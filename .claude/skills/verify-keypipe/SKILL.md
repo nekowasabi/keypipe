@@ -33,17 +33,18 @@ side are safe: every run writes to its own
 Read-only. Answers "is this checkout worth driving?"
 
 ```sh
-./verify.sh --doctor   # V0 only: branch, toolchain, repo layout probe
+.claude/skills/verify-keypipe/verify.sh --doctor   # V0 only: branch, toolchain, repo layout probe
 ```
 
 `V0` never FAILs on a missing toolchain; it records `swift: missing/broken`
-so later items can SKIP honestly.
+so later items can SKIP honestly. `--doctor` exits non-zero when any check
+FAILs (wrong branch), so automation can gate on it.
 
 ## Drive
 
 ```sh
-REPO=/workspace/keypipe ./verify.sh            # full V0..V7 run
-REPO=/workspace/keypipe ./verify.sh --doctor   # V0 only
+REPO=/workspace/keypipe .claude/skills/verify-keypipe/verify.sh            # full V0..V7 run
+REPO=/workspace/keypipe .claude/skills/verify-keypipe/verify.sh --doctor   # V0 only
 ```
 
 V table (each row: exact command run by `verify.sh`, expected result):
@@ -55,9 +56,9 @@ V table (each row: exact command run by `verify.sh`, expected result):
 | V2 | S2 | `test -f Sources/keypipe/main.swift`; `! grep -rq 'NSStatusItem\|NSStatusBar\|import AppKit\|import Cocoa' Sources/`; `grep -rq 'SIGINT\|SIGTERM' Sources/`; `grep -rq 'keypipe started' Sources/`; `swift build`; run `.build/debug/keypipe`, expect start line and survival until SIGTERM | static parts exit 0; build/run SKIP as `MAC_UNVERIFIED` when swift is missing/broken |
 | V3 | S3 | `python3 -c json.load(open('config.example.json'))` + `@@@` present; invalid-config run expects non-zero exit or stderr error, else static error-path grep | exit 0 |
 | V4 | S4 | `Context` type with `appBundleId`/`processName` fields + always-true stub + test reference | exit 0 |
-| V5 | S5 | `TriggerMatcher`/`feed` module + unit test asserting `@@@` detection; hook doc grep (`CGEvent\|AX\|tap`) | exit 0 |
-| V6 | S6 | skill files exist with frontmatter; `verify.sh` references S1..S5; harness logs mention `create-verification-skill` and `poteto-mode` | files FAIL if absent; log mentions SKIP when no harness logs are in scope |
-| V7 | S7 | `swift-format lint` (or documented equivalent) exit 0; `swift test` exit 0 | SKIP as `MAC_UNVERIFIED` when the tool is missing on Linux |
+| V5 | S5 | `TriggerMatcher`/`feed` module + unit test asserting `@@@` detection; hook doc grep (`CGEvent\|AX\|tap`); `main.swift` wires the matcher with `--feed-stdin`/`--smoke-feed`; runtime `--smoke-feed '@@@'` must print the match and produce the shell/log side effect | exit 0; runtime parts SKIP as `MAC_UNVERIFIED` when swift is missing/broken |
+| V6 | S6 | skill files exist with frontmatter; `verify.sh` references S1..S5; `phase1.jsonl`/`phase2.jsonl` harness logs mention `create-verification-skill` and `poteto-mode` | files FAIL if absent; SKIP when harness logs are absent, FAIL when logs exist but a skill name is missing |
+| V7 | S7 | `swift-format lint --strict --recursive Sources Tests` (config: `.swift-format`, four spaces) exit 0; `swift test` exit 0; long builds/tests use a portable timeout (`timeout`, `gtimeout`, perl alarm, or none on Darwin) | SKIP as `MAC_UNVERIFIED` when the tool is missing on Linux |
 
 `verify.sh` exits 0 iff zero FAILs. SKIP never fails the run.
 
@@ -83,11 +84,13 @@ their absence becomes a logged SKIP, not a crash.
 
 ## Linux note
 
-Swift on this box is broken (`libncurses.so.6` missing for
-`/home/box/swift/usr/bin/swift`), so build/run/format/test items SKIP with
-`MAC_UNVERIFIED` until run on macOS or a working toolchain. Static checks
-(scaffold, no-menu-bar grep, schema, trigger logic shape) run everywhere and
-must PASS. Never weaken a journey to make it pass: a missing file is a FAIL.
+Swift on this box needs `PATH=/home/box/swift/usr/bin` (already exported by
+`verify.sh`) plus `LD_LIBRARY_PATH=/workspace/keypipe-mvp/scratch/swift-lib`
+for `libncurses.so.6`. With that set, build/run/format/test items run for
+real; they SKIP with `MAC_UNVERIFIED` only when the toolchain is still
+missing or broken. Static checks (scaffold, no-menu-bar grep, schema,
+trigger logic shape) run everywhere and must PASS. Never weaken a journey
+to make it pass: a missing file is a FAIL.
 
 ## Feature map
 

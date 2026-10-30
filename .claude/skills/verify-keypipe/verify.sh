@@ -7,6 +7,9 @@ SCRATCH="${SCRATCH:-/workspace/keypipe-mvp/scratch}"
 EVIDENCE="${EVIDENCE:-$SCRATCH/verify-$(date +%F-%H%M%S)}"
 mkdir -p "$EVIDENCE"
 export PATH="/home/box/swift/usr/bin:$PATH"
+if [ -d "/workspace/keypipe-mvp/scratch/swift-lib" ]; then
+  export LD_LIBRARY_PATH="/workspace/keypipe-mvp/scratch/swift-lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
 
 PASS=0; FAIL=0; SKIP=0
 RESULTS="$EVIDENCE/results.tsv"
@@ -14,6 +17,15 @@ printf 'item\tspec\tstatus\tdetail\n' > "$RESULTS"
 vpass() { PASS=$((PASS+1)); printf 'PASS %s\n' "$1"; printf '%s\t%s\tPASS\t%s\n' "$1" "$2" "$3" >> "$RESULTS"; }
 vfail() { FAIL=$((FAIL+1)); printf 'FAIL %s :: %s\n' "$1" "$3"; printf '%s\t%s\tFAIL\t%s\n' "$1" "$2" "$3" >> "$RESULTS"; }
 vskip() { SKIP=$((SKIP+1)); printf 'SKIP %s :: %s\n' "$1" "$3"; printf '%s\t%s\tSKIP\t%s\n' "$1" "$2" "$3" >> "$RESULTS"; }
+# Portable timeout: GNU timeout, then gtimeout, then perl alarm, then no cap.
+kp_timeout() {
+  local secs="$1"; shift
+  if command -v timeout >/dev/null 2>&1; then timeout "$secs" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then gtimeout "$secs" "$@"
+  elif command -v perl >/dev/null 2>&1; then perl -e 'alarm shift; exec @ARGV' "$secs" "$@"
+  else "$@"
+  fi
+}
 
 {
   echo "repo=$REPO"
@@ -38,7 +50,7 @@ DOCTOR_ONLY=0
 
 cur="$(git -C "$REPO" symbolic-ref --short HEAD 2>/dev/null || echo UNKNOWN)"
 if [ "$cur" = "$BRANCH" ]; then vpass "V0 doctor on $BRANCH, $SWIFT_WHY" "env" "$SWIFT_WHY"; else vfail "V0 doctor" "env" "branch is $cur, want $BRANCH"; fi
-[ "$DOCTOR_ONLY" = 1 ] && { printf 'summary pass=%d fail=%d skip=%d\n' "$PASS" "$FAIL" "$SKIP"; exit 0; }
+[ "$DOCTOR_ONLY" = 1 ] && { printf 'summary pass=%d fail=%d skip=%d\n' "$PASS" "$FAIL" "$SKIP"; [ "$FAIL" -eq 0 ]; }
 cd "$REPO" || { vfail "V0 repo dir" "env" "cannot cd $REPO"; }
 
 # V1 S1 scaffold
@@ -74,7 +86,7 @@ else
   vfail "V2d start log keypipe started" "S2" "Sources/ missing"
 fi
 if [ "$SWIFT_OK" = 1 ]; then
-  if timeout 600 swift build > "$EVIDENCE/swift-build.log" 2>&1; then vpass "V2e swift build exit 0" "S2" "swift build"; else vfail "V2e swift build exit 0" "S2" "see swift-build.log"; fi
+  if kp_timeout 600 swift build > "$EVIDENCE/swift-build.log" 2>&1; then vpass "V2e swift build exit 0" "S2" "swift build"; else vfail "V2e swift build exit 0" "S2" "see swift-build.log"; fi
 else
   vskip "V2e swift build exit 0" "S2" "$SWIFT_WHY"
 fi
@@ -151,6 +163,28 @@ if grep -rqi 'CGEvent\|CGEventTap\|Accessibility\|key tap' README.md Sources/ 2>
 else
   vfail "V5c macOS tap hook point documented" "S5" "document CGEvent/AX hook in README or source"
 fi
+if grep -q 'TriggerMatcher' Sources/keypipe/main.swift 2>/dev/null && grep -rq 'smoke-feed\|feed-stdin' Sources/ 2>/dev/null; then
+  vpass "V5d daemon wires TriggerMatcher with feed-stdin/smoke-feed" "S5" "main.swift wiring"
+else
+  vfail "V5d daemon wires TriggerMatcher with feed-stdin/smoke-feed" "S5" "wire matcher into main.swift with a Linux/dev feed path"
+fi
+if [ "$SWIFT_OK" = 1 ] && [ -x "$BIN" ]; then
+  printf '{"rules": [{"trigger": "@@@", "action": {"type": "shell", "command": "echo kp-smoke-marker"}}]}' > "$EVIDENCE/smoke-shell.json"
+  printf '{"rules": [{"trigger": "@@@", "action": {"type": "log", "message": "kp-log-marker"}}], "logPath": "%s"}' "$EVIDENCE/smoke.log.out" > "$EVIDENCE/smoke-log.json"
+  if "$BIN" --config "$EVIDENCE/smoke-shell.json" --smoke-feed '@@@' > "$EVIDENCE/smoke-shell.log" 2>&1 \
+    && grep -q 'kp-smoke-marker' "$EVIDENCE/smoke-shell.log" \
+    && grep -q 'matched' "$EVIDENCE/smoke-shell.log" \
+    && "$BIN" --config "$EVIDENCE/smoke-log.json" --smoke-feed 'hi @@@ there' > "$EVIDENCE/smoke-log-run.log" 2>&1 \
+    && grep -q 'kp-log-marker' "$EVIDENCE/smoke.log.out"; then
+    vpass "V5e smoke-feed executes shell and log side effects" "S5" "shell stdout + log file"
+  else
+    vfail "V5e smoke-feed executes shell and log side effects" "S5" "see smoke-*.log"
+  fi
+elif grep -rq 'runAction\|feedAndRun' Sources/ 2>/dev/null; then
+  vpass "V5e action execution path present (static)" "S5" "static grep; runtime MAC_UNVERIFIED"
+else
+  vfail "V5e action execution path present (static)" "S5" "no action execution in Sources/"
+fi
 
 # V6 S6 skill + pstack trace
 SKILL=""
@@ -171,27 +205,40 @@ if [ -n "$VSH" ]; then
 else
   vfail "V6b verify.sh covers S1-S5" "S6" "verify.sh missing"
 fi
-if grep -rl 'create-verification-skill' "$MVP_ROOT/msgs" "$MVP_ROOT/logs" "$REPO" 2>/dev/null | head -1 | grep -q .; then
-  vpass "V6c create-verification-skill invocation logged" "S6" "msgs/logs grep"
+# V6c/V6d honesty: only real harness jsonl logs count. SKIP when the logs
+# are absent; FAIL when logs exist but the skill name is missing.
+HARNESS_LOGS=""
+for h in "$MVP_ROOT/logs/phase1.jsonl" "$MVP_ROOT/logs/phase2.jsonl"; do
+  [ -f "$h" ] && HARNESS_LOGS="$HARNESS_LOGS $h"
+done
+if [ -z "$HARNESS_LOGS" ]; then
+  vskip "V6c create-verification-skill invocation logged" "S6" "no harness jsonl logs in scope"
+  vskip "V6d poteto-mode invocation logged" "S6" "no harness jsonl logs in scope"
 else
-  vskip "V6c create-verification-skill invocation logged" "S6" "no harness logs in scope yet"
-fi
-if grep -rli 'poteto-mode' "$MVP_ROOT/msgs" "$MVP_ROOT/logs" "$REPO" 2>/dev/null | head -1 | grep -q .; then
-  vpass "V6d poteto-mode invocation logged" "S6" "msgs/logs grep"
-else
-  vskip "V6d poteto-mode invocation logged" "S6" "no harness logs in scope yet"
+  # shellcheck disable=SC2086
+  if grep -q 'create-verification-skill' $HARNESS_LOGS 2>/dev/null; then
+    vpass "V6c create-verification-skill invocation logged" "S6" "harness jsonl"
+  else
+    vfail "V6c create-verification-skill invocation logged" "S6" "harness logs lack the skill name"
+  fi
+  # shellcheck disable=SC2086
+  if grep -q 'poteto-mode' $HARNESS_LOGS 2>/dev/null; then
+    vpass "V6d poteto-mode invocation logged" "S6" "harness jsonl"
+  else
+    vfail "V6d poteto-mode invocation logged" "S6" "harness logs lack the skill name"
+  fi
 fi
 
 # V7 S7 gates
 if [ "$SWIFT_OK" = 1 ] && command -v swift-format >/dev/null 2>&1; then
-  if swift-format lint --recursive Sources Tests > "$EVIDENCE/swift-format.log" 2>&1; then vpass "V7a formatter/lint verify exit 0" "S7" "swift-format lint"; else vfail "V7a formatter/lint verify exit 0" "S7" "see swift-format.log"; fi
+  if swift-format lint --strict --recursive Sources Tests > "$EVIDENCE/swift-format.log" 2>&1; then vpass "V7a formatter/lint verify exit 0" "S7" "swift-format lint --strict"; else vfail "V7a formatter/lint verify exit 0" "S7" "see swift-format.log"; fi
 elif grep -qi 'swift-format\|format' README.md 2>/dev/null; then
   vskip "V7a formatter/lint verify exit 0" "S7" "formatter documented but tool missing on Linux (MAC_UNVERIFIED)"
 else
   vfail "V7a formatter/lint verify exit 0" "S7" "no formatter tool or documented equivalent"
 fi
 if [ "$SWIFT_OK" = 1 ]; then
-  if timeout 600 swift test > "$EVIDENCE/swift-test.log" 2>&1; then vpass "V7b swift test exit 0" "S7" "swift test"; else vfail "V7b swift test exit 0" "S7" "see swift-test.log"; fi
+  if kp_timeout 600 swift test > "$EVIDENCE/swift-test.log" 2>&1; then vpass "V7b swift test exit 0" "S7" "swift test"; else vfail "V7b swift test exit 0" "S7" "see swift-test.log"; fi
 else
   vskip "V7b swift test exit 0" "S7" "$SWIFT_WHY"
 fi
