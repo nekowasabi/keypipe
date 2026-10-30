@@ -1,0 +1,10 @@
+{
+  "rules": [
+    {
+      "trigger": "@@@",
+      "action": { "type": "shell", "command": "echo keypipe-triggered" },
+      "context": { "appBundleId": null, "processName": null }
+    }
+  ],
+  "logPath": null
+}
