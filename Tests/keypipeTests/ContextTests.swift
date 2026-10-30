@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import keypipe
 
 final class ContextTests: XCTestCase {
@@ -29,7 +30,7 @@ final class ContextTests: XCTestCase {
                 trigger: "@@@",
                 action: Action(type: "log", message: "hi"),
                 context: context
-            ),
+            )
         ])
         _ = matcher.feed("@")
         _ = matcher.feed("@")

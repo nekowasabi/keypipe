@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import keypipe
 
 final class ConfigTests: XCTestCase {
@@ -46,5 +47,20 @@ final class ConfigTests: XCTestCase {
 
     func testMissingFileThrows() {
         XCTAssertThrowsError(try loadConfig(path: "/nonexistent/keypipe.json"))
+    }
+
+    func testLongTriggerThrows() {
+        let long = String(repeating: "a", count: triggerMaxBuffer + 1)
+        let path = try! writeTemp(
+            #"{"rules": [{"trigger": "\#(long)", "action": {"type": "log", "message": "x"}}]}"#)
+        XCTAssertThrowsError(try loadConfig(path: path))
+    }
+
+    func testMaxLengthTriggerAccepted() throws {
+        let max = String(repeating: "a", count: triggerMaxBuffer)
+        let path = try writeTemp(
+            #"{"rules": [{"trigger": "\#(max)", "action": {"type": "log", "message": "x"}}]}"#)
+        let config = try loadConfig(path: path)
+        XCTAssertEqual(config.rules.count, 1)
     }
 }

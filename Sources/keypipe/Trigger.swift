@@ -18,13 +18,28 @@ public struct TriggerRule {
     }
 }
 
+/// Buffer capacity for TriggerMatcher, in characters.
+/// Triggers longer than this are rejected by loadConfig so no configured
+/// rule can silently never match. feed trims the buffer to this size.
+public let triggerMaxBuffer = 64
+
 public struct TriggerMatcher {
     private let rules: [TriggerRule]
     private let maxBuffer: Int
     private var chars: [Character] = []
 
-    public init(rules: [TriggerRule], maxBuffer: Int = 64) {
-        self.rules = rules
+    /// Longest trigger wins when several rules match the same buffer.
+    /// Ties keep config order. Streaming note: a shorter trigger fires as
+    /// soon as its suffix matches, before a longer sibling can complete.
+    public init(rules: [TriggerRule], maxBuffer: Int = triggerMaxBuffer) {
+        self.rules = rules.enumerated()
+            .sorted {
+                if $0.element.trigger.count != $1.element.trigger.count {
+                    return $0.element.trigger.count > $1.element.trigger.count
+                }
+                return $0.offset < $1.offset
+            }
+            .map { $0.element }
         self.maxBuffer = maxBuffer
     }
 

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import keypipe
 
 final class TriggerTests: XCTestCase {
@@ -59,5 +60,36 @@ final class TriggerTests: XCTestCase {
         _ = matcher.feed("@")
         _ = matcher.feed("@")
         XCTAssertEqual(matcher.feed("@")?.action.message, "first")
+    }
+
+    func testLongestMatchWins() {
+        let rules = [
+            TriggerRule(trigger: "ab", action: Action(type: "log", message: "short")),
+            TriggerRule(trigger: "aab", action: Action(type: "log", message: "long")),
+        ]
+        var forward = TriggerMatcher(rules: rules)
+        var hit: TriggerRule?
+        for ch in "aab" { hit = forward.feed(ch) }
+        XCTAssertEqual(hit?.trigger, "aab")
+        var reversed = TriggerMatcher(rules: rules.reversed())
+        hit = nil
+        for ch in "aab" { hit = reversed.feed(ch) }
+        XCTAssertEqual(hit?.trigger, "aab")
+    }
+
+    func testRefiresAfterReset() {
+        var matcher = TriggerMatcher(rules: [atAtAtRule()])
+        for ch in "@@@" { _ = matcher.feed(ch) }
+        matcher.reset()
+        var hit: TriggerRule?
+        for ch in "@@@" { hit = matcher.feed(ch) }
+        XCTAssertEqual(hit?.trigger, "@@@")
+    }
+
+    func testBufferSlidesToKeepSuffix() {
+        var matcher = TriggerMatcher(rules: [atAtAtRule()], maxBuffer: 4)
+        var hit: TriggerRule?
+        for ch in "xyz@@@" { hit = matcher.feed(ch) }
+        XCTAssertEqual(hit?.trigger, "@@@")
     }
 }

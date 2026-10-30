@@ -67,6 +67,11 @@ public func loadConfig(path: String) throws -> KeypipeConfig {
         if rule.trigger.isEmpty {
             throw ConfigError.invalid("rule trigger must be a non-empty string")
         }
+        if rule.trigger.count > triggerMaxBuffer {
+            throw ConfigError.invalid(
+                "rule trigger exceeds \(triggerMaxBuffer) characters and can never match"
+            )
+        }
         switch rule.action.type {
         case "shell":
             if (rule.action.command ?? "").isEmpty {
