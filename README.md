@@ -30,7 +30,8 @@ config path. It stays alive until SIGINT (Ctrl-C) or SIGTERM (`kill -TERM`).
 
 ## Config
 
-One JSON file. Path is passed with `--config` and defaults to
+One JSON file (only the `"json"` format is accepted in MVP; TOML and YAML are
+out of scope). Path is passed with `--config` and defaults to
 `./config.example.json`. Copy `config.example.json` to start:
 
 ```json
