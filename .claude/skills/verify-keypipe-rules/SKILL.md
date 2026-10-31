@@ -53,13 +53,13 @@ Transcript lines the binary prints, in both harnesses.
 
 Line names share prefixes (`erase`, `erase-rewrite`), so a `lacks` check on a bare name matches up to the trailing space: `'keypipe erase '`.
 
-Context JSON for `--context`: `{"app":"<bundle id>","focusIsTextField":true,"fieldText":"...","composing":false,"ignoresBackspace":false,"backspacePerRead":false}`. `backspacePerRead` delivers one queued Backspace per field read, like an app that processes key events between polls. Typed keys append to `fieldText`; erase removes from its end. A rule only reads the field when it declares `"when":{"focus":"textField"}` (design revision 3); `focus: any` rules get an empty input, so every item that asserts field text through `$1` or stdin declares `textField`.
+Context JSON for `--context`: `{"app":"<bundle id>","focusIsTextField":true,"fieldText":"...","composing":false,"ignoresBackspace":false,"backspacePerRead":false}`. `backspacePerRead` delivers one queued Backspace per field read, like an app that processes key events between polls; `keysPerRead` does the same for typed keys, like the tap seeing a key before the app has appended it. Typed keys append to `fieldText`; erase removes from its end. A rule only reads the field when it declares `"when":{"focus":"textField"}` (design revision 3); `focus: any` rules get an empty input, so every item that asserts field text through `$1` or stdin declares `textField`.
 
 `--smoke-feed` exits 0 when at least one rule matched (even if a later stage failed), 2 when none, 1 on invalid config.
 
 Invalid configs print `invalid config: <reason>` with one of these reasons, which R2 matches literally: `empty trigger`, `unknown key <name>`, `unknown output <value>`, `empty output.shell`, `empty transform`, `unknown focus <value>`. A rejection with any other reason fails the item.
 
-`--probe` prints one JSON line: `{"trusted":bool,"app":...,"focusIsTextField":bool,"fieldText":...}`.
+`--probe` prints one JSON line: `{"trusted":bool,"app":...,"focus":"textField"|"composing"|"none","focusIsTextField":bool,"fieldText":...}` (`fieldText` only when `focus` is `textField`). It never prompts and exits 0 even when untrusted.
 
 ## Items
 
@@ -74,6 +74,7 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | R4a/b | trigger erased before the field is read | fake |
 | R4c | Backspaces delivered one per read: the engine waits for all of them, no rewrite | fake |
 | R4d | app ignores Backspace: trigger removed by `AXValue` rewrite (`erase-rewrite`) | fake |
+| R4e | trigger keys land after the tap sees them: the engine waits for the trigger suffix before erasing | fake |
 | R5a | transform gets input on stdin, `$1`, `KEYPIPE_INPUT`, and app in `KEYPIPE_APP` | fake |
 | R5b | one trailing newline stripped from transform output | fake |
 | R5c | failing transform applies nothing, notifies, keeps field | fake |
@@ -84,7 +85,7 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | R8 | field text with `$()`, backticks, quotes passes through transform and output.shell unexecuted and byte-exact | fake |
 | M0 | Accessibility granted to keypipe (M0a); daemon prints `keypipe started` within 5 s (M0b, gates M1-M4) | live |
 | M1 | TextEdit `hello@@@` becomes `HELLO` | live |
-| M2 | TextEdit `abc;;;` sends `abc` to output.shell, field left as `abc` | live |
+| M2 | TextEdit `1abc;;;` sends `1abc` to output.shell, field left as `1abc` (digit first: TextEdit auto-capitalizes `abc` to `Abc`) | live |
 | M3 | Finder frontmost, `@@@` is seen (`nomatch` +1), no rule fires, daemon still alive | live |
 | M4 | iTerm2 probe recorded (risk check, not a behavior claim) | live |
 
@@ -111,4 +112,4 @@ Fake feeds are independent processes and can run in parallel. Live items cannot:
 
 ## Status
 
-Stages 1 to 5 of `docs/design/failure-fallback.md` are implemented on the fake harness: `--no-live` passes every R item (R1c skips without swift-format). The live items M0 to M4 wait for stage 6 (`MacKeyTap`, `MacDesktop`); `--probe` is a stub that prints `{"trusted":false}` until then.
+Stages 1 to 6 of `docs/design/failure-fallback.md` are implemented: `--no-live` passes every R item (R1c skips without swift-format), and the live items M0 to M4 run against the real CGEventTap and AX (`MacKeyTap`, `MacDesktop`). Stage 7 (`onFail`, `shellTimeout`, R9) is next.

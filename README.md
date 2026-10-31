@@ -15,8 +15,7 @@ UI. Configuration lives in one JSON file. The design is in
 - macOS 13 or later, Xcode 15 or Swift 5.9 toolchain.
 - The Linux build runs the whole pipeline against a fake desktop
   (`--context` plus `--feed-stdin` or `--smoke-feed`), which is the unit-test
-  path. The real key tap and Accessibility access are macOS only and not
-  wired up yet (stage 6 in `docs/design/failure-fallback.md`).
+  path. The real key tap and Accessibility access are macOS only.
 
 ## Build
 
@@ -104,22 +103,32 @@ out of scope). Path is passed with `--config` and defaults to
   unknown `output` or `focus`, and `replaceInput` without `focus: textField`
   are rejected at load with `invalid config: <reason>` and exit 1.
 
-## macOS key tap and Accessibility (stage 6, not wired yet)
+## macOS key tap and Accessibility
 
-`Sources/keypipe/MacKeyTap.swift` documents the hook point. The real
-implementation installs a listen-only CGEventTap, ignores keypipe's own
-posted Backspaces, and calls `Engine.key` after the event is delivered.
-`MacDesktop` will implement the `Desktop` primitives over the Accessibility
-API. Both need Accessibility permission and only compile under
-`#if os(macOS)`. What was measured on a real Mac before implementing is in
-`docs/design/verification-plan.md`.
+`Sources/keypipe/MacKeyTap.swift` installs a listen-only CGEventTap, drops
+keypipe's own posted Backspaces (tagged through `eventSourceUserData`), skips
+Command-modified keys, and hands each typed character to `Engine.key` on a
+serial queue so a slow transform never stalls the tap. `MacDesktop.swift`
+implements the `Desktop` primitives over the Accessibility API: the focused
+`AXTextField`/`AXTextArea` of the frontmost app is the field, a non-empty
+`AXTextInputMarkedRange` means composing, anything else is `nothing`.
+Notifications go through `osascript display notification` with the text
+passed as an argument. Both files only compile under `#if os(macOS)`.
+
+The daemon refuses to start without Accessibility permission for the
+`keypipe` binary (System Settings > Privacy & Security > Accessibility).
+`keypipe --probe` prints the grant and the current snapshot as one JSON line
+and never prompts. What was measured on a real Mac is in
+`docs/design/verification-plan.md`; the live items M0 to M4 of
+`.claude/skills/verify-keypipe-rules/verify.sh` drive this path through
+TextEdit and System Events.
 
 ## Layout
 
 - `Package.swift`: Swift package `keypipe`, executable target `keypipe`,
   test target `keypipeTests`.
 - `Sources/keypipe/main.swift`: entrypoint, `--config`, `--context`,
-  `--smoke-feed`, `--feed-stdin`, `--probe` (stub), signal handling.
+  `--smoke-feed`, `--feed-stdin`, `--probe`, and the macOS daemon loop.
 - `Sources/keypipe/Config.swift`: the only JSON boundary, `loadConfig(path:)`
   with reason-specific rejections.
 - `Sources/keypipe/Context.swift`: `Focus`, `Field`, `Snapshot`, and the
@@ -132,7 +141,9 @@ API. Both need Accessibility permission and only compile under
   command (stdin/`$1`/env, process-group timeout).
 - `Sources/keypipe/Desktop.swift`, `FakeDesktop.swift`: the desktop port
   (snapshot, backspace, text, setText, notify) and its JSON-driven fake.
-- `Sources/keypipe/MacKeyTap.swift`: CGEvent hook documentation (stage 6).
+- `Sources/keypipe/MacKeyTap.swift`, `MacDesktop.swift`: the listen-only
+  CGEventTap and the Accessibility implementation of the desktop port
+  (macOS only).
 - `Tests/keypipeTests/`: unit tests for trigger, context, config, shell,
   and engine.
 - `config.example.json`: a minimal `focus: any` rule that echoes.

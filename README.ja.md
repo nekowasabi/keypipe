@@ -14,8 +14,7 @@ UI は意図的にありません。設定は 1 つの JSON ファイルです�
 - macOS 13 以降、Xcode 15 または Swift 5.9 ツールチェーン。
 - Linux ビルドでは偽のデスクトップ（`--context` と `--feed-stdin` か
   `--smoke-feed`）に対してパイプライン全体を動かせます。これが単体テストの経路です。
-  実際のキー取得と Accessibility は macOS 専用で、まだ配線されていません
-  （`docs/design/failure-fallback.md` の段 6）。
+  実際のキー取得と Accessibility は macOS 専用です。
 
 ## ビルド
 
@@ -98,21 +97,30 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   `focus`、`focus: textField` の無い `replaceInput` は読み込み時に
   `invalid config: <理由>` で拒否し、終了コード 1 です。
 
-## macOS のキー取得と Accessibility（段 6、未配線）
+## macOS のキー取得と Accessibility
 
-`Sources/keypipe/MacKeyTap.swift` がフックポイントをドキュメント化しています。
-実装では listen-only の CGEventTap を張り、keypipe 自身が post した Backspace を
-除外し、イベント配送後に `Engine.key` を呼びます。`MacDesktop` が `Desktop` の
-原始操作を Accessibility API の上に実装します。どちらも Accessibility 許可が
-必要で、`#if os(macOS)` でのみコンパイルされます。実装前に実機で測った事実は
-`docs/design/verification-plan.md` にあります。
+`Sources/keypipe/MacKeyTap.swift` は listen-only の CGEventTap を張り、keypipe
+自身が post した Backspace（`eventSourceUserData` の印）と Command 付きのキーを
+除外し、打たれた文字を直列キューの `Engine.key` に渡します。遅い変換が tap を
+止めないためです。`MacDesktop.swift` は `Desktop` の原始操作を Accessibility API
+の上に実装します。最前面アプリのフォーカス要素が `AXTextField` / `AXTextArea`
+なら欄、`AXTextInputMarkedRange` が空でなければ変換中、それ以外は `nothing`
+です。通知は `osascript` の `display notification` に文字を引数で渡します。
+どちらも `#if os(macOS)` でのみコンパイルされます。
+
+デーモンは `keypipe` バイナリに Accessibility 許可（システム設定 >
+プライバシーとセキュリティ > アクセシビリティ）が無いと起動を拒否します。
+`keypipe --probe` は許可の有無と現在のスナップショットを JSON 1 行で出し、
+ダイアログは出しません。実機で測った事実は `docs/design/verification-plan.md`
+に、この経路を TextEdit と System Events で動かす検証は
+`.claude/skills/verify-keypipe-rules/verify.sh` の M0〜M4 にあります。
 
 ## 構成
 
 - `Package.swift`: Swift パッケージ `keypipe`、実行ターゲット `keypipe`、
   テストターゲット `keypipeTests`。
 - `Sources/keypipe/main.swift`: エントリーポイント、`--config`、`--context`、
-  `--smoke-feed`、`--feed-stdin`、`--probe`（仮）、シグナル処理。
+  `--smoke-feed`、`--feed-stdin`、`--probe`、macOS のデーモンループ。
 - `Sources/keypipe/Config.swift`: 唯一の JSON 境界。理由付きで拒否する
   `loadConfig(path:)`。
 - `Sources/keypipe/Context.swift`: `Focus`、`Field`、`Snapshot` と純粋なルール選択
@@ -125,7 +133,8 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   （stdin / `$1` / 環境変数、プロセスグループの期限）。
 - `Sources/keypipe/Desktop.swift`、`FakeDesktop.swift`: デスクトップの境界
   （snapshot、backspace、text、setText、notify）と JSON 駆動の偽物。
-- `Sources/keypipe/MacKeyTap.swift`: CGEvent フックのドキュメント（段 6）。
+- `Sources/keypipe/MacKeyTap.swift`、`MacDesktop.swift`: listen-only の
+  CGEventTap と、デスクトップ境界の Accessibility 実装（macOS 専用）。
 - `Tests/keypipeTests/`: トリガー、コンテキスト、設定、シェル、エンジンの単体テスト。
 - `config.example.json`: echo する最小の `focus: any` ルール。
 

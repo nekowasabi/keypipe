@@ -123,6 +123,9 @@ check "R4c Backspaces delivered one per read: wait for all, no rewrite" \
 feed R4d "$UP" '{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"hello","ignoresBackspace":true}' '@@@'
 check "R4d app ignores Backspace: trigger removed by AXValue rewrite" \
   "has R4d 'keypipe erase-rewrite' && field R4d '\"HELLO\"'" "field HELLO"
+feed R4e "$UP" '{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"hello","keysPerRead":true}' '@@@'
+check "R4e trigger keys land after the tap sees them: wait before erasing" \
+  "lacks R4e 'keypipe erase-rewrite' && field R4e '\"HELLO\"'" "field HELLO, not HE@@ or HELL@@"
 
 # R5 transform contract
 CH='{"rules":[{"when":{"focus":"textField"},"trigger":"@@@","transform":"printf \"stdin=%s arg=%s env=%s app=%s\" \"$(cat)\" \"$1\" \"$KEYPIPE_INPUT\" \"$KEYPIPE_APP\"","output":"replaceInput"}]}'
@@ -203,11 +206,12 @@ if [ "${1:-}" != "--no-live" ] && [ "$(uname -s)" = Darwin ] && [ "${STARTED:-0}
 
     osa "tell application \"TextEdit\" to set text of document \"$DOC\" to \"\"" >/dev/null
     if front_is_ours; then
-      osa 'tell application "System Events" to keystroke "abc;;;"' >/dev/null
+      # Digit first: TextEdit auto-capitalizes a sentence-initial letter (abc;;; became Abc).
+      osa 'tell application "System Events" to keystroke "1abc;;;"' >/dev/null
       sleep 2
       osa "tell application \"TextEdit\" to get text of document \"$DOC\"" > "$EV/M2.text"
-      check "M2 TextEdit: abc;;; sends abc to output.shell and erases trigger" \
-        "[ \"\$(cat '$EV/M2.sent' 2>/dev/null)\" = abc ] && [ \"\$(cat '$EV/M2.text')\" = abc ]" "M2.sent, M2.text"
+      check "M2 TextEdit: 1abc;;; sends 1abc to output.shell and erases trigger" \
+        "[ \"\$(cat '$EV/M2.sent' 2>/dev/null)\" = 1abc ] && [ \"\$(cat '$EV/M2.text')\" = 1abc ]" "M2.sent, M2.text"
     else
       ng "M2 TextEdit" "our document lost focus before typing; not typed"
     fi

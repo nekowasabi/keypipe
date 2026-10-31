@@ -8,25 +8,30 @@ final class FakeDesktop: Desktop {
         var composing: Bool?
         var ignoresBackspace: Bool?
         var backspacePerRead: Bool?
+        var keysPerRead: Bool?
     }
 
     private let app: String?
     private let focus: Focus
     private let ignoresBackspace: Bool
     private let backspacePerRead: Bool
+    private let keysPerRead: Bool
     private var pendingBackspaces = 0
+    private var pendingKeys: [Character] = []
     private(set) var fieldText: String
     private(set) var notifications: [String] = []
 
     /// backspacePerRead delivers one queued Backspace per text() read, like an app
-    /// that processes key events between keypipe's polls.
+    /// that processes key events between keypipe's polls. keysPerRead does the same
+    /// for typed keys, like the tap seeing a key before the app has appended it.
     init(app: String? = nil, focus: Focus = .nothing, fieldText: String = "",
-         ignoresBackspace: Bool = false, backspacePerRead: Bool = false) {
+         ignoresBackspace: Bool = false, backspacePerRead: Bool = false, keysPerRead: Bool = false) {
         self.app = app
         self.focus = focus
         self.fieldText = fieldText
         self.ignoresBackspace = ignoresBackspace
         self.backspacePerRead = backspacePerRead
+        self.keysPerRead = keysPerRead
     }
 
     convenience init(path: String) throws {
@@ -40,10 +45,13 @@ final class FakeDesktop: Desktop {
             focus: context.composing == true ? .composing : context.focusIsTextField ? .text : .nothing,
             fieldText: context.fieldText,
             ignoresBackspace: context.ignoresBackspace ?? false,
-            backspacePerRead: context.backspacePerRead ?? false)
+            backspacePerRead: context.backspacePerRead ?? false,
+            keysPerRead: context.keysPerRead ?? false)
     }
 
-    func key(_ character: Character) { fieldText.append(character) }
+    func key(_ character: Character) {
+        if keysPerRead && focus == .text { pendingKeys.append(character) } else { fieldText.append(character) }
+    }
 
     func snapshot() -> Snapshot {
         Snapshot(app: app, focus: focus, field: focus == .text ? Field(token: 0) : nil)
@@ -56,6 +64,7 @@ final class FakeDesktop: Desktop {
 
     func text(_ field: Field) -> String? {
         guard field.token == 0 && focus == .text else { return nil }
+        if !pendingKeys.isEmpty { fieldText.append(pendingKeys.removeFirst()) }
         if pendingBackspaces > 0 {
             pendingBackspaces -= 1
             if !fieldText.isEmpty { fieldText.removeLast() }

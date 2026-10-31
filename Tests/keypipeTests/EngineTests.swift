@@ -48,6 +48,18 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(desktop.fieldText, "HELLO")
     }
 
+    func testEraseWaitsForTheTriggerToLandBeforeBackspacing() {
+        let desktop = FakeDesktop(focus: .text, fieldText: "hello", keysPerRead: true)
+        let rule = Rule(trigger: "@@@", when: When(focus: .textField),
+                        transform: Guarded(primary: "tr"), output: Guarded(primary: .builtin(.replaceInput)))
+        let (_, lines) = run(rules: [rule], desktop: desktop) { _, input, _, _ in
+            XCTAssertEqual(input, "hello")
+            return .exited(0, stdout: "HELLO")
+        }
+        XCTAssertFalse(lines.contains("keypipe erase-rewrite"))
+        XCTAssertEqual(desktop.fieldText, "HELLO")
+    }
+
     func testEmptyTransformOutputNotifiesInsteadOfWipingField() {
         let desktop = FakeDesktop(focus: .text, fieldText: "hello")
         let rule = Rule(trigger: "@@@", when: When(focus: .textField),

@@ -13,7 +13,7 @@ and typing `@@@` (the trigger in the JSON config) shows a notification.
 | ID | Item | How to check | Status at sync commit |
 | --- | --- | --- | --- |
 | G1 | The command returns and the daemon keeps running | `perl -e 'alarm 3; exec @ARGV' .build/debug/keypipe --config config.example.json; echo $?` returns before the alarm | FAIL. Exit 142: the command stays in the foreground (`main.swift:76-83`). With a trailing `&` it does stay alive (verify-keypipe V2f). |
-| G2 | The running daemon receives keystrokes | Read `main.swift:76-83` and `MacKeyTap.swift` | FAIL. Daemon mode only sleeps. `MacKeyTap.swift` is a comment and a string constant, no CGEventTap. Keys reach the matcher only through `--smoke-feed` and `--feed-stdin`. |
+| G2 | The running daemon receives keystrokes | `verify-keypipe-rules/verify.sh` live items M1 and M3 | PASS on a Mac with Accessibility granted (2026-11-01). `MacKeyTap.swift` installs a listen-only CGEventTap and feeds `Engine.key`. |
 | G3 | `@@@` fires the rule exactly once per completed `@@@` | `check.sh` (below) | PASS within the bounds below. |
 | G4 | A match shows a notification | `--smoke-feed '@@@'` with a notification config | PARTIAL. `"type": "notify"` is rejected by `loadConfig` (`Config.swift:75-84`, `unknown action type: notify`). A `shell` action running `osascript -e 'display notification ...'` matches and exits 0. That the banner appears was not observed by the check. |
 
