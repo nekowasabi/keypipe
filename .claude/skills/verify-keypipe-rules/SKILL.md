@@ -29,7 +29,7 @@ The script builds with `swift build` (R1a). There is no server for the fake harn
 
 Read-only. Reports the host OS, the swift toolchain, and, when the binary exists, `keypipe --probe` (Accessibility trust and the current snapshot). Run it first whenever anything looks off.
 
-Live items need two Accessibility grants in System Settings > Privacy & Security > Accessibility: the built `keypipe` binary (for the tap and AX) and the terminal running the script (for `System Events` keystrokes). The terminal also needs Automation grants for TextEdit and System Events; the first `osascript` call raises the dialog and blocks until it is answered (AppleEvent timeout -1712 after about 60 s). Set the input source to ABC and pause any espanso trigger that shares a prefix with the test triggers.
+Live items need two Accessibility grants in System Settings > Privacy & Security > Accessibility: the built `keypipe` binary (for the tap and AX) and the terminal running the script (for `System Events` keystrokes). The terminal also needs Automation grants for TextEdit and System Events; the first `osascript` call raises the dialog and blocks until it is answered (AppleEvent timeout -1712 after about 60 s). Set the input source to ABC and pause any espanso trigger that shares a prefix with the test triggers. Live triggers use unshifted keys only (`@`, `;`, `/` on a JIS layout): a `System Events` keystroke for a shifted key carries the unshifted string in the event (shift+1 arrives as `1`), so a shifted trigger never reaches the matcher through this harness.
 
 Throwaway probes that settled the design's runtime risks live in [`probes/`](probes/) (`axprobe.swift`, `tap.swift`, `imsel.swift`); build each with `swiftc -O -o <out> <file>`. Results are in `docs/design/verification-plan.md`.
 
@@ -86,6 +86,7 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | M0 | Accessibility granted to keypipe (M0a); daemon prints `keypipe started` within 5 s (M0b, gates M1-M4) | live |
 | M1 | TextEdit `hello@@@` becomes `HELLO` | live |
 | M2 | TextEdit `1abc;;;` sends `1abc` to output.shell, field left as `1abc` (digit first: TextEdit auto-capitalizes `abc` to `Abc`) | live |
+| M2b | TextEdit `1xyz///` under a `focus: any` rule: only the trigger is erased (field `1xyz`), output.shell gets empty input | live |
 | M3 | Finder frontmost, `@@@` is seen (`nomatch` +1), no rule fires, daemon still alive | live |
 | M4 | iTerm2 probe recorded (risk check, not a behavior claim) | live |
 

@@ -179,7 +179,8 @@ else
 
   LIVE="{\"rules\":[
    {\"trigger\":\"@@@\",\"when\":{\"focus\":\"textField\"},\"transform\":\"tr a-z A-Z\",\"output\":\"replaceInput\"},
-   {\"trigger\":\";;;\",\"when\":{\"focus\":\"textField\"},\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/M2.sent'\"}}]}"
+   {\"trigger\":\";;;\",\"when\":{\"focus\":\"textField\"},\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/M2.sent'\"}},
+   {\"trigger\":\"///\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/M2b.sent'\"}}]}"
   printf '%s' "$LIVE" > "$EV/live.config.json"
   "$BIN" --config "$EV/live.config.json" > "$EV/daemon.log" 2>&1 &
   DPID=$!; STARTED_PIDS="$STARTED_PIDS $DPID"; echo "$DPID" > "$EV/daemon.pid"
@@ -214,6 +215,18 @@ if [ "${1:-}" != "--no-live" ] && [ "$(uname -s)" = Darwin ] && [ "${STARTED:-0}
         "[ \"\$(cat '$EV/M2.sent' 2>/dev/null)\" = 1abc ] && [ \"\$(cat '$EV/M2.text')\" = 1abc ]" "M2.sent, M2.text"
     else
       ng "M2 TextEdit" "our document lost focus before typing; not typed"
+    fi
+    osa "tell application \"TextEdit\" to set text of document \"$DOC\" to \"\"" >/dev/null
+    if front_is_ours; then
+      # Unshifted keys only: System Events puts the unshifted string in a shifted
+      # keystroke's event (shift+1 arrives as "1"), so "!!!" never reaches the matcher.
+      osa 'tell application "System Events" to keystroke "1xyz///"' >/dev/null
+      sleep 2
+      osa "tell application \"TextEdit\" to get text of document \"$DOC\"" > "$EV/M2b.text"
+      check "M2b TextEdit: focus any rule 1xyz/// erases only the trigger, sends empty input" \
+        "[ -f '$EV/M2b.sent' ] && [ ! -s '$EV/M2b.sent' ] && [ \"\$(cat '$EV/M2b.text')\" = 1xyz ]" "M2b.sent empty, M2b.text"
+    else
+      ng "M2b TextEdit" "our document lost focus before typing; not typed"
     fi
     osa "tell application \"TextEdit\" to close document \"$DOC\" saving no" >/dev/null
   fi

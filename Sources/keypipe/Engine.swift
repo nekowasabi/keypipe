@@ -5,16 +5,22 @@ func jsonString(_ text: String) -> String {
     return String(decoding: data, as: UTF8.self)
 }
 
-func performErase(_ field: Field, trigger: String, _ desktop: Desktop, emit: (String) -> Void) -> String? {
-    guard var before = desktop.text(field) else { return nil }
-    // Why: the tap sees the last trigger key before the app has appended it;
-    // erasing then would remove text typed before the trigger.
-    let typed = ProcessInfo.processInfo.systemUptime + 0.1
-    while !before.hasSuffix(trigger) && ProcessInfo.processInfo.systemUptime < typed {
+/// Field text once the trigger has landed, or the latest text after 100 ms.
+/// Why: the tap sees the last trigger key before the app has appended it;
+/// erasing then would remove text typed before the trigger.
+func waitForTrigger(_ field: Field, _ trigger: String, _ desktop: Desktop) -> String? {
+    guard var text = desktop.text(field) else { return nil }
+    let deadline = ProcessInfo.processInfo.systemUptime + 0.1
+    while !text.hasSuffix(trigger) && ProcessInfo.processInfo.systemUptime < deadline {
         Thread.sleep(forTimeInterval: 0.005)
         guard let current = desktop.text(field) else { return nil }
-        before = current
+        text = current
     }
+    return text
+}
+
+func performErase(_ field: Field, trigger: String, _ desktop: Desktop, emit: (String) -> Void) -> String? {
+    guard let before = waitForTrigger(field, trigger, desktop) else { return nil }
     desktop.backspace(trigger.count)
     emit("keypipe erase \(trigger.count)")
     guard before.hasSuffix(trigger) else { return desktop.text(field) }
@@ -81,7 +87,10 @@ struct Engine {
             input = erased
         } else {
             let count = snapshot.focus == .text ? trigger.count : 0
-            if count > 0 { desktop.backspace(count) }
+            if count > 0, let field = snapshot.field {
+                _ = waitForTrigger(field, trigger, desktop)
+                desktop.backspace(count)
+            }
             emit("keypipe erase \(count)")
             input = ""
         }

@@ -213,7 +213,7 @@ struct Engine {
 - 自分が post した Backspace は自分の tap にも届く。`eventSourceUserData` に印を付けて無視する。
 - TextEdit の本文は AXTextArea で `AXValue` は読み書きできる。CotEditor も同じ。
 - ターミナル（iTerm2）のプロンプトは **AX 上テキスト欄として見える**。AXTextArea で `AXValue` は画面全体（約 3,800 文字）。`focus: textField` の既定ではターミナルで `@@@` を打つと画面全体が入力になる。AXRole では TextEdit と区別できない。判別ができるまで、ターミナル向けのルールは `focus: any` にして欄の文字を使わない（上の `;;;` の例）。
-- 合成 Backspace はアプリ依存。CotEditor では消えるが TextEdit は無視する（`System Events` の `key code 51` も同じ）。手順 5 の読み戻しと `AXValue` の書き戻しはこのため。
+- 合成 Backspace はアプリ依存。CotEditor では消える。TextEdit はプローブ（2026-10-31）では無視したが、デーモン本体が post した Backspace は届いた（2026-11-01、M1/M2 の 4 発火すべて `erase 3` のみで `erase-rewrite` 無し）。差の原因は未特定。手順 5 の読み戻しと `AXValue` の書き戻しは無視するアプリ向けに残す。
 - 「何もフォーカスしていない」は nil ではない。Finder のデスクトップでも `AXFocusedUIElement` は `AXGroup`（`AXFocused=1`）。役割から `nothing` を導く。
 - IME 変換中は判別できる。TextEdit の欄は `AXTextInputMarkedRange` を持ち、ATOK で変換中は長さが正、Escape 後は 0。`AXValue` には変換中の文字が既に入る。
 - ATOK が有効だと合成打鍵がローマ字変換される。利用者の espanso に `@@` トリガーがあり、`@@@` と取り合う。共存は設計の範囲外とし、検証では止める。
@@ -224,7 +224,8 @@ struct Engine {
 - ターミナルをテキスト欄から外す判別。`AXRoleDescription` が TextEdit では取れ、iTerm2 ではエラー（-25212）だったのが候補。2 種以上のターミナルとブラウザの欄で測ってから型にする。
 - TextEdit が合成 Backspace を無視する原因と、ブラウザの欄での挙動。iTerm2 が合成 Backspace を受けるか。
 - TextEdit 以外のアプリが `AXTextInputMarkedRange` を出すか。出さないアプリでは変換中を `text` と見て、かなを消す。
-- tap がアプリより先にキーを見る前提と、配送後に呼ぶ遅れがメインキューへの非同期で足りるか。Backspace 後の読み戻しの待ち（200 ms）の妥当性。M1 で測る。
+- Backspace 後の読み戻しの待ち（200 ms）の妥当性。M1 では足りた。
+- 測定済み（2026-11-01）。tap はアプリより先にキーを見る。直列キューへの非同期だけでは足りず、M1 で欄が `HELL@@` になった（最後の `@` が入る前に読んで消した）。消す前にトリガーの接尾辞が揃うまで最大 100 ms 待って直した（`waitForTrigger`、`focus: any` の消去でも同じ）。
 
 ## 検証のための追加契約
 

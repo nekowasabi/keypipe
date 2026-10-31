@@ -72,8 +72,8 @@ final class EngineTests: XCTestCase {
     }
 
     func testAnySuppliesEmptyInputAndErasesOnlyInTextFields() {
-        for focus in [Focus.text, .nothing] {
-            let desktop = FakeDesktop(app: "editor", focus: focus, fieldText: "hello")
+        for (focus, late) in [(Focus.text, false), (.text, true), (.nothing, false)] {
+            let desktop = FakeDesktop(app: "editor", focus: focus, fieldText: "hello", keysPerRead: late)
             let rule = Rule(trigger: "@@@", output: Guarded(primary: .shell("send")))
             var called = false
             let (_, lines) = run(rules: [rule], desktop: desktop) { script, input, env, timeout in
