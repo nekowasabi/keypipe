@@ -1,6 +1,6 @@
-# keypipe 設計案: コンテキスト付きルール（改訂 2）
+# keypipe 設計案: コンテキスト付きルール（改訂 3）
 
-レビュー用の設計スケッチ。実装前。改訂 2 はレビュー回答（選択は扱わない、変換と送り先は差し替え可能）を反映した。
+レビュー用の設計スケッチ。実装前。改訂 2 はレビュー回答（選択は扱わない、変換と送り先は差し替え可能）を反映した。改訂 3 は実機検証と設計 arena（候補 2 本、2026-10-31）の統合。変更点は「Synthesis decision」に列挙。処理ごとのフォールバック（`onFail`、`shellTimeout`）と、構造を先に直す実装順序は [`failure-fallback.md`](failure-fallback.md)。
 
 ## Problem
 
@@ -51,22 +51,28 @@
 意味。
 
 - `trigger` 直近のキー入力の末尾がこれに一致したら候補になる。
-- `when` 省略したキーはワイルドカード。`focus` は `textField` か `any`。`app` は bundle id のどれか。同じトリガーの候補は設定順で最初に満たしたものが勝つ。
-- 欄の文字（トリガーを消した後）が入力になる。フォーカスがテキスト欄でなければ入力は空文字。
+- `when` 省略したキーはワイルドカード。`app` は bundle id のどれか。同じトリガーの候補は設定順で最初に満たしたものが勝つ。
+- `when.focus` は「このルールが欄を使うか」を表す。
+  - `textField` 欄を使うルール。フォーカスが AX のテキスト欄（`AXTextField` / `AXTextArea`）のときだけ発火する。トリガーを消し、欄の文字（トリガーを消した後）が入力になる。`replaceInput` を使えるのはこの値のときだけ（設定エラー `output replaceInput requires focus textField`）。
+  - `any`（既定） 欄を使わないルール。どこでも発火する。入力は空文字。フォーカスがテキスト欄ならトリガーだけ Backspace で消し、欄は読まない。テキスト欄でなければ何も送らない（`keypipe erase 0`）。
+- IME の変換中（`AXTextInputMarkedRange` の長さが正）はどのルールも発火しない。`keypipe composing <trigger>` を出して終わる。日本語入力モードではトリガーは効かず、英数に切り替えて打つ。
 - `transform` 省略可。シェルコマンド。入力を stdin と `$1` と `KEYPIPE_INPUT` で受け、stdout が結果になる。省略すると入力がそのまま結果になる。
 - `output` 結果の行き先。二種類のどちらか。
-  - 組み込み（アプリ内でしかできないもの）。`"replaceInput"` / `"insert"` / `"clipboard"` / `"notify"` / `"none"`。
-  - 外部（それ以外全部）。`{ "shell": "..." }`。結果を stdin と `$1` と `KEYPIPE_INPUT` で受ける。tmux、Herdr、Grok Bot、CotEditor、任意スクリプトの引数はすべてこちらで書く。CotEditor なら `{ "shell": "printf %s \"$1\" | cot" }` のように同梱の `cot` コマンドへ渡す。
+  - 組み込み（アプリ内でしかできないか、エンジン自身が使うもの）。`"replaceInput"` / `"notify"` / `"none"`。
+  - 外部（それ以外全部）。`{ "shell": "..." }`。結果を stdin と `$1` と `KEYPIPE_INPUT` で受ける。tmux、Herdr、Grok Bot、CotEditor、webhook、クリップボード、任意スクリプトの引数はすべてこちらで書く。CotEditor なら `{ "shell": "printf %s \"$1\" | cot" }`、クリップボードは `{ "shell": "pbcopy" }`、webhook は `{ "shell": "curl -sS -m 5 --data-urlencode text@- \"$(cat ~/.config/keypipe/hook-url)\"" }`。JSON 本文が要る webhook は `jq` を使う（標準の macOS には無い。これが shell 方式の上限）。
 - 環境変数 `KEYPIPE_APP` に前面アプリの bundle id を入れる。
 
 発火の手順は固定。
 
-1. matcher がトリガー一致を報告する。
-2. その時点のスナップショット（前面アプリ、フォーカス種別）で `when` を評価し、ルールを一つ選ぶ。満たすルールが無ければ何もしない。最長一致したトリガーのルールがどれも満たさなくても、短いトリガーのルールへは落ちない。
-3. トリガー文字数ぶん Backspace を送って消す。`focus: any` のルールでも消す。
-4. 欄の文字を読む。末尾にトリガーが残っていれば（TextEdit は合成 Backspace を無視する。実機検証済み）、トリガーを取り除いた文字列を `AXValue` に書き戻してから、それを欄の文字とする。
-5. `transform` を実行する。非ゼロ終了なら送り先へ渡さず通知する。
-6. `output` を適用する。
+1. matcher がトリガー一致を報告する。tap はキーをアプリより先に見るので、呼び出しはイベント配送後にメインキューで行う。
+2. その時点のスナップショット（前面アプリ、`Focus`、欄のハンドル）を取る。`Focus` が `composing` なら `keypipe composing <trigger>` を出して終わる。
+3. `when` を評価し、ルールを一つ選ぶ。満たすルールが無ければ何もしない。最長一致したトリガーのルールがどれも満たさなくても、短いトリガーのルールへは落ちない。
+4. トリガーを消す。`Focus` が `text` なら Backspace を送る（`any` のルールでも）。`nothing` なら送らない。
+5. `focus: textField` のルールだけ欄を読む。消す前に一度読み、Backspace の後は値が変わるのを期限（200 ms 程度、未検証）まで待ってから読み直す。二回の読みが同じなら Backspace は無視された（TextEdit。実機検証済み）ので、末尾のトリガーを取り除いて `AXValue` に書き戻し、`keypipe erase-rewrite` を出す。末尾だけで判定せず二回の読みを比べるのは、欄がもともとトリガーと同じ文字で終わる場合に二重に消さないため。
+6. `transform` を実行する。非ゼロ終了、期限切れ、空出力は失敗。`onFail.transform` があれば同じ入力で一度だけ走らせ、その結果で続ける。無ければ送り先へ渡さず通知する。
+7. `output` を適用する。`replaceInput` はスナップショット時に捕まえた欄のハンドルへ書き、読み戻しが一致したときだけ `apply` 行を出す。変換に数秒かかってフォーカスが移っていても、別の欄を書かない。失敗（非ゼロ、期限切れ、書き込み無視、欄の失効）は `onFail.output` があれば同じ結果で一度だけ走らせる。失敗の扱いの全体は [`failure-fallback.md`](failure-fallback.md)。
+
+`--smoke-feed` の終了コードは、ルールが一つでも一致すれば 0（段が失敗しても 0）、どれも一致しなければ 2、設定が不正なら 1。
 
 ## Shape
 
@@ -76,7 +82,7 @@
 // Config.swift  境界。JSON をここで全部検証する。
 enum Focus: String, Codable { case textField, any }
 
-enum BuiltinSink: String, Codable { case none, replaceInput, insert, clipboard, notify }
+enum BuiltinSink: String, Codable { case none, replaceInput, notify }
 enum Output: Equatable { case builtin(BuiltinSink), shell(String) }   // JSON は文字列か {"shell"}
 
 struct When: Equatable {
@@ -84,21 +90,35 @@ struct When: Equatable {
     var focus: Focus       // 省略時 .any
 }
 
+/// 本来の値と、失敗したとき一度だけ差し替える値。onFail は Value であって Guarded ではない（代替の代替は無い）。
+struct Guarded<Value: Equatable>: Equatable { var primary: Value; var onFail: Value? }
+
 struct Rule: Equatable {
     var trigger: String
     var when: When
-    var transform: String?  // nil は恒等
-    var output: Output      // 省略時 .builtin(.none)
+    var transform: Guarded<String>?  // nil は恒等。transform が無ければ onFail.transform も無い
+    var output: Guarded<Output>      // 省略時 .builtin(.none)
 }
 
-struct KeypipeConfig: Equatable { var rules: [Rule] }
+struct KeypipeConfig: Equatable {
+    var rules: [Rule]
+    var shellTimeout: TimeInterval   // 既定 30。全シェルの期限
+}
 
 // Context.swift  状況のスナップショットと純粋な判定。
+enum Focus: Equatable {
+    case nothing    // focused element exists but is not a text element (Finder desktop is an AXGroup)
+    case text       // AXTextField / AXTextArea with no marked text
+    case composing  // text element whose AXTextInputMarkedRange.length > 0
+}
+/// Opaque handle to the element captured at snapshot time. MacDesktop maps it to the AXUIElement.
+struct Field: Equatable { var token: Int }
 struct Snapshot: Equatable {
     var app: String?
-    var focusIsTextField: Bool
+    var focus: Focus
+    var field: Field?   // non-nil when focus is .text
 }
-func matches(_ when: When, _ s: Snapshot) -> Bool { notImplemented() }
+func matches(_ when: When, _ s: Snapshot) -> Bool { notImplemented() }   // .composing never reaches here
 func select(_ candidates: [Rule], _ s: Snapshot) -> Rule? { notImplemented() }
 ```
 
@@ -106,14 +126,17 @@ func select(_ candidates: [Rule], _ s: Snapshot) -> Rule? { notImplemented() }
 
 ```swift
 // Desktop.swift
-protocol Desktop {
+protocol Desktop {   // 原始操作だけ。消去と書き込みの手順は Engine 側の performErase / performWrite に一度だけ書く
     func snapshot() -> Snapshot
-    func erase(_ count: Int)
-    func fieldText() -> String
-    func apply(_ sink: BuiltinSink, text: String)
+    func backspace(_ count: Int)                   // post Backspace tagged with keypipe's eventSourceUserData
+    func text(_ f: Field) -> String?               // nil: handle is dead
+    func setText(_ f: Field, _ s: String) -> Bool  // false: handle is dead. AXValue; replaceInput and erase-rewrite
+    func notify(_ s: String)
 }
 // MacDesktop.swift   #if os(macOS)。AXUIElement と CGEvent はこのファイルの外に出さない。
-// FakeDesktop.swift  JSON で状況と欄の文字を与え、erase/apply の呼び出しを記録して出力する。
+// FakeDesktop.swift  JSON で状況と欄の文字を与え、erase/write の呼び出しを記録して出力する。
+//   {"app":..,"focusIsTextField":bool,"composing":bool?,"ignoresBackspace":bool?,"fieldText":..}
+//   composing && !focusIsTextField は読み込み時に拒否。
 ```
 
 実装は二つ。macOS の AX 実装と、テストと Linux の feed モードで使う偽物。対象 OS は macOS のみ。検証は利用者が Mac で別途行う。
@@ -135,6 +158,8 @@ struct Engine {
 ### 判断と原則
 
 - 送り先を「アプリ内でしかできない組み込み」と「シェル」の二種類の判別共用体にした。tmux 型や Grok Bot 型を足し続ける if の連鎖を作らない。model-the-domain による。
+- フォーカスは bool ではなく `Focus` 3 状態。「テキスト欄でないのに変換中」を型で表せなくする。`composing` と `nothing` はルール作者が名指しするものではないので `when` の値には出さない。
+- アプリ固有の癖は bundle id の表で持たない。Backspace 無視は読み戻しで観測して直す（未知のアプリにも効く）。ターミナルが欄に見える件は `when.app` で書き分ける。`AXRoleDescription` などの未検証の判別子に乗る型は作らない。
 - AX と CGEvent の型は `MacDesktop` に閉じる。JSON の検証は `loadConfig` だけで行う。boundary-discipline による。
 - 変換と外部送信は同じ `shell` 経路を共有し、専用の型を作らない。`log` アクションは消す。laziness-protocol による。
 
@@ -147,17 +172,38 @@ struct Engine {
 
 ## Synthesis decision
 
-arena の複数モデル実行は回していない。候補は自分で比較した。
+改訂 2 まで。arena は回さず候補を自分で比較した。候補 A（採用）`when → transform → output` の固定の組。候補 B `steps: [...]` の自由なステップ列は、シェルのパイプと二通りの書き方になるので不採用。候補 C トリガー検出だけして状況を環境変数で渡す極小案は、欄の読み書きができないので環境変数の部分だけ取り込んだ。
 
-- 候補 A（採用）。`when → transform → output` の固定の組。output は組み込みかシェル。
-- 候補 B。`steps: [...]` の自由なステップ列。シェルのパイプと二通りの書き方になる。不採用。
-- 候補 C（一部採用）。トリガー検出だけして状況を環境変数で渡す極小案。欄の読み書きがシェルからできないので単独では成り立たない。環境変数で状況を渡す部分だけ取り込んだ。
+改訂 3（2026-10-31）。コンテキストと実行モデルの妥当性を問う arena を回した。候補 2 本、ともに Claude Opus（別系統の判定役はこのホストに無く、判定は置かなかった）。候補 1 は最小の形、候補 2 は領域を型で明示する形。基準は「測定事実に反しない」「ルール作者が設定だけで `$1` の中身を言える」「未検証の判別子に乗らない」「同じことに二通りの書き方を作らない」「改訂 2 からの差分の小ささ」。
+
+両候補が一致した点（そのまま採用）。
+
+- フォーカスは bool ではなく列挙。`nothing` は nil ではなく役割から導く。`composing` は `AXTextInputMarkedRange` から取る。
+- 変換中のトリガーは発火しない。確定を待つ案は、tap が見た `@@@` と欄の `＠` が合わないので両候補とも捨てた。
+- `focus: any` のルールは欄を読まない。テキスト欄でないときは Backspace も送らない。レビュー既定「`focus: any` でも消す」をテキスト欄のときだけに狭める。
+- ターミナルで `textField` ルールが画面全体を読む問題は、実装前の今は `when.app` で書き分ける。
+
+基底は候補 1。差分が小さく、癖をコードに名指しで溜めない。候補 2 から移植した点。
+
+- 欄のハンドル（`Field`）をスナップショット時に捕まえ、`replaceInput` と書き戻しはそこへ書く。候補 1 の `apply(sink, text)` は書き先が無く、遅い変換の間にフォーカスが移ると別の欄を書く。
+- `replaceInput` は `focus: textField` でだけ許す設定エラー。列挙の入れ子（候補 2 の `Scope`）までは持ち込まず、`loadConfig` の検査一つにする。
+- 読み戻しの前に、値が変わるのを期限まで待つ。候補 1 の「即座に二回読む」は、Backspace がまだ処理されていないと書き戻してしまい、遅れて届いた Backspace が利用者の文字を消す（候補 2 の指摘、推測）。
+
+候補 2 から退けた点。
+
+- bundle id の癖表。測定済みの癖でアプリ名が要るものは無く、表に無いアプリの同じ癖は直らない。
+- `focus: terminal` と「最後の Return 以降に打った行」の追跡。矢印・貼り付け・クリックで不明になり、上限が重い。iTerm2 の入力は `tmux capture-pane` をシェルで書けば足りる。
+- webhook の組み込み。`curl` の面を設定キーに写す二通り目の書き方になる。JSON 本文に `jq` が要る上限は Usage に書いた。
+- `insert` と `clipboard` の組み込み。実例が無く、`pbcopy` で書ける。
 
 ## Tradeoffs accepted
 
 - 変換と送信がシェル一本である代わりに、利用者はクォートを自分で書く。`$1` を用意してクォート事故を減らす。
 - 旧スキーマ（`action.type`, `context.appBundleId`）との互換は捨てる。
-- `transform` と `output.shell` は同期実行。`claude -p` の数秒間、次の発火は待たされる。キー取得自体は止めない。
+- `transform` と `output.shell` は同期実行。`claude -p` の数秒間、次の発火は待たされる。キー取得自体は止めない（発火は tap のスレッドではなく直列キューで走らせる）。
+- 日本語入力モードではトリガーが効かない。代わりに変換中のかなを誤って消さない。
+- `focus: any` のルールは欄の文字を受け取れない。代わりに `$1` の中身が設定だけで決まり、ターミナルで画面全体を書き戻す経路と、欄以外での Backspace が無くなる。
+- ターミナル除けは設定の `when.app` か先行ルールで書く。代わりに未検証の判別子に乗る型を作らない。
 
 ## 実機で確かめた前提（2026-10-31、macOS 26.6）
 
@@ -167,15 +213,18 @@ arena の複数モデル実行は回していない。候補は自分で比較�
 - 自分が post した Backspace は自分の tap にも届く。`eventSourceUserData` に印を付けて無視する。
 - TextEdit の本文は AXTextArea で `AXValue` は読み書きできる。CotEditor も同じ。
 - ターミナル（iTerm2）のプロンプトは **AX 上テキスト欄として見える**。AXTextArea で `AXValue` は画面全体（約 3,800 文字）。`focus: textField` の既定ではターミナルで `@@@` を打つと画面全体が入力になる。AXRole では TextEdit と区別できない。判別ができるまで、ターミナル向けのルールは `focus: any` にして欄の文字を使わない（上の `;;;` の例）。
-- 合成 Backspace はアプリ依存。CotEditor では消えるが TextEdit は無視する（`System Events` の `key code 51` も同じ）。手順 4 の読み戻しと `AXValue` の書き戻しはこのため。
+- 合成 Backspace はアプリ依存。CotEditor では消えるが TextEdit は無視する（`System Events` の `key code 51` も同じ）。手順 5 の読み戻しと `AXValue` の書き戻しはこのため。
+- 「何もフォーカスしていない」は nil ではない。Finder のデスクトップでも `AXFocusedUIElement` は `AXGroup`（`AXFocused=1`）。役割から `nothing` を導く。
+- IME 変換中は判別できる。TextEdit の欄は `AXTextInputMarkedRange` を持ち、ATOK で変換中は長さが正、Escape 後は 0。`AXValue` には変換中の文字が既に入る。
 - ATOK が有効だと合成打鍵がローマ字変換される。利用者の espanso に `@@` トリガーがあり、`@@@` と取り合う。共存は設計の範囲外とし、検証では止める。
 
 ## リスク（未検証）
 
 - 一部アプリ（Electron 系）は `AXValue` の書き込みを無視する。`replaceInput` は書き込み後に読み戻し、失敗したら「全選択してペースト」に落とす。
-- ターミナルをテキスト欄から外す判別。`AXRoleDescription` が TextEdit では取れ、iTerm2 ではエラー（-25212）だったのが候補。
-- TextEdit が合成 Backspace を無視する原因と、ブラウザの欄での挙動。
-- 日本語 IME 変換中の発火と Backspace の数。
+- ターミナルをテキスト欄から外す判別。`AXRoleDescription` が TextEdit では取れ、iTerm2 ではエラー（-25212）だったのが候補。2 種以上のターミナルとブラウザの欄で測ってから型にする。
+- TextEdit が合成 Backspace を無視する原因と、ブラウザの欄での挙動。iTerm2 が合成 Backspace を受けるか。
+- TextEdit 以外のアプリが `AXTextInputMarkedRange` を出すか。出さないアプリでは変換中を `text` と見て、かなを消す。
+- tap がアプリより先にキーを見る前提と、配送後に呼ぶ遅れがメインキューへの非同期で足りるか。Backspace 後の読み戻しの待ち（200 ms）の妥当性。M1 で測る。
 
 ## 検証のための追加契約
 
@@ -185,9 +234,9 @@ arena の複数モデル実行は回していない。候補は自分で比較�
 - 出力行は一行ごとに flush する。検証は各行を期限内に観測できることを契約とする。
 - `transform` の出力は末尾の改行を一つだけ落とす。`claude -p` や `echo` が付ける改行を欄に入れないため。
 - `focus: textField` は AX のテキスト欄とテキストエリア（複数行）の両方を含む。
-- `--context <json>` で `FakeDesktop` に状況を与える。打ったキーは `fieldText` の末尾に足され、erase は末尾から消す。
-- `--probe` は Accessibility の許可と現在のスナップショットを JSON 1 行で出す。利用者が `when.app` の bundle id を調べる用途も兼ねる。
-- 発火の各段で `keypipe matched / nomatch / erase / transform exit / apply / output-shell exit / field` の行を出す。形式は `SKILL.md` の表。
+- `--context <json>` で `FakeDesktop` に状況を与える。打ったキーは `fieldText` の末尾に足され、erase は末尾から消す。`composing` と `ignoresBackspace` で変換中と Backspace 無視を再現する。
+- `--probe` は Accessibility の許可と現在のスナップショットを JSON 1 行で出す。`focus` は `textField` / `composing` / `none`。利用者が `when.app` の bundle id を調べる用途も兼ねる。
+- 発火の各段で `keypipe matched / nomatch / composing / erase / erase-rewrite / transform exit / apply / output-shell exit / field` の行を出す。形式は `SKILL.md` の表。
 
 ## 変更範囲
 

@@ -102,7 +102,7 @@ check "R3a text field picks rule 1" "has R3a 'keypipe matched @@@ rule 1'" ""
 feed R3b "$SEL" '{"app":"com.apple.Terminal","focusIsTextField":false,"fieldText":""}' '@@@'
 check "R3b app filter picks rule 0" "has R3b 'keypipe matched @@@ rule 0'" ""
 feed R3c "$SEL" '{"app":"com.apple.finder","focusIsTextField":false,"fieldText":""}' '@@@'
-check "R3c no rule satisfied: no fire, no erase" "exitis R3c 2 && has R3c 'keypipe nomatch @@@' && lacks R3c 'keypipe erase'" ""
+check "R3c no rule satisfied: no fire, no erase" "exitis R3c 2 && has R3c 'keypipe nomatch @@@' && lacks R3c 'keypipe erase '" ""
 SEL2='{"rules":[
  {"trigger":"@@@","when":{"focus":"textField"},"output":"none"},
  {"trigger":"@@@","when":{"focus":"textField"},"output":"none"}]}'
