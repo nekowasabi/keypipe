@@ -110,9 +110,11 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
 ## macOS のキー取得と Accessibility
 
 `Sources/keypipe/MacKeyTap.swift` は listen-only の CGEventTap を張り、keypipe
-自身が post した Backspace（`eventSourceUserData` の印）と Command 付きのキーを
-除外し、打たれた文字を直列キューの `Engine.key` に渡します。遅い変換が tap を
-止めないためです。`MacDesktop.swift` は `Desktop` の原始操作を Accessibility API
+自身が post した Backspace（`eventSourceUserData` の印）を除外し、各事象を
+直列キューのエンジンに渡します。遅い変換が tap を止めないためです。ctrl、alt、
+cmd のどれかが押されていればホットキー、それ以外は文字列照合器への文字です。
+文字は keycode と shift から `UCKeyTranslate` で現在の配列に従って求めます。
+前面アプリと同じ解釈です。`MacDesktop.swift` は `Desktop` の原始操作を Accessibility API
 の上に実装します。最前面アプリのフォーカス要素が `AXTextField` / `AXTextArea`
 なら欄、`AXTextInputMarkedRange` が空でなければ変換中、それ以外は `nothing`
 です。通知は `osascript` の `display notification` に文字を引数で渡します。
@@ -135,8 +137,8 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   `loadConfig(path:)`。
 - `Sources/keypipe/Context.swift`: `Focus`、`Field`、`Snapshot` と純粋なルール選択
   （`matches`、`select`）。
-- `Sources/keypipe/Trigger.swift`: 純粋なトリガーバッファマッチャー
-  （最長一致優先、64 文字バッファ）。
+- `Sources/keypipe/Trigger.swift`: `Trigger`（文字列かホットキー）、`Hotkey` の
+  解析、純粋なトリガーバッファマッチャー（最長一致優先、64 文字バッファ）。
 - `Sources/keypipe/Engine.swift`: 発火手順（変換中の門、選択、読み戻し付きの消去、
   変換、送り先）。
 - `Sources/keypipe/Shell.swift`: `runShell`。keypipe がコマンドを走らせる唯一の経路

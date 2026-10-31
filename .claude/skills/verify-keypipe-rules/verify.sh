@@ -205,7 +205,8 @@ else
    {\"trigger\":\"@@@\",\"when\":{\"focus\":\"textField\"},\"transform\":\"tr a-z A-Z\",\"output\":\"replaceInput\"},
    {\"trigger\":\";;;\",\"when\":{\"focus\":\"textField\"},\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/M2.sent'\"}},
    {\"trigger\":\"///\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/M2b.sent'\"}},
-   {\"hotkey\":\"ctrl+@\",\"when\":{\"focus\":\"textField\"},\"transform\":\"tr a-z A-Z\",\"output\":\"replaceInput\"}]}"
+   {\"hotkey\":\"ctrl+@\",\"when\":{\"focus\":\"textField\"},\"transform\":\"tr a-z A-Z\",\"output\":\"replaceInput\"},
+   {\"trigger\":\"!!!\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/M6.sent'\"}}]}"
   printf '%s' "$LIVE" > "$EV/live.config.json"
   "$BIN" --config "$EV/live.config.json" > "$EV/daemon.log" 2>&1 &
   DPID=$!; STARTED_PIDS="$STARTED_PIDS $DPID"; echo "$DPID" > "$EV/daemon.pid"
@@ -243,8 +244,6 @@ if [ "${1:-}" != "--no-live" ] && [ "$(uname -s)" = Darwin ] && [ "${STARTED:-0}
     fi
     osa "tell application \"TextEdit\" to set text of document \"$DOC\" to \"\"" >/dev/null
     if front_is_ours; then
-      # Unshifted keys only: System Events puts the unshifted string in a shifted
-      # keystroke's event (shift+1 arrives as "1"), so "!!!" never reaches the matcher.
       osa 'tell application "System Events" to keystroke "1xyz///"' >/dev/null
       sleep 2
       osa "tell application \"TextEdit\" to get text of document \"$DOC\"" > "$EV/M2b.text"
@@ -264,6 +263,17 @@ if [ "${1:-}" != "--no-live" ] && [ "$(uname -s)" = Darwin ] && [ "${STARTED:-0}
         "[ \"\$(cat '$EV/M5.text')\" = 1HELLO ] && grep -q 'keypipe matched ctrl+@' '$EV/daemon.log'" "M5.text, daemon.log"
     else
       ng "M5 TextEdit" "our document lost focus before typing; not typed"
+    fi
+    osa "tell application \"TextEdit\" to set text of document \"$DOC\" to \"\"" >/dev/null
+    if front_is_ours; then
+      # Shifted key: the event's stored string is "1", UCKeyTranslate yields "!".
+      osa 'tell application "System Events" to keystroke "1xyz!!!"' >/dev/null
+      sleep 2
+      osa "tell application \"TextEdit\" to get text of document \"$DOC\"" > "$EV/M6.text"
+      check "M6 TextEdit: shifted text trigger 1xyz!!! fires and erases only the trigger" \
+        "[ -f '$EV/M6.sent' ] && [ \"\$(cat '$EV/M6.text')\" = 1xyz ]" "M6.sent, M6.text"
+    else
+      ng "M6 TextEdit" "our document lost focus before typing; not typed"
     fi
     osa "tell application \"TextEdit\" to close document \"$DOC\" saving no" >/dev/null
   fi

@@ -118,9 +118,12 @@ out of scope). Path is passed with `--config` and defaults to
 ## macOS key tap and Accessibility
 
 `Sources/keypipe/MacKeyTap.swift` installs a listen-only CGEventTap, drops
-keypipe's own posted Backspaces (tagged through `eventSourceUserData`), skips
-Command-modified keys, and hands each typed character to `Engine.key` on a
-serial queue so a slow transform never stalls the tap. `MacDesktop.swift`
+keypipe's own posted Backspaces (tagged through `eventSourceUserData`), and
+hands each event to the engine on a serial queue so a slow transform never
+stalls the tap: a key with ctrl, alt or cmd held is a hotkey, anything else
+is a character for the text matcher. The character comes from the keycode
+and shift state through `UCKeyTranslate` on the current layout, which is
+what the app in front does too. `MacDesktop.swift`
 implements the `Desktop` primitives over the Accessibility API: the focused
 `AXTextField`/`AXTextArea` of the frontmost app is the field, a non-empty
 `AXTextInputMarkedRange` means composing, anything else is `nothing`.
@@ -145,8 +148,9 @@ TextEdit and System Events.
   with reason-specific rejections.
 - `Sources/keypipe/Context.swift`: `Focus`, `Field`, `Snapshot`, and the
   pure rule selection (`matches`, `select`).
-- `Sources/keypipe/Trigger.swift`: pure trigger buffer matcher
-  (longest match first, 64-character buffer).
+- `Sources/keypipe/Trigger.swift`: `Trigger` (text or hotkey), `Hotkey`
+  parsing, and the pure trigger buffer matcher (longest match first,
+  64-character buffer).
 - `Sources/keypipe/Engine.swift`: the fire sequence (composing gate, select,
   erase with readback, transform, output).
 - `Sources/keypipe/Shell.swift`: `runShell`, the one way keypipe runs a

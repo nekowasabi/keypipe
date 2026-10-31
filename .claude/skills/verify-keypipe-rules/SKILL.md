@@ -29,7 +29,7 @@ The script builds with `swift build` (R1a). There is no server for the fake harn
 
 Read-only. Reports the host OS, the swift toolchain, and, when the binary exists, `keypipe --probe` (Accessibility trust and the current snapshot). Run it first whenever anything looks off.
 
-Live items need two Accessibility grants in System Settings > Privacy & Security > Accessibility: the built `keypipe` binary (for the tap and AX) and the terminal running the script (for `System Events` keystrokes). The terminal also needs Automation grants for TextEdit and System Events; the first `osascript` call raises the dialog and blocks until it is answered (AppleEvent timeout -1712 after about 60 s). Set the input source to ABC. Any text expander (espanso) must not own a trigger that is a prefix of a test trigger (`@@` once was; it has been removed from the user's config, and the live run passes with espanso running). Keys are translated from keycode and shift with `UCKeyTranslate` on the current layout (since the hotkey change), so a `System Events` keystroke for a shifted key now arrives as the shifted character even though the event's stored string is unshifted (`probes/chord.swift` shows both). Live triggers still use `@`, `;`, `/`, which are unshifted on this JIS layout.
+Live items need two Accessibility grants in System Settings > Privacy & Security > Accessibility: the built `keypipe` binary (for the tap and AX) and the terminal running the script (for `System Events` keystrokes). The terminal also needs Automation grants for TextEdit and System Events; the first `osascript` call raises the dialog and blocks until it is answered (AppleEvent timeout -1712 after about 60 s). Set the input source to ABC. Any text expander (espanso) must not own a trigger that is a prefix of a test trigger (`@@` once was; it has been removed from the user's config, and the live run passes with espanso running). Keys are translated from keycode and shift with `UCKeyTranslate` on the current layout (since the hotkey change), so a `System Events` keystroke for a shifted key now arrives as the shifted character even though the event's stored string is unshifted (`probes/chord.swift` shows both). M6 types the shifted `!!!` to prove it.
 
 Throwaway probes that settled the design's runtime risks live in [`probes/`](probes/) (`axprobe.swift`, `tap.swift`, `imsel.swift`); build each with `swiftc -O -o <out> <file>`. Results are in `docs/design/verification-plan.md`.
 
@@ -94,6 +94,7 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | M2 | TextEdit `1abc;;;` sends `1abc` to output.shell, field left as `1abc` (digit first: TextEdit auto-capitalizes `abc` to `Abc`) | live |
 | M2b | TextEdit `1xyz///` under a `focus: any` rule: only the trigger is erased (field `1xyz`), output.shell gets empty input | live |
 | M5 | TextEdit `1hello` then `keystroke "@" using control down` under a `ctrl+@` textField rule: field becomes `1HELLO`, nothing erased | live |
+| M6 | TextEdit `1xyz!!!` under a `!!!` any rule: shifted key translated to `!`, trigger erased (field `1xyz`) | live |
 | M3 | Finder frontmost, `@@@` is seen (`nomatch` +1), no rule fires, daemon still alive | live |
 | M4 | iTerm2 probe recorded (risk check, not a behavior claim) | live |
 
