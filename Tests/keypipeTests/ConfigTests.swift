@@ -3,63 +3,58 @@ import XCTest
 @testable import keypipe
 
 final class ConfigTests: XCTestCase {
-    private func writeTemp(_ text: String) throws -> String {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString + ".json")
+    private func load(_ text: String) throws -> KeypipeConfig {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try text.write(to: url, atomically: true, encoding: .utf8)
-        return url.path
+        defer { try? FileManager.default.removeItem(at: url) }
+        return try loadConfig(path: url.path)
     }
 
-    func testLoadsExampleConfig() throws {
-        let example = URL(fileURLWithPath: #file)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("config.example.json").path
-        let config = try loadConfig(path: example)
-        XCTAssertTrue(config.rules.contains { $0.trigger == "@@@" })
+    func testLoadsExampleAndDefaults() throws {
+        let example = URL(fileURLWithPath: #file).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("config.example.json")
+        XCTAssertEqual(try loadConfig(path: example.path).rules.first?.trigger, "@@@")
+        XCTAssertEqual(try load(#"{"rules":[{"trigger":"@@@"}]}"#).rules, [Rule(trigger: "@@@")])
     }
 
-    func testLoadsMinimalRule() throws {
-        let path = try writeTemp(
-            #"{"rules": [{"trigger": "@@@", "action": {"type": "shell", "command": "echo hi"}}]}"#)
-        let config = try loadConfig(path: path)
-        XCTAssertEqual(config.rules.count, 1)
+    func testRejectionReasons() {
+        let cases = [
+            (#"{"rules":[{"trigger":""}]}"#, "empty trigger"),
+            (#"{"rules":[{"trigger":"@@@","action":{}}]}"#, "unknown key action"),
+            (#"{"rules":[{"trigger":"@@@","output":"replaceAll"}]}"#, "unknown output replaceAll"),
+            (#"{"rules":[{"trigger":"@@@","output":{"shell":""}}]}"#, "empty output.shell"),
+            (#"{"rules":[{"trigger":"@@@","transform":""}]}"#, "empty transform"),
+            (#"{"rules":[{"trigger":"@@@","when":{"focus":"window"}}]}"#, "unknown focus window"),
+            (#"{"rules":[{"trigger":"@@@","output":"replaceInput"}]}"#, "output replaceInput requires focus textField"),
+            (#"{"rules":[],"shellTimeout":1}"#, "unknown key shellTimeout"),
+            (#"{"rules":[{"trigger":"@@@","onFail":{}}]}"#, "unknown key onFail"),
+            (#"{"rules":[{"trigger":"@@@","when":{"apps":[]}}]}"#, "unknown key apps"),
+            (#"{"rules":[{"trigger":"@@@","output":{"shell":"true","extra":true}}]}"#, "unknown key extra"),
+        ]
+        for (json, reason) in cases {
+            XCTAssertThrowsError(try load(json)) {
+                XCTAssertEqual(String(describing: $0), "keypipe: invalid config: \(reason)")
+            }
+        }
     }
 
-    func testBadJSONThrows() throws {
-        let path = try writeTemp("{bad json")
-        XCTAssertThrowsError(try loadConfig(path: path))
+    func testTextFieldAllowsReplacement() throws {
+        let config = try load(#"{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"output":"replaceInput"}]}"#)
+        XCTAssertEqual(config.rules[0].output.primary, .builtin(.replaceInput))
     }
 
-    func testUnknownActionTypeThrows() throws {
-        let path = try writeTemp(
-            #"{"rules": [{"trigger": "@@@", "action": {"type": "teleport"}}]}"#)
-        XCTAssertThrowsError(try loadConfig(path: path))
-    }
-
-    func testEmptyTriggerThrows() throws {
-        let path = try writeTemp(
-            #"{"rules": [{"trigger": "", "action": {"type": "shell", "command": "true"}}]}"#)
-        XCTAssertThrowsError(try loadConfig(path: path))
-    }
-
-    func testMissingFileThrows() {
-        XCTAssertThrowsError(try loadConfig(path: "/nonexistent/keypipe.json"))
-    }
-
-    func testLongTriggerThrows() {
-        let long = String(repeating: "a", count: triggerMaxBuffer + 1)
-        let path = try! writeTemp(
-            #"{"rules": [{"trigger": "\#(long)", "action": {"type": "shell", "command": "true"}}]}"#)
-        XCTAssertThrowsError(try loadConfig(path: path))
-    }
-
-    func testMaxLengthTriggerAccepted() throws {
+    func testTriggerLengthBoundary() throws {
         let max = String(repeating: "a", count: triggerMaxBuffer)
-        let path = try writeTemp(
-            #"{"rules": [{"trigger": "\#(max)", "action": {"type": "shell", "command": "true"}}]}"#)
-        let config = try loadConfig(path: path)
-        XCTAssertEqual(config.rules.count, 1)
+        XCTAssertEqual(try load(#"{"rules":[{"trigger":"\#(max)"}]}"#).rules.count, 1)
+        XCTAssertThrowsError(try load(#"{"rules":[{"trigger":"\#(max)a"}]}"#))
+    }
+
+    func testMalformedShapesAndMissingFile() {
+        for json in ["{bad", "[]", #"{"rules":{}}"#, #"{"rules":[{"trigger":3}]}"#,
+                     #"{"rules":[{"trigger":"x","when":{"app":"app"}}]}"#,
+                     #"{"rules":[{"trigger":"x","transform":false}]}"#] {
+            XCTAssertThrowsError(try load(json))
+        }
+        XCTAssertThrowsError(try loadConfig(path: "/nonexistent/keypipe.json"))
     }
 }

@@ -2,8 +2,8 @@
   "rules": [
     {
       "trigger": "@@@",
-      "action": { "type": "shell", "command": "echo keypipe-triggered" },
-      "context": { "appBundleId": null, "processName": null }
+      "when": { "focus": "any" },
+      "output": { "shell": "echo keypipe-triggered" }
     }
   ]
 }

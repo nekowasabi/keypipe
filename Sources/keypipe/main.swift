@@ -29,11 +29,15 @@ private func smokeFeed(from args: [String]) -> String? {
 private func feedAndRun(_ text: String, matcher: inout TriggerMatcher, rules: [Rule]) -> Int {
     var hits = 0
     for ch in text {
-        if let trigger = matcher.feed(ch), let rule = rules.first(where: { $0.trigger == trigger }) {
+        if let trigger = matcher.feed(ch),
+           let rule = select(rules.filter { $0.trigger == trigger }, Snapshot(focus: .nothing)) {
             hits += 1
             print("keypipe matched \(rule.trigger)")
             fflush(stdout)
-            let outcome = runShell(rule.action.command ?? "", input: "", env: [:], timeout: 30)
+            let script: String
+            if case .shell(let command) = rule.output.primary { script = command }
+            else { script = "true" }
+            let outcome = runShell(script, input: "", env: [:], timeout: 30)
             let status: Int32
             switch outcome {
             case .exited(let code, let output):

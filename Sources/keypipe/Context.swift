@@ -1,12 +1,21 @@
-import Foundation
+enum Focus: Equatable { case nothing, text, composing }
 
-public struct MatchContext: Codable, Equatable {
-    public var appBundleId: String?
-    public var processName: String?
+struct Field: Equatable { var token: Int }
 
-    public init(appBundleId: String? = nil, processName: String? = nil) {
-        self.appBundleId = appBundleId
-        self.processName = processName
+struct Snapshot: Equatable {
+    var app: String? = nil
+    var focus: Focus
+    var field: Field? = nil
+}
+
+func matches(_ when: When, _ snapshot: Snapshot) -> Bool {
+    guard snapshot.focus != .composing else { return false }
+    if let apps = when.app {
+        guard let app = snapshot.app, apps.contains(app) else { return false }
     }
+    return when.focus == .any || snapshot.focus == .text
+}
 
+func select(_ candidates: [Rule], _ snapshot: Snapshot) -> Rule? {
+    candidates.first { matches($0.when, snapshot) }
 }
