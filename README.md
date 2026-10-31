@@ -2,17 +2,21 @@
 
 English | [日本語](README.ja.md)
 
-keypipe is a Mac background daemon that maps key sequences to actions,
-Espanso-like. Type a trigger such as `@@@` and keypipe runs the configured
-action (a shell command or a log line). There is deliberately no menu bar UI:
-no status item, no preferences window. Configuration lives in one JSON file.
+keypipe is a Mac background daemon, Espanso-like. Type a trigger such as
+`@@@` in a text field and keypipe takes the field's text, runs it through a
+configured transform (any shell command: a script, `claude -p`, `curl`), and
+hands the result to a configured sink (replace the field, or any shell
+command: tmux, a webhook, the clipboard). There is deliberately no menu bar
+UI. Configuration lives in one JSON file. The design is in
+`docs/design/context-rules.md`.
 
 ## Requirements
 
 - macOS 13 or later, Xcode 15 or Swift 5.9 toolchain.
-- Linux builds run the full matcher/action path via `--feed-stdin` and
-  `--smoke-feed`. The macOS key tap is a documented hook point, not wired
-  up in this MVP.
+- The Linux build runs the whole pipeline against a fake desktop
+  (`--context` plus `--feed-stdin` or `--smoke-feed`), which is the unit-test
+  path. The real key tap and Accessibility access are macOS only and not
+  wired up yet (stage 6 in `docs/design/failure-fallback.md`).
 
 ## Build
 
@@ -31,19 +35,25 @@ swift run keypipe --config ./config.example.json
 On start the daemon prints `keypipe started` with the rule count and the
 config path. It stays alive until SIGINT (Ctrl-C) or SIGTERM (`kill -TERM`).
 
-On Linux and in dev there is no key tap, so typed input arrives explicitly:
+Without the key tap, typed input and the desktop state arrive explicitly.
+`--context` points at a JSON snapshot of a fake desktop; typed keys append to
+its `fieldText`:
 
 ```sh
-# Feed one string through the matcher and run any matched actions.
-.build/debug/keypipe --config ./config.example.json --smoke-feed '@@@'
-# Stream stdin line by line through the matcher until EOF.
-echo '@@@' | .build/debug/keypipe --config ./config.example.json --feed-stdin
+cat > /tmp/ctx.json <<'EOF'
+{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"hello"}
+EOF
+# Feed one string, fire matched rules, print the final field.
+.build/debug/keypipe --config ./config.example.json --context /tmp/ctx.json --smoke-feed '@@@'
+# Stream stdin until EOF.
+echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/ctx.json --feed-stdin
 ```
 
-On a match the daemon prints `keypipe matched <trigger>`, runs the rule
-action, prints `keypipe action exit <status>`, and resets the matcher so the
-same trigger can fire again. `--smoke-feed` exits 0 on at least one hit and
-2 when nothing matched.
+On a match the daemon prints `keypipe matched <trigger> rule <n>`, then one
+line per stage (`erase`, `transform exit`, `apply` or `output-shell exit`),
+and finally `keypipe field <json>` with the fake field's text. `--smoke-feed`
+exits 0 when a rule matched and 2 when nothing matched. The full line
+contract is in `.claude/skills/verify-keypipe-rules/SKILL.md`.
 
 ## Config
 
@@ -56,63 +66,76 @@ out of scope). Path is passed with `--config` and defaults to
   "rules": [
     {
       "trigger": "@@@",
-      "action": { "type": "shell", "command": "echo keypipe-triggered" },
-      "context": { "appBundleId": null, "processName": null }
+      "when": { "app": ["com.apple.TextEdit"], "focus": "textField" },
+      "transform": "claude -p 'Translate to English. Output only the translation.'",
+      "output": "replaceInput"
+    },
+    {
+      "trigger": ";;;",
+      "when": { "focus": "textField" },
+      "output": { "shell": "tmux send-keys -t work:claude -l -- \"$1\"" }
     }
-  ],
-  "logPath": null
+  ]
 }
 ```
 
 - `trigger` is a non-empty string matched as a suffix of recent keystrokes,
-  at most 64 characters (`triggerMaxBuffer`). Longer triggers are rejected
-  at load because the buffer could never hold them. When several rules match
-  the same buffer, the longest trigger wins and ties keep config order.
-  Note the streaming caveat: a shorter trigger fires as soon as its own
-  suffix matches, before a longer sibling sharing that prefix can complete.
-- `action.type` is `shell` (runs `command` via `/bin/sh -c`) or `log`
-  (appends `message` to the top-level `logPath`, or prints it when `logPath`
-  is null). A shell action without a command, or any other type, is rejected.
-- `context` is optional. `appBundleId` and `processName` may each be null,
-  meaning wildcard. Matching is stubbed in this MVP: every rule always
-  matches, but the fields exist and are decoded and tested so a real per-app
-  matcher slots in later.
-- Invalid config (bad JSON, empty trigger, unknown action type, missing file)
-  fails loud: the daemon prints the error to stderr and exits non-zero.
+  at most 64 characters. When several rules share a buffer, the longest
+  trigger wins; among rules with the same trigger, the first one in config
+  order whose `when` holds wins. If none holds, nothing fires (no fallback to
+  a shorter trigger).
+- `when.app` is a list of bundle ids (omit for any app). `when.focus` is
+  `textField` or `any` (default). `textField` rules fire only when a text
+  element is focused; they erase the trigger and read the field, which
+  becomes the input. `any` rules fire anywhere with an empty input; in a text
+  element they still erase the trigger. Nothing fires while an input method
+  is composing.
+- `transform` is optional, a shell command run as `/bin/sh -c`. The input is
+  on stdin, in `$1`, and in `KEYPIPE_INPUT`; the front app is in
+  `KEYPIPE_APP`. Its stdout, minus one trailing newline, is the result. A
+  non-zero exit, a timeout (30 s), or empty output delivers nothing and
+  notifies.
+- `output` is `"replaceInput"` (writes the result back into the same field;
+  requires `focus: textField`), `"notify"`, `"none"` (default), or
+  `{ "shell": "..." }`, which receives the result the same way a transform
+  receives its input. Clipboard is `{ "shell": "pbcopy" }`, a webhook is
+  `curl`.
+- Unknown keys, an empty `trigger`, `transform`, or `output.shell`, an
+  unknown `output` or `focus`, and `replaceInput` without `focus: textField`
+  are rejected at load with `invalid config: <reason>` and exit 1.
 
-No secrets or network calls belong in actions.
+## macOS key tap and Accessibility (stage 6, not wired yet)
 
-## macOS key tap hook (future, not in MVP)
-
-`Sources/keypipe/MacKeyTap.swift` documents the hook point. A future change
-creates a CGEventTap for keyDown events, converts each CGEvent to the typed
-character, and feeds it into `TriggerMatcher.feed`. On a hit it executes
-`rule.action`. The tap needs Accessibility permission (`AXIsProcessTrusted`)
-and only compiles under `#if os(macOS)`. The matcher itself is already wired
-into the daemon path (`main.swift` builds it from the loaded rules and runs
-actions on hits); until the tap lands, `--feed-stdin` and `--smoke-feed`
-prove that path on Linux, and the pure `TriggerMatcher` buffer pipeline is
-exercised by unit tests with no Accessibility API.
+`Sources/keypipe/MacKeyTap.swift` documents the hook point. The real
+implementation installs a listen-only CGEventTap, ignores keypipe's own
+posted Backspaces, and calls `Engine.key` after the event is delivered.
+`MacDesktop` will implement the `Desktop` primitives over the Accessibility
+API. Both need Accessibility permission and only compile under
+`#if os(macOS)`. What was measured on a real Mac before implementing is in
+`docs/design/verification-plan.md`.
 
 ## Layout
 
 - `Package.swift`: Swift package `keypipe`, executable target `keypipe`,
   test target `keypipeTests`.
-- `Sources/keypipe/main.swift`: entrypoint, `--config` parsing, `keypipe
-  started` log, SIGINT/SIGTERM handling, run-until-signal loop, plus
-  `--feed-stdin` and `--smoke-feed` dev input paths that feed the matcher
-  and execute actions.
-- `Sources/keypipe/Config.swift`: JSON schema types and `loadConfig(path:)`
-  with boundary validation.
-- `Sources/keypipe/Actions.swift`: `runAction(_:logPath:)` executes a
-  matched rule's `shell`/`log` action.
-- `Sources/keypipe/Context.swift`: optional per-rule context plus the
-  always-true stub matcher.
+- `Sources/keypipe/main.swift`: entrypoint, `--config`, `--context`,
+  `--smoke-feed`, `--feed-stdin`, `--probe` (stub), signal handling.
+- `Sources/keypipe/Config.swift`: the only JSON boundary, `loadConfig(path:)`
+  with reason-specific rejections.
+- `Sources/keypipe/Context.swift`: `Focus`, `Field`, `Snapshot`, and the
+  pure rule selection (`matches`, `select`).
 - `Sources/keypipe/Trigger.swift`: pure trigger buffer matcher
-  (`feed`/`reset`/`buffer`, `triggerMaxBuffer` capacity, longest-match-first).
-- `Sources/keypipe/MacKeyTap.swift`: future CGEvent hook documentation.
-- `Tests/keypipeTests/`: unit tests for trigger, context, and config.
-- `config.example.json`: example mapping `@@@` to `echo keypipe-triggered`.
+  (longest match first, 64-character buffer).
+- `Sources/keypipe/Engine.swift`: the fire sequence (composing gate, select,
+  erase with readback, transform, output).
+- `Sources/keypipe/Shell.swift`: `runShell`, the one way keypipe runs a
+  command (stdin/`$1`/env, process-group timeout).
+- `Sources/keypipe/Desktop.swift`, `FakeDesktop.swift`: the desktop port
+  (snapshot, backspace, text, setText, notify) and its JSON-driven fake.
+- `Sources/keypipe/MacKeyTap.swift`: CGEvent hook documentation (stage 6).
+- `Tests/keypipeTests/`: unit tests for trigger, context, config, shell,
+  and engine.
+- `config.example.json`: a minimal `focus: any` rule that echoes.
 
 ## Format and tests
 
@@ -129,10 +152,15 @@ toolchain additionally needs
 
 ## Verification
 
-The project-local verification skill lives at
-`.claude/skills/verify-keypipe/` with `SKILL.md`, `verify.sh`, and
-`features/`. Run the full drive with:
+The verification skill for the rule pipeline lives at
+`.claude/skills/verify-keypipe-rules/` (`SKILL.md`, `verify.sh`, `probes/`).
+The fake-desktop items run anywhere; the live items need a Mac with
+Accessibility and Automation grants:
 
 ```sh
-REPO=/workspace/keypipe .claude/skills/verify-keypipe/verify.sh
+.claude/skills/verify-keypipe-rules/verify.sh --no-live   # R items
+.claude/skills/verify-keypipe-rules/verify.sh             # plus M items (Mac)
 ```
+
+`.claude/skills/verify-keypipe/` is the older MVP skill and still expects
+the pre-revision-3 schema.

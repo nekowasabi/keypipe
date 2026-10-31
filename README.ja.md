@@ -2,18 +2,20 @@
 
 [English](README.md) | 日本語
 
-keypipe はキーシーケンスをアクションにマッピングする Mac バックグラウンドデーモンで、
-Espanso に似ています。`@@@` のようなトリガーを入力すると、keypipe は設定された
-アクション（シェルコマンドまたはログ行）を実行します。メニューバー UI は意図的に
-ありません。ステータスアイテムも設定ウィンドウもありません。設定は 1 つの JSON
-ファイルに記述します。
+keypipe は Espanso に似た Mac のバックグラウンドデーモンです。テキスト欄で
+`@@@` のようなトリガーを打つと、欄の文字を設定した変換（任意のシェルコマンド。
+スクリプト、`claude -p`、`curl`）に通し、結果を設定した送り先（欄の置換、または
+tmux、webhook、クリップボードなど任意のシェルコマンド）へ渡します。メニューバー
+UI は意図的にありません。設定は 1 つの JSON ファイルです。設計は
+`docs/design/context-rules.md` にあります。
 
 ## 必要条件
 
 - macOS 13 以降、Xcode 15 または Swift 5.9 ツールチェーン。
-- Linux ビルドでは `--feed-stdin` と `--smoke-feed` 経由でマッチャー／アクションの
-  パス全体を実行します。macOS のキー取得（key tap）はドキュメント化された
-  フックポイントであり、この MVP では未配線です。
+- Linux ビルドでは偽のデスクトップ（`--context` と `--feed-stdin` か
+  `--smoke-feed`）に対してパイプライン全体を動かせます。これが単体テストの経路です。
+  実際のキー取得と Accessibility は macOS 専用で、まだ配線されていません
+  （`docs/design/failure-fallback.md` の段 6）。
 
 ## ビルド
 
@@ -32,19 +34,25 @@ swift run keypipe --config ./config.example.json
 起動時にデーモンはルール数と設定パスとともに `keypipe started` を出力します。
 SIGINT（Ctrl-C）または SIGTERM（`kill -TERM`）まで動作し続けます。
 
-Linux および開発環境ではキー取得が無いため、入力は明示的に渡します。
+キー取得が無い環境では、打鍵とデスクトップの状態を明示的に渡します。
+`--context` に偽デスクトップの JSON を指定し、打ったキーはその `fieldText` の
+末尾に足されます。
 
 ```sh
-# Feed one string through the matcher and run any matched actions.
-.build/debug/keypipe --config ./config.example.json --smoke-feed '@@@'
-# Stream stdin line by line through the matcher until EOF.
-echo '@@@' | .build/debug/keypipe --config ./config.example.json --feed-stdin
+cat > /tmp/ctx.json <<'EOF'
+{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"hello"}
+EOF
+# 文字列を 1 つ流し、一致したルールを発火し、最終的な欄の文字を出す。
+.build/debug/keypipe --config ./config.example.json --context /tmp/ctx.json --smoke-feed '@@@'
+# EOF まで stdin を流す。
+echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/ctx.json --feed-stdin
 ```
 
-マッチするとデーモンは `keypipe matched <trigger>` を出力し、ルールの
-アクションを実行し、`keypipe action exit <status>` を出力して、マッチャーを
-リセットするため同じトリガーが再び発火できます。`--smoke-feed` は少なくとも
-1 件ヒットすると終了コード 0、マッチ無しでは 2 で終了します。
+一致するとデーモンは `keypipe matched <trigger> rule <n>` を出し、段ごとに 1 行
+（`erase`、`transform exit`、`apply` か `output-shell exit`）、最後に偽の欄の文字を
+`keypipe field <json>` で出します。`--smoke-feed` はルールが一致すれば終了コード 0、
+どれも一致しなければ 2 です。出力行の契約は
+`.claude/skills/verify-keypipe-rules/SKILL.md` にあります。
 
 ## 設定
 
@@ -57,63 +65,69 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --feed-stdin
   "rules": [
     {
       "trigger": "@@@",
-      "action": { "type": "shell", "command": "echo keypipe-triggered" },
-      "context": { "appBundleId": null, "processName": null }
+      "when": { "app": ["com.apple.TextEdit"], "focus": "textField" },
+      "transform": "claude -p 'Translate to English. Output only the translation.'",
+      "output": "replaceInput"
+    },
+    {
+      "trigger": ";;;",
+      "when": { "focus": "textField" },
+      "output": { "shell": "tmux send-keys -t work:claude -l -- \"$1\"" }
     }
-  ],
-  "logPath": null
+  ]
 }
 ```
 
-- `trigger` は直近のキー入力のサフィックスとしてマッチする空でない文字列で、
-  最大 64 文字（`triggerMaxBuffer`）です。より長いトリガーはバッファに収まらない
-  ため読み込み時に拒否されます。複数のルールが同じバッファにマッチした場合は
-  最も長いトリガーが勝ち、同点では設定順を保ちます。ストリーミング上の注意点：
-  短いトリガーは、そのサフィックスが一致した時点で発火するため、その接頭辞を
-  共有する長いトリガーが完成する前に発火します。
-- `action.type` は `shell`（`command` を `/bin/sh -c` 経由で実行）または `log`
-  （`message` をトップレベルの `logPath` に追記し、`logPath` が null の場合は
-  出力します）です。コマンドの無い shell アクションやその他の種別は拒否されます。
-- `context` は任意です。`appBundleId` と `processName` はそれぞれ null 可で、
-  null はワイルドカードを意味します。マッチングはこの MVP ではスタブです。
-  すべてのルールは常にマッチしますが、フィールドは存在し、デコードとテストが
-  済んでいるため、将来のアプリ別マッチャーを後から差し込めます。
-- 不正な設定（壊れた JSON、空のトリガー、未知のアクション種別、ファイル欠落）は
-  大きく失敗します。デーモンはエラーを stderr に出力し、非ゼロで終了します。
+- `trigger` は直近のキー入力の末尾に一致する空でない文字列で、最大 64 文字です。
+  複数のルールが同じバッファに一致したら最長のトリガーが勝ちます。同じトリガーの
+  ルールは、設定順で最初に `when` を満たすものが勝ちます。どれも満たさなければ
+  何もしません（短いトリガーへは落ちません）。
+- `when.app` は bundle id の一覧（省略で全アプリ）。`when.focus` は `textField` か
+  `any`（既定）。`textField` のルールはテキスト要素にフォーカスがあるときだけ
+  発火し、トリガーを消して欄を読み、それが入力になります。`any` のルールはどこでも
+  発火し入力は空文字で、テキスト要素ならトリガーだけ消します。IME の変換中は
+  何も発火しません。
+- `transform` は省略可で、`/bin/sh -c` で走るシェルコマンドです。入力は stdin、
+  `$1`、`KEYPIPE_INPUT` で受け、前面アプリは `KEYPIPE_APP` です。stdout から末尾の
+  改行を 1 つ落としたものが結果です。非ゼロ終了、期限切れ（30 秒）、空の出力は
+  何も送らず通知します。
+- `output` は `"replaceInput"`（同じ欄に結果を書き戻す。`focus: textField` が必要）、
+  `"notify"`、`"none"`（既定）、または `{ "shell": "..." }`（変換と同じ経路で結果を
+  受ける）。クリップボードは `{ "shell": "pbcopy" }`、webhook は `curl` で書きます。
+- 未知のキー、空の `trigger` / `transform` / `output.shell`、未知の `output` や
+  `focus`、`focus: textField` の無い `replaceInput` は読み込み時に
+  `invalid config: <理由>` で拒否し、終了コード 1 です。
 
-アクションにシークレットやネットワーク呼び出しを入れてはいけません。
-
-## macOS キー取得フック（将来対応、MVP 対象外）
+## macOS のキー取得と Accessibility（段 6、未配線）
 
 `Sources/keypipe/MacKeyTap.swift` がフックポイントをドキュメント化しています。
-将来の変更では keyDown イベント用の CGEventTap を作成し、各 CGEvent を入力文字に
-変換して `TriggerMatcher.feed` に流します。ヒットしたら `rule.action` を実行
-します。この取得にはアクセシビリティ許可（`AXIsProcessTrusted`）が必要で、
-`#if os(macOS)` でのみコンパイルされます。マッチャー自体はすでにデーモンの
-パスに配線されています（`main.swift` が読み込んだルールから構築し、ヒット時に
-アクションを実行します）。取得が入るまでは、`--feed-stdin` と `--smoke-feed`
-で Linux 上のそのパスを検証し、純粋な `TriggerMatcher` のバッファパイプラインは
-Accessibility API を使わない単体テストで検証します。
+実装では listen-only の CGEventTap を張り、keypipe 自身が post した Backspace を
+除外し、イベント配送後に `Engine.key` を呼びます。`MacDesktop` が `Desktop` の
+原始操作を Accessibility API の上に実装します。どちらも Accessibility 許可が
+必要で、`#if os(macOS)` でのみコンパイルされます。実装前に実機で測った事実は
+`docs/design/verification-plan.md` にあります。
 
 ## 構成
 
 - `Package.swift`: Swift パッケージ `keypipe`、実行ターゲット `keypipe`、
   テストターゲット `keypipeTests`。
-- `Sources/keypipe/main.swift`: エントリーポイント、`--config` 解析、`keypipe
-  started` ログ、SIGINT/SIGTERM 処理、シグナル受信までの実行ループ、および
-  マッチャーに流してアクションを実行する `--feed-stdin` と `--smoke-feed`
-  の開発用入力パス。
-- `Sources/keypipe/Config.swift`: JSON スキーマ型と境界検証付きの
+- `Sources/keypipe/main.swift`: エントリーポイント、`--config`、`--context`、
+  `--smoke-feed`、`--feed-stdin`、`--probe`（仮）、シグナル処理。
+- `Sources/keypipe/Config.swift`: 唯一の JSON 境界。理由付きで拒否する
   `loadConfig(path:)`。
-- `Sources/keypipe/Actions.swift`: マッチしたルールの `shell`／`log` アクションを
-  実行する `runAction(_:logPath:)`。
-- `Sources/keypipe/Context.swift`: 任意のルール別コンテキストと、常に真を返す
-  スタブマッチャー。
+- `Sources/keypipe/Context.swift`: `Focus`、`Field`、`Snapshot` と純粋なルール選択
+  （`matches`、`select`）。
 - `Sources/keypipe/Trigger.swift`: 純粋なトリガーバッファマッチャー
-  （`feed`／`reset`／`buffer`、`triggerMaxBuffer` 容量、最長マッチ優先）。
-- `Sources/keypipe/MacKeyTap.swift`: 将来の CGEvent フックのドキュメント。
-- `Tests/keypipeTests/`: トリガー、コンテキスト、設定の単体テスト。
-- `config.example.json`: `@@@` を `echo keypipe-triggered` にマッピングする例。
+  （最長一致優先、64 文字バッファ）。
+- `Sources/keypipe/Engine.swift`: 発火手順（変換中の門、選択、読み戻し付きの消去、
+  変換、送り先）。
+- `Sources/keypipe/Shell.swift`: `runShell`。keypipe がコマンドを走らせる唯一の経路
+  （stdin / `$1` / 環境変数、プロセスグループの期限）。
+- `Sources/keypipe/Desktop.swift`、`FakeDesktop.swift`: デスクトップの境界
+  （snapshot、backspace、text、setText、notify）と JSON 駆動の偽物。
+- `Sources/keypipe/MacKeyTap.swift`: CGEvent フックのドキュメント（段 6）。
+- `Tests/keypipeTests/`: トリガー、コンテキスト、設定、シェル、エンジンの単体テスト。
+- `config.example.json`: echo する最小の `focus: any` ルール。
 
 ## フォーマットとテスト
 
@@ -130,9 +144,14 @@ swift-format lint --strict --recursive Sources Tests
 
 ## 検証
 
-プロジェクトローカルの検証スキルは `.claude/skills/verify-keypipe/` にあります
-（`SKILL.md`、`verify.sh`、`features/`）。完全なドライブは以下で実行します。
+ルールのパイプラインの検証スキルは `.claude/skills/verify-keypipe-rules/`
+（`SKILL.md`、`verify.sh`、`probes/`）にあります。偽デスクトップの項目はどこでも
+動き、実機の項目は Accessibility と Automation を許可した Mac が必要です。
 
 ```sh
-REPO=/workspace/keypipe ./verify.sh
+.claude/skills/verify-keypipe-rules/verify.sh --no-live   # R 項目
+.claude/skills/verify-keypipe-rules/verify.sh             # M 項目も（Mac）
 ```
+
+`.claude/skills/verify-keypipe/` は MVP 時代の古いスキルで、改訂 3 より前の
+スキーマを前提にしています。
