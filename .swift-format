@@ -1,0 +1,11 @@
+{
+  "indentation": {
+    "spaces": 4
+  },
+  "lineLength": 100,
+  "maximumBlankLines": 1,
+  "respectsExistingLineBreaks": true,
+  "lineBreakAroundMultilineExpressionChainComponents": false,
+  "indentConditionalCompilationBlocks": true,
+  "indentSwitchCaseLabels": false
+}
