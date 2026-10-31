@@ -26,14 +26,14 @@ private func smokeFeed(from args: [String]) -> String? {
 
 /// Feeds text through the matcher. On every hit runs the rule action,
 /// then resets so the same trigger can fire again. Returns hit count.
-private func feedAndRun(_ text: String, matcher: inout TriggerMatcher, logPath: String?) -> Int {
+private func feedAndRun(_ text: String, matcher: inout TriggerMatcher) -> Int {
     var hits = 0
     for ch in text {
         if let rule = matcher.feed(ch) {
             hits += 1
             print("keypipe matched \(rule.trigger)")
             fflush(stdout)
-            let status = runAction(rule.action, logPath: logPath)
+            let status = runAction(rule.action)
             print("keypipe action exit \(status)")
             fflush(stdout)
             matcher.reset()
@@ -58,7 +58,7 @@ do {
 var matcher = TriggerMatcher(rules: loaded.rules.map { TriggerRule($0) })
 
 if let seed = smokeFeed(from: args) {
-    let hits = feedAndRun(seed, matcher: &matcher, logPath: loaded.logPath)
+    let hits = feedAndRun(seed, matcher: &matcher)
     print("keypipe smoke-feed hits \(hits)")
     fflush(stdout)
     exit(hits > 0 ? 0 : 2)
@@ -68,7 +68,7 @@ if args.contains("--feed-stdin") {
     print("keypipe started with \(loaded.rules.count) rule(s) from \(configFile)")
     fflush(stdout)
     while let line = readLine(strippingNewline: false) {
-        _ = feedAndRun(line, matcher: &matcher, logPath: loaded.logPath)
+        _ = feedAndRun(line, matcher: &matcher)
     }
     exit(0)
 }

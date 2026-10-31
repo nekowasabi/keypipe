@@ -26,11 +26,9 @@ public struct Rule: Codable, Equatable {
 
 public struct KeypipeConfig: Codable, Equatable {
     public var rules: [Rule]
-    public var logPath: String?
 
-    public init(rules: [Rule], logPath: String? = nil) {
+    public init(rules: [Rule]) {
         self.rules = rules
-        self.logPath = logPath
     }
 }
 
@@ -77,8 +75,6 @@ public func loadConfig(path: String) throws -> KeypipeConfig {
             if (rule.action.command ?? "").isEmpty {
                 throw ConfigError.invalid("shell action requires a non-empty command")
             }
-        case "log":
-            break
         default:
             throw ConfigError.invalid("unknown action type: \(rule.action.type)")
         }

@@ -25,7 +25,6 @@ final class ConfigTests: XCTestCase {
             #"{"rules": [{"trigger": "@@@", "action": {"type": "shell", "command": "echo hi"}}]}"#)
         let config = try loadConfig(path: path)
         XCTAssertEqual(config.rules.count, 1)
-        XCTAssertNil(config.logPath)
     }
 
     func testBadJSONThrows() throws {
@@ -41,7 +40,7 @@ final class ConfigTests: XCTestCase {
 
     func testEmptyTriggerThrows() throws {
         let path = try writeTemp(
-            #"{"rules": [{"trigger": "", "action": {"type": "log", "message": "x"}}]}"#)
+            #"{"rules": [{"trigger": "", "action": {"type": "shell", "command": "true"}}]}"#)
         XCTAssertThrowsError(try loadConfig(path: path))
     }
 
@@ -52,14 +51,14 @@ final class ConfigTests: XCTestCase {
     func testLongTriggerThrows() {
         let long = String(repeating: "a", count: triggerMaxBuffer + 1)
         let path = try! writeTemp(
-            #"{"rules": [{"trigger": "\#(long)", "action": {"type": "log", "message": "x"}}]}"#)
+            #"{"rules": [{"trigger": "\#(long)", "action": {"type": "shell", "command": "true"}}]}"#)
         XCTAssertThrowsError(try loadConfig(path: path))
     }
 
     func testMaxLengthTriggerAccepted() throws {
         let max = String(repeating: "a", count: triggerMaxBuffer)
         let path = try writeTemp(
-            #"{"rules": [{"trigger": "\#(max)", "action": {"type": "log", "message": "x"}}]}"#)
+            #"{"rules": [{"trigger": "\#(max)", "action": {"type": "shell", "command": "true"}}]}"#)
         let config = try loadConfig(path: path)
         XCTAssertEqual(config.rules.count, 1)
     }
