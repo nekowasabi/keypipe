@@ -33,7 +33,15 @@ private func feedAndRun(_ text: String, matcher: inout TriggerMatcher, rules: [R
             hits += 1
             print("keypipe matched \(rule.trigger)")
             fflush(stdout)
-            let status = runAction(rule.action)
+            let outcome = runShell(rule.action.command ?? "", input: "", env: [:], timeout: 30)
+            let status: Int32
+            switch outcome {
+            case .exited(let code, let output):
+                if !output.isEmpty { print(output) }
+                status = code
+            case .timedOut:
+                status = 124
+            }
             print("keypipe action exit \(status)")
             fflush(stdout)
             matcher.reset()
