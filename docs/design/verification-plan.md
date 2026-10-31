@@ -90,19 +90,40 @@
 | R2d/e は設計に無い | 設計に一行足して項目は残す |
 | Input Monitoring を `--probe` で見るか | 未検証リスクとして Gotchas に書くだけ。M1 失敗時に切り分ける |
 
+## 実機で確かめたこと（2026-10-31、macOS 26.6、使い捨ての Swift スクリプト）
+
+スクリプトは `.claude/skills/verify-keypipe-rules/probes/`（`axprobe.swift` 前面の AX 要素の読み書き、`tap.swift` listen-only tap と Backspace の post、`imsel.swift` 入力ソースの切替）。`swiftc -O -o <出力> <ファイル>` で単体ビルドする。手順は「listen-only の CGEventTap を張る」「`System Events` で打鍵」「AX で前面の要素を読む・書く」「CGEvent で Backspace を post する」。
+
+| 問い | 結果 |
+| --- | --- |
+| CGEventTap が `System Events` の合成打鍵を受けるか | 受ける。`hello@@@` の 8 打鍵すべてを keyDown で観測 |
+| listen-only の tap に Input Monitoring が要るか | 要らなかった。未署名の CLI を端末（iTerm2）から起動し、`AXIsProcessTrusted` が true で tap も AX も動いた。TCC が端末に帰属しているのは推定 |
+| 端末に要る許可 | Accessibility に加えて **Automation**（端末 → TextEdit、端末 → System Events）。初回はダイアログで osascript が止まり、約 60 秒で AppleEvent timeout（-1712）。`SKILL.md` の Doctor と下の手順 2 に足す |
+| TextEdit の本文は `focus: textField` か | AXTextArea、`AXValue` 読み書き可。書き込み後の読み戻しも一致 |
+| iTerm2 のプロンプトは AX 上テキスト欄か | **テキスト欄として見える**。AXTextArea で `AXValue` は画面全体（3,819 文字）、settable。設計の「テキスト欄ではない可能性」は逆で、欄の文字が画面全体になる方が問題。AXRole だけでは TextEdit と区別できない。`AXRoleDescription` が TextEdit では取れ、iTerm2 ではエラー（-25212）だったのが判別の候補（未検証） |
+| CGEvent で post した Backspace は届くか | アプリ依存。**CotEditor では届く**（`abcdef` → `abc`）。AppleScript の `display dialog` の欄でも 4 回で 4 文字消えた。**TextEdit だけ無視する**。文字キー（`x`）は入るが Backspace・左矢印・前方削除は無視され、`System Events` の `key code 51` も espanso の post した Backspace も同じ。原因は未特定 |
+| 自分が post した Backspace を自分の tap が拾うか | 拾う。`eventSourceUserData` で自分の事象だと識別できた |
+| 日本語 IME | ATOK が有効だと `keystroke "hello@@@"` は `へっぉ＠` になる。変換中の文字には Backspace が効いた（`＠` 3 文字が espanso の 2 回で 1 文字に）。検証前に ABC へ切り替える（`TISSelectInputSource` で可） |
+| espanso との共存 | 利用者の espanso に `@@` トリガーがあり、`@@@` を打つと espanso が Backspace 2 回と空白を post した。同じトリガー文字列を二つのツールが取り合う |
+| TextEdit の予測入力 | 打鍵後に候補のポップオーバーが出て、出ている間は AppleScript の `get text` が止まる。Escape で閉じる。「osascript の期限」（中）は観測済みに格上げ |
+
+設計への含意。
+
+- 手順 3「Backspace で消す」は維持できるが、TextEdit では効かない。消去後に欄を読み戻し、末尾にトリガーが残っていれば `AXValue` からトリガーを取り除いて書き戻す予備経路を足す。
+- `focus: textField` の既定ではあらゆるターミナルがテキスト欄として通り、プロンプトで `@@@` を打つと画面全体が入力になって `replaceInput` が走る。AXRole 以外の判別が要る。判別ができるまで、iTerm2 向けルールは `focus: any` にして欄の文字を使わない。
+- 検証の前提に「入力ソース ABC」「espanso の `@@` トリガーを一時停止」「TextEdit の予測入力を閉じる」「端末への Automation 許可」を足す。
+
 ## 未検証のリスク
 
-- CGEventTap が `System Events` の合成打鍵を受け取るか。
-- listen-only の CGEventTap に Input Monitoring の許可が要るか。端末から起動したときの TCC の帰属先。
 - ビルドし直すと Accessibility の許可が外れるか。
-- iTerm2 のプロンプトが AX 上テキスト欄か。
 - Electron 系アプリが `AXValue` の書き込みを無視するか。
-- 日本語 IME 変換中の発火と Backspace の数。
+- TextEdit が合成 Backspace を無視する原因。ブラウザの欄でどうなるか。
+- ターミナルをテキスト欄から外す判別（`AXRoleDescription` の有無が候補）。
 
 ## Mac での次の手順
 
 1. 前提をそろえる。Xcode 15 か Swift 5.9 以降、`tmux`、TextEdit。入力ソースは ABC。TextEdit の未保存文書は閉じておく。
-2. Accessibility をターミナルに許可する（`System Events` の打鍵用）。keypipe 本体への許可は実装後。
+2. Accessibility と Automation（TextEdit、System Events）をターミナルに許可する（`System Events` の打鍵用）。Automation は初回の osascript でダイアログが出るので、そこで許可する。keypipe 本体への許可は実装後。
 3. 実装前の基準を取る。今のコードは新しいフラグを持たないので R2 以降と M は FAIL するのが正しい。
    ```sh
    .claude/skills/verify-keypipe-rules/verify.sh --doctor

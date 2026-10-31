@@ -29,7 +29,9 @@ The script builds with `swift build` (R1a). There is no server for the fake harn
 
 Read-only. Reports the host OS, the swift toolchain, and, when the binary exists, `keypipe --probe` (Accessibility trust and the current snapshot). Run it first whenever anything looks off.
 
-Live items need two Accessibility grants in System Settings > Privacy & Security > Accessibility: the built `keypipe` binary (for the tap and AX) and the terminal running the script (for `System Events` keystrokes).
+Live items need two Accessibility grants in System Settings > Privacy & Security > Accessibility: the built `keypipe` binary (for the tap and AX) and the terminal running the script (for `System Events` keystrokes). The terminal also needs Automation grants for TextEdit and System Events; the first `osascript` call raises the dialog and blocks until it is answered (AppleEvent timeout -1712 after about 60 s). Set the input source to ABC and pause any espanso trigger that shares a prefix with the test triggers.
+
+Throwaway probes that settled the design's runtime risks live in [`probes/`](probes/) (`axprobe.swift`, `tap.swift`, `imsel.swift`); build each with `swiftc -O -o <out> <file>`. Results are in `docs/design/verification-plan.md`.
 
 ## Contract the script asserts
 
