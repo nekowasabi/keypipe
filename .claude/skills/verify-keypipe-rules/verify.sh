@@ -53,7 +53,7 @@ cat "$EV/env.txt"
 command -v swift >/dev/null 2>&1 && swift --version >/dev/null 2>&1 \
   && ok "R0b swift toolchain" || ng "R0b swift toolchain" "swift missing or broken"
 if [ "${1:-}" = "--doctor" ]; then
-  [ -x "$BIN" ] && "$BIN" --probe > "$EV/probe.json" 2>&1 && cat "$EV/probe.json"
+  [ -x "$BIN" ] && cap 10 "$BIN" --probe > "$EV/probe.json" 2>&1 && cat "$EV/probe.json"
   echo "summary pass=$PASS fail=$FAIL skip=$SKIP evidence=$EV"
   [ "$FAIL" -eq 0 ]; exit
 fi
@@ -74,19 +74,22 @@ fi
 
 TXT='{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"hello"}'
 
-# R2 config boundary
+# R2 config boundary. bad <id> <config> <reason>: exit 1 and the line
+# "invalid config: <reason>". A generic rejection (e.g. the old loader
+# refusing a config for a missing key) must not pass.
 bad() {
   printf '%s' "$2" > "$EV/$1.config.json"
   cap 10 "$BIN" --config "$EV/$1.config.json" --smoke-feed '@@@' > "$EV/$1.out" 2>&1
   local code=$?
-  if [ "$code" = 1 ] && has "$1" "invalid config"; then ok "$1" "$3"; else ng "$1" "$3 (exit $code)"; fi
+  echo "$code" > "$EV/$1.exit"
+  if [ "$code" = 1 ] && has "$1" "invalid config: $3"; then ok "$1" "$3"; else ng "$1" "$3 (exit $code)"; fi
 }
-bad R2a '{"rules":[{"trigger":""}]}' "empty trigger rejected"
-bad R2b '{"rules":[{"trigger":"@@@","action":{"type":"shell","command":"echo x"}}]}' "old schema key action rejected"
-bad R2c '{"rules":[{"trigger":"@@@","output":"replaceAll"}]}' "unknown builtin output rejected"
-bad R2d '{"rules":[{"trigger":"@@@","output":{"shell":""}}]}' "empty output.shell rejected"
-bad R2e '{"rules":[{"trigger":"@@@","transform":""}]}' "empty transform rejected"
-bad R2f '{"rules":[{"trigger":"@@@","when":{"focus":"window"}}]}' "unknown focus rejected"
+bad R2a '{"rules":[{"trigger":""}]}' "empty trigger"
+bad R2b '{"rules":[{"trigger":"@@@","action":{"type":"shell","command":"echo x"}}]}' "unknown key action"
+bad R2c '{"rules":[{"trigger":"@@@","output":"replaceAll"}]}' "unknown output replaceAll"
+bad R2d '{"rules":[{"trigger":"@@@","output":{"shell":""}}]}' "empty output.shell"
+bad R2e '{"rules":[{"trigger":"@@@","transform":""}]}' "empty transform"
+bad R2f '{"rules":[{"trigger":"@@@","when":{"focus":"window"}}]}' "unknown focus window"
 feed R2g '{"rules":[{"trigger":"@@@"}]}' "$TXT" '@@@'
 check "R2g minimal rule accepted" "exitis R2g 0 && has R2g 'keypipe matched @@@ rule 0'" "defaults: when any, identity, output none"
 
@@ -146,7 +149,7 @@ check "R7 Japanese field text intact" "[ \"\$(cat '$EV/R7.sent' 2>/dev/null)\" =
 if [ "${1:-}" = "--no-live" ] || [ "$(uname -s)" != Darwin ]; then
   sk "M1-M4 live macOS" "not Darwin or --no-live"
 else
-  "$BIN" --probe > "$EV/M0.probe.json" 2>&1
+  cap 10 "$BIN" --probe > "$EV/M0.probe.json" 2>&1
   if grep -q '"trusted":true' "$EV/M0.probe.json"; then ok "M0 Accessibility granted to keypipe" "M0.probe.json"
   else ng "M0 Accessibility granted to keypipe" "grant it in System Settings > Privacy > Accessibility, see M0.probe.json"; fi
 
@@ -197,7 +200,7 @@ else
   if [ -d /Applications/iTerm.app ]; then
     osa 'tell application "iTerm" to activate' >/dev/null
     sleep 1
-    "$BIN" --probe > "$EV/M4.probe.json" 2>&1
+    cap 10 "$BIN" --probe > "$EV/M4.probe.json" 2>&1
     check "M4 iTerm2 probe recorded (risk: prompt may not be a text field)" "grep -q focusIsTextField '$EV/M4.probe.json'" "$(cat "$EV/M4.probe.json")"
   else
     sk "M4 iTerm2 probe" "/Applications/iTerm.app absent"

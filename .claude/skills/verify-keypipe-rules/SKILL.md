@@ -50,6 +50,8 @@ Context JSON for `--context`: `{"app":"<bundle id>","focusIsTextField":true,"fie
 
 `--smoke-feed` exits 0 when at least one rule matched, 2 when none, 1 on invalid config.
 
+Invalid configs print `invalid config: <reason>` with one of these reasons, which R2 matches literally: `empty trigger`, `unknown key <name>`, `unknown output <value>`, `empty output.shell`, `empty transform`, `unknown focus <value>`. A rejection with any other reason fails the item.
+
 `--probe` prints one JSON line: `{"trusted":bool,"app":...,"focusIsTextField":bool,"fieldText":...}`.
 
 ## Items
