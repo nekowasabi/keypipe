@@ -216,7 +216,7 @@ struct Engine {
 - 合成 Backspace はアプリ依存。CotEditor では消える。TextEdit はプローブ（2026-10-31）では無視したが、デーモン本体が post した Backspace は届いた（2026-11-01、M1/M2 の 4 発火すべて `erase 3` のみで `erase-rewrite` 無し）。差の原因は未特定。手順 5 の読み戻しと `AXValue` の書き戻しは無視するアプリ向けに残す。
 - 「何もフォーカスしていない」は nil ではない。Finder のデスクトップでも `AXFocusedUIElement` は `AXGroup`（`AXFocused=1`）。役割から `nothing` を導く。
 - IME 変換中は判別できる。TextEdit の欄は `AXTextInputMarkedRange` を持ち、ATOK で変換中は長さが正、Escape 後は 0。`AXValue` には変換中の文字が既に入る。
-- ATOK が有効だと合成打鍵がローマ字変換される。利用者の espanso に `@@` トリガーがあり、`@@@` と取り合う。共存は設計の範囲外とし、検証では止める。
+- ATOK が有効だと合成打鍵がローマ字変換される。利用者の espanso に `@@` トリガーがあり `@@@` と取り合ったが、2026-11-01 に利用者が `@@` を外し、espanso を動かしたまま実機検証が通った。トリガーの接頭辞を共有しない限り共存できる。
 
 ## リスク（未検証）
 

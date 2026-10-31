@@ -108,14 +108,14 @@
 | ビルドし直すと Accessibility の許可が外れるか | 外れなかった。段 6 で `.build/debug/keypipe` を複数回ビルドし直しても `--probe` は `trusted:true` のまま |
 | 自分が post した Backspace を自分の tap が拾うか | 拾う。`eventSourceUserData` で自分の事象だと識別できた |
 | 日本語 IME | ATOK が有効だと `keystroke "hello@@@"` は `へっぉ＠` になる。変換中の文字には Backspace が効いた（`＠` 3 文字が espanso の 2 回で 1 文字に）。検証前に ABC へ切り替える（`TISSelectInputSource` で可） |
-| espanso との共存 | 利用者の espanso に `@@` トリガーがあり、`@@@` を打つと espanso が Backspace 2 回と空白を post した。同じトリガー文字列を二つのツールが取り合う |
+| espanso との共存 | 利用者の espanso に `@@` トリガーがあり、`@@@` を打つと espanso が Backspace 2 回と空白を post した。同じトリガー文字列を二つのツールが取り合う。**追記（2026-11-01）**: 利用者が `@@` を外した後、espanso を動かしたまま実機 verify.sh が pass=37 fail=0 で通った。接頭辞を共有しなければ共存できる |
 | TextEdit の予測入力 | 打鍵後に候補のポップオーバーが出て、出ている間は AppleScript の `get text` が止まる。Escape で閉じる。「osascript の期限」（中）は観測済みに格上げ |
 
 設計への含意。
 
 - 手順 3「Backspace で消す」は維持できるが、TextEdit では効かない。消去後に欄を読み戻し、末尾にトリガーが残っていれば `AXValue` からトリガーを取り除いて書き戻す予備経路を足す。
 - `focus: textField` の既定ではあらゆるターミナルがテキスト欄として通り、プロンプトで `@@@` を打つと画面全体が入力になって `replaceInput` が走る。AXRole 以外の判別が要る。判別ができるまで、iTerm2 向けルールは `focus: any` にして欄の文字を使わない。
-- 検証の前提に「入力ソース ABC」「espanso の `@@` トリガーを一時停止」「TextEdit の予測入力を閉じる」「端末への Automation 許可」を足す。
+- 検証の前提に「入力ソース ABC」「テキスト展開ツールが検証トリガーの接頭辞を持たないこと」「TextEdit の予測入力を閉じる」「端末への Automation 許可」を足す。
 
 ## 未検証のリスク
 
