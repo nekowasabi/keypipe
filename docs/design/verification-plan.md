@@ -50,10 +50,10 @@
 
 - TextEdit の既存文書を消しうる経路（高）。`verify.sh` は作成した文書の名前を保持し、その文書だけを読み・消し・閉じる。前面が自分の文書でなければ M1-M2 を打鍵せず FAIL にする。
 
-### 未反映（高）
+### 高（すべて `verify.sh` に反映済み）
 
-1. M3 に陽性対照が無い。`nomatch` が一件増えたこと、`matched` が増えないこと、`kill -0` で daemon 生存を判定にする。起動待ちの期限切れは FAIL。
-2. シェル注入の項目が無い。`$(touch …)`、引用符、バッククォートを含む欄の文字で、実行されないことと完全一致を確かめる。
+1. M3 に陽性対照が無い。`nomatch` が一件増えたこと、`matched` が増えないこと、`kill -0` で daemon 生存を判定にする。起動待ちの期限切れは M0b の FAIL とし、M1-M4 を打鍵しない。
+2. シェル注入の項目が無い。R8 として追加。`$(touch …)`、バッククォート、引用符を含む欄の文字を `transform: cat` と `output.shell` に通し、touch されたファイルが無いことと `cmp` でのバイト一致を確かめる。
 3. R2a/c/d/e/f が偽陽性（2026-10-31 の Mac 実行で確認）。判定が `invalid config` と exit 1 だけなので、旧ローダーが `action` 欠落で拒否しただけで PASS する。拒否理由を契約にし（`invalid config: empty trigger` / `unknown key action` / `unknown output replaceAll` / `empty output.shell` / `empty transform` / `unknown focus window`）、`bad()` で理由文字列を照合する。`verify.sh` に反映済み。実装側は同じ文言を出すこと。
 4. `--probe` に期限が無い（doctor、M0、M4）。未知フラグの現バイナリでは daemon ループへ落ちて `--doctor` がハングし、孤児プロセスが残る（exit 142 で確認）。実装後も AX 待ちで固まれば検証全体が止まる。`cap 10` で包む。`verify.sh` に反映済み。
 

@@ -145,6 +145,15 @@ feed R7 "{\"rules\":[{\"trigger\":\"@@@\",\"output\":{\"shell\":\"printf %s \\\"
   '{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"こんにちは 世界"}' '@@@'
 check "R7 Japanese field text intact" "[ \"\$(cat '$EV/R7.sent' 2>/dev/null)\" = 'こんにちは 世界' ]" "R7.sent"
 
+# R8 shell injection: field text is data, never code, through transform and output.shell
+INJ_TXT='$(touch '"$EV"'/R8.pwned) `touch '"$EV"'/R8.pwned2` "dq" '"'"'sq'"'"' ; echo x'
+printf '%s' "$INJ_TXT" > "$EV/R8.expected"
+INJ_JSON="$(printf '%s' "$INJ_TXT" | sed 's/"/\\"/g')"
+feed R8 "{\"rules\":[{\"trigger\":\"@@@\",\"transform\":\"cat\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/R8.sent'\"}}]}" \
+  "{\"app\":\"com.apple.TextEdit\",\"focusIsTextField\":true,\"fieldText\":\"$INJ_JSON\"}" '@@@'
+check "R8 field text with \$(), backticks, quotes is not executed and arrives byte-exact" \
+  "[ ! -e '$EV/R8.pwned' ] && [ ! -e '$EV/R8.pwned2' ] && cmp -s '$EV/R8.sent' '$EV/R8.expected'" "R8.sent vs R8.expected"
+
 # M live macOS items: real CGEventTap and AX, driven through System Events
 if [ "${1:-}" = "--no-live" ] || [ "$(uname -s)" != Darwin ]; then
   sk "M1-M4 live macOS" "not Darwin or --no-live"
@@ -159,8 +168,12 @@ else
   printf '%s' "$LIVE" > "$EV/live.config.json"
   "$BIN" --config "$EV/live.config.json" > "$EV/daemon.log" 2>&1 &
   DPID=$!; STARTED_PIDS="$STARTED_PIDS $DPID"; echo "$DPID" > "$EV/daemon.pid"
-  for _ in 1 2 3 4 5 6 7 8 9 10; do grep -q 'keypipe started' "$EV/daemon.log" && break; sleep 0.5; done
-
+  STARTED=0
+  for _ in 1 2 3 4 5 6 7 8 9 10; do grep -q 'keypipe started' "$EV/daemon.log" && STARTED=1 && break; sleep 0.5; done
+  if [ "$STARTED" = 1 ]; then ok "M0b daemon started" "daemon.log"
+  else ng "M0b daemon started" "no 'keypipe started' within 5s, see daemon.log; M1-M4 not run"; fi
+fi
+if [ "${1:-}" != "--no-live" ] && [ "$(uname -s)" = Darwin ] && [ "${STARTED:-0}" = 1 ]; then
   osa() { osascript -e "$1" 2>&1; }
   osa 'tell application "TextEdit" to activate' >/dev/null
   # Only the document this run created is ever read, cleared, or closed.
@@ -191,11 +204,17 @@ else
 
   osa 'tell application "Finder" to activate' >/dev/null
   sleep 1
-  before=$(grep -c 'keypipe matched' "$EV/daemon.log")
+  # Positive control: the daemon must see the trigger (nomatch +1) and stay
+  # alive; an unchanged matched count alone would also pass for a dead daemon.
+  before_m=$(grep -c 'keypipe matched' "$EV/daemon.log")
+  before_n=$(grep -c 'keypipe nomatch' "$EV/daemon.log")
   osa 'tell application "System Events" to keystroke "@@@"' >/dev/null
   sleep 1
-  after=$(grep -c 'keypipe matched' "$EV/daemon.log")
-  check "M3 Finder (no text field): @@@ does not fire" "[ '$before' = '$after' ]" "daemon.log"
+  after_m=$(grep -c 'keypipe matched' "$EV/daemon.log")
+  after_n=$(grep -c 'keypipe nomatch' "$EV/daemon.log")
+  check "M3 Finder (no text field): @@@ seen, no rule fires, daemon alive" \
+    "[ '$before_m' = '$after_m' ] && [ '$after_n' = '$((before_n + 1))' ] && kill -0 '$DPID' 2>/dev/null" \
+    "matched $before_m->$after_m nomatch $before_n->$after_n, daemon.log"
 
   if [ -d /Applications/iTerm.app ]; then
     osa 'tell application "iTerm" to activate' >/dev/null

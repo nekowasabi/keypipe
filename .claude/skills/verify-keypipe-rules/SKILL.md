@@ -72,10 +72,11 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | R6a/b | output.shell gets the result as `$1` and stdin (side-effect file) | fake |
 | R6c | output.shell drives a real tmux pane on an isolated socket | fake + tmux |
 | R7 | Japanese text intact end to end | fake |
-| M0 | Accessibility granted to keypipe | live |
+| R8 | field text with `$()`, backticks, quotes passes through transform and output.shell unexecuted and byte-exact | fake |
+| M0 | Accessibility granted to keypipe (M0a); daemon prints `keypipe started` within 5 s (M0b, gates M1-M4) | live |
 | M1 | TextEdit `hello@@@` becomes `HELLO` | live |
 | M2 | TextEdit `abc;;;` sends `abc` to output.shell, field left as `abc` | live |
-| M3 | Finder frontmost, `@@@` does not fire | live |
+| M3 | Finder frontmost, `@@@` is seen (`nomatch` +1), no rule fires, daemon still alive | live |
 | M4 | iTerm2 probe recorded (risk check, not a behavior claim) | live |
 
 Feature recipes live in [`features/`](features/README.md).
