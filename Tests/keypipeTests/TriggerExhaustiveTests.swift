@@ -7,7 +7,7 @@ import XCTest
 final class TriggerExhaustiveTests: XCTestCase {
     private let alphabet: [Character] = ["@", "a", "\n", "\u{0301}"]
     private let maxLength = 8
-    private let rule = TriggerRule(trigger: "@@@", action: Action(type: "log", message: "hit"))
+    private let trigger = "@@@"
 
     private func forEachInput(_ body: ([Character]) -> Bool) {
         var stack: [[Character]] = [[]]
@@ -22,7 +22,7 @@ final class TriggerExhaustiveTests: XCTestCase {
     /// Mirrors feedAndRun in Sources/keypipe/main.swift: feed each character,
     /// and on a hit run the action and reset the matcher.
     private func actualFires(_ input: [Character], maxBuffer: Int, resetOnHit: Bool) -> [Int] {
-        var matcher = TriggerMatcher(rules: [rule], maxBuffer: maxBuffer)
+        var matcher = TriggerMatcher(triggers: [trigger], maxBuffer: maxBuffer)
         var fires: [Int] = []
         for (i, ch) in input.enumerated() where matcher.feed(ch) != nil {
             fires.append(i)

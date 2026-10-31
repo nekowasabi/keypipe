@@ -10,7 +10,7 @@ swift build >/dev/null || { echo "FAIL swift build"; exit 1; }
 BIN=.build/debug/keypipe
 CFG="$(mktemp)"
 trap 'rm -f "$CFG"' EXIT
-printf '{"rules":[{"trigger":"@@@","action":{"type":"log","message":"kp-hit"}}]}' > "$CFG"
+printf '{"rules":[{"trigger":"@@@","action":{"type":"shell","command":"true"}}]}' > "$CFG"
 
 expected_hits() {
   local s="$1" run=0 hits=0 i

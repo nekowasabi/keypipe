@@ -9,11 +9,4 @@ public struct MatchContext: Codable, Equatable {
         self.processName = processName
     }
 
-    public func matches(_ app: MatchContext?) -> Bool {
-        contextMatches(self, app: app)
-    }
-}
-
-public func contextMatches(_ context: MatchContext?, app: MatchContext?) -> Bool {
-    true
 }
