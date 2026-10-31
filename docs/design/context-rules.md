@@ -36,7 +36,7 @@
     },
     {
       "trigger": ";;;",
-      "when": { "focus": "textField", "app": ["com.googlecode.iterm2"] },
+      "when": { "focus": "any", "app": ["com.googlecode.iterm2"] },
       "output": { "shell": "tmux new-window -t work -- claude \"$1\"" }
     },
     {
@@ -64,7 +64,7 @@
 1. matcher がトリガー一致を報告する。
 2. その時点のスナップショット（前面アプリ、フォーカス種別）で `when` を評価し、ルールを一つ選ぶ。満たすルールが無ければ何もしない。
 3. トリガー文字数ぶん Backspace を送って消す。
-4. 欄の文字を読む。
+4. 欄の文字を読む。末尾にトリガーが残っていれば（TextEdit は合成 Backspace を無視する。実機検証済み）、トリガーを取り除いた文字列を `AXValue` に書き戻してから、それを欄の文字とする。
 5. `transform` を実行する。非ゼロ終了なら送り先へ渡さず通知する。
 6. `output` を適用する。
 
@@ -159,10 +159,23 @@ arena の複数モデル実行は回していない。候補は自分で比較�
 - 旧スキーマ（`action.type`, `context.appBundleId`）との互換は捨てる。
 - `transform` と `output.shell` は同期実行。`claude -p` の数秒間、次の発火は待たされる。キー取得自体は止めない。
 
+## 実機で確かめた前提（2026-10-31、macOS 26.6）
+
+手順と観測は [`verification-plan.md`](verification-plan.md) の表、プローブは `.claude/skills/verify-keypipe-rules/probes/`。設計に効く結論だけ書く。
+
+- listen-only の CGEventTap は `System Events` の合成打鍵を受ける。Input Monitoring は不要で、Accessibility だけで tap と AX が動いた。
+- 自分が post した Backspace は自分の tap にも届く。`eventSourceUserData` に印を付けて無視する。
+- TextEdit の本文は AXTextArea で `AXValue` は読み書きできる。CotEditor も同じ。
+- ターミナル（iTerm2）のプロンプトは **AX 上テキスト欄として見える**。AXTextArea で `AXValue` は画面全体（約 3,800 文字）。`focus: textField` の既定ではターミナルで `@@@` を打つと画面全体が入力になる。AXRole では TextEdit と区別できない。判別ができるまで、ターミナル向けのルールは `focus: any` にして欄の文字を使わない（上の `;;;` の例）。
+- 合成 Backspace はアプリ依存。CotEditor では消えるが TextEdit は無視する（`System Events` の `key code 51` も同じ）。手順 4 の読み戻しと `AXValue` の書き戻しはこのため。
+- ATOK が有効だと合成打鍵がローマ字変換される。利用者の espanso に `@@` トリガーがあり、`@@@` と取り合う。共存は設計の範囲外とし、検証では止める。
+
 ## リスク（未検証）
 
 - 一部アプリ（Electron 系）は `AXValue` の書き込みを無視する。`replaceInput` は書き込み後に読み戻し、失敗したら「全選択してペースト」に落とす。
-- ターミナル（iTerm2）のプロンプトは AX 上テキスト欄ではない可能性が高い。その場合 `;;;` の例は `focus: any` にし、欄の文字は取れない。
+- ターミナルをテキスト欄から外す判別。`AXRoleDescription` が TextEdit では取れ、iTerm2 ではエラー（-25212）だったのが候補。
+- TextEdit が合成 Backspace を無視する原因と、ブラウザの欄での挙動。
+- 日本語 IME 変換中の発火と Backspace の数。
 
 ## 検証のための追加契約
 
