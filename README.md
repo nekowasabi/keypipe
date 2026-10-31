@@ -1,5 +1,7 @@
 # keypipe
 
+English | [日本語](README.ja.md)
+
 keypipe is a Mac background daemon that maps key sequences to actions,
 Espanso-like. Type a trigger such as `@@@` and keypipe runs the configured
 action (a shell command or a log line). There is deliberately no menu bar UI:
