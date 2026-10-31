@@ -28,20 +28,32 @@ final class ShellTests: XCTestCase {
     }
 
     func testTimeoutKillsTheProcessGroup() throws {
-        let path = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
-        defer { try? FileManager.default.removeItem(atPath: path) }
-        let outcome = runShell("sleep 30 & echo $! > \"$1\"; wait", input: path, env: [:], timeout: 0.15)
-        XCTAssertEqual(outcome, .timedOut(seconds: 0))
-        let child = try String(contentsOfFile: path).trimmingCharacters(in: .whitespacesAndNewlines)
-        let pid = try XCTUnwrap(Int32(child))
-        XCTAssertNotEqual(kill(pid, 0), 0)
-        XCTAssertEqual(errno, ESRCH)
+        for prefix in ["", "trap '' TERM; "] {
+            let path = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+            defer { try? FileManager.default.removeItem(atPath: path) }
+            let outcome = runShell(prefix + "sleep 30 & echo $! > \"$1\"; wait", input: path, env: [:], timeout: 0.15)
+            XCTAssertEqual(outcome, .timedOut(seconds: 0))
+            let child = try String(contentsOfFile: path).trimmingCharacters(in: .whitespacesAndNewlines)
+            let pid = try XCTUnwrap(Int32(child))
+            // Why: SIGKILL delivery and orphan reaping are asynchronous after the deadline.
+            let deadline = ProcessInfo.processInfo.systemUptime + 0.35
+            while kill(pid, 0) == 0 && ProcessInfo.processInfo.systemUptime < deadline {
+                Thread.sleep(forTimeInterval: 0.005)
+            }
+            XCTAssertNotEqual(kill(pid, 0), 0)
+            XCTAssertEqual(errno, ESRCH)
+        }
     }
 
     func testPipesAreDrainedWhileInputIsWritten() {
-        let input = String(repeating: "x", count: 200000)
+        let input = String(repeating: "x", count: 70000)
         let script = "dd if=/dev/zero bs=100000 count=2 2>/dev/null; cat"
         let expected = String(repeating: "\0", count: 200000) + input
         XCTAssertEqual(runShell(script, input: input, env: [:], timeout: 3), .exited(0, stdout: expected))
+    }
+
+    func testClosedStdinDoesNotKillCaller() {
+        let input = String(repeating: "x", count: 70000)
+        XCTAssertEqual(runShell("exit 0", input: input, env: [:], timeout: 2), .exited(0, stdout: ""))
     }
 }

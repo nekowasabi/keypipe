@@ -116,24 +116,24 @@ check "R4a trigger erased" "has R4 'keypipe erase 3'" ""
 check "R4b field replaced without trigger chars" "field R4 '\"HELLO\"'" "field HELLO, not HELLO@@@"
 
 # R5 transform contract
-CH='{"rules":[{"trigger":"@@@","transform":"printf \"stdin=%s arg=%s env=%s app=%s\" \"$(cat)\" \"$1\" \"$KEYPIPE_INPUT\" \"$KEYPIPE_APP\"","output":"replaceInput"}]}'
+CH='{"rules":[{"when":{"focus":"textField"},"trigger":"@@@","transform":"printf \"stdin=%s arg=%s env=%s app=%s\" \"$(cat)\" \"$1\" \"$KEYPIPE_INPUT\" \"$KEYPIPE_APP\"","output":"replaceInput"}]}'
 feed R5a "$CH" "$TXT" '@@@'
 check "R5a input on stdin, \$1, KEYPIPE_INPUT; app in KEYPIPE_APP" \
   "field R5a '\"stdin=hello arg=hello env=hello app=com.apple.TextEdit\"'" ""
-feed R5b '{"rules":[{"trigger":"@@@","transform":"echo HELLO","output":"replaceInput"}]}' "$TXT" '@@@'
+feed R5b '{"rules":[{"when":{"focus":"textField"},"trigger":"@@@","transform":"echo HELLO","output":"replaceInput"}]}' "$TXT" '@@@'
 check "R5b one trailing newline stripped" "field R5b '\"HELLO\"'" ""
-feed R5c '{"rules":[{"trigger":"@@@","transform":"exit 3","output":"replaceInput"}]}' "$TXT" '@@@'
+feed R5c '{"rules":[{"when":{"focus":"textField"},"trigger":"@@@","transform":"exit 3","output":"replaceInput"}]}' "$TXT" '@@@'
 check "R5c failing transform: no output, notify, field keeps text" \
   "has R5c 'keypipe transform exit 3' && lacks R5c 'keypipe apply replaceInput' && has R5c 'keypipe apply notify' && field R5c '\"hello\"'" ""
 
 # R6 shell output (tmux, Herdr, Grok Bot, CotEditor stand in here)
-feed R6a "{\"rules\":[{\"trigger\":\"@@@\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/R6a.sent'\"}}]}" "$TXT" '@@@'
+feed R6a "{\"rules\":[{\"when\":{\"focus\":\"textField\"},\"trigger\":\"@@@\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/R6a.sent'\"}}]}" "$TXT" '@@@'
 check "R6a identity input reaches output.shell as \$1" "[ \"\$(cat '$EV/R6a.sent' 2>/dev/null)\" = hello ]" "R6a.sent"
-feed R6b "{\"rules\":[{\"trigger\":\"@@@\",\"transform\":\"tr a-z A-Z\",\"output\":{\"shell\":\"cat > '$EV/R6b.sent'\"}}]}" "$TXT" '@@@'
+feed R6b "{\"rules\":[{\"when\":{\"focus\":\"textField\"},\"trigger\":\"@@@\",\"transform\":\"tr a-z A-Z\",\"output\":{\"shell\":\"cat > '$EV/R6b.sent'\"}}]}" "$TXT" '@@@'
 check "R6b transform result reaches output.shell on stdin" "[ \"\$(cat '$EV/R6b.sent' 2>/dev/null)\" = HELLO ]" "R6b.sent"
 if command -v tmux >/dev/null 2>&1; then
   tmux -L "$TMUX_SOCK" new-session -d -s kpv -x 120 -y 10
-  feed R6c "{\"rules\":[{\"trigger\":\";;;\",\"output\":{\"shell\":\"tmux -L $TMUX_SOCK send-keys -t kpv -l \\\"\$1\\\"\"}}]}" "$TXT" ';;;'
+  feed R6c "{\"rules\":[{\"when\":{\"focus\":\"textField\"},\"trigger\":\";;;\",\"output\":{\"shell\":\"tmux -L $TMUX_SOCK send-keys -t kpv -l \\\"\$1\\\"\"}}]}" "$TXT" ';;;'
   tmux -L "$TMUX_SOCK" capture-pane -p -t kpv > "$EV/R6c.pane" 2>&1
   check "R6c text sent to a real tmux pane" "grep -qF hello '$EV/R6c.pane'" "R6c.pane"
 else
@@ -141,7 +141,7 @@ else
 fi
 
 # R7 multibyte passes through intact
-feed R7 "{\"rules\":[{\"trigger\":\"@@@\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/R7.sent'\"}}]}" \
+feed R7 "{\"rules\":[{\"when\":{\"focus\":\"textField\"},\"trigger\":\"@@@\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/R7.sent'\"}}]}" \
   '{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"こんにちは 世界"}' '@@@'
 check "R7 Japanese field text intact" "[ \"\$(cat '$EV/R7.sent' 2>/dev/null)\" = 'こんにちは 世界' ]" "R7.sent"
 
@@ -149,7 +149,7 @@ check "R7 Japanese field text intact" "[ \"\$(cat '$EV/R7.sent' 2>/dev/null)\" =
 INJ_TXT='$(touch '"$EV"'/R8.pwned) `touch '"$EV"'/R8.pwned2` "dq" '"'"'sq'"'"' ; echo x'
 printf '%s' "$INJ_TXT" > "$EV/R8.expected"
 INJ_JSON="$(printf '%s' "$INJ_TXT" | sed 's/"/\\"/g')"
-feed R8 "{\"rules\":[{\"trigger\":\"@@@\",\"transform\":\"cat\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/R8.sent'\"}}]}" \
+feed R8 "{\"rules\":[{\"when\":{\"focus\":\"textField\"},\"trigger\":\"@@@\",\"transform\":\"cat\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/R8.sent'\"}}]}" \
   "{\"app\":\"com.apple.TextEdit\",\"focusIsTextField\":true,\"fieldText\":\"$INJ_JSON\"}" '@@@'
 check "R8 field text with \$(), backticks, quotes is not executed and arrives byte-exact" \
   "[ ! -e '$EV/R8.pwned' ] && [ ! -e '$EV/R8.pwned2' ] && cmp -s '$EV/R8.sent' '$EV/R8.expected'" "R8.sent vs R8.expected"

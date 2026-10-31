@@ -6,90 +6,60 @@ import Foundation
 
 private var keepRunning = true
 
-private func handleSignal(_ sig: Int32) {
-    keepRunning = false
+private func handleSignal(_ sig: Int32) { keepRunning = false }
+
+private func argument(_ flag: String, in args: [String]) -> String? {
+    guard let index = args.firstIndex(of: flag), index + 1 < args.count else { return nil }
+    return args[index + 1]
 }
 
-private func configPath(from args: [String]) -> String {
-    if let flag = args.firstIndex(of: "--config"), flag + 1 < args.count {
-        return args[flag + 1]
-    }
-    return "config.example.json"
-}
-
-private func smokeFeed(from args: [String]) -> String? {
-    if let flag = args.firstIndex(of: "--smoke-feed"), flag + 1 < args.count {
-        return args[flag + 1]
-    }
-    return nil
-}
-
-/// Feeds text through the matcher. On every hit runs the rule action,
-/// then resets so the same trigger can fire again. Returns hit count.
-private func feedAndRun(_ text: String, matcher: inout TriggerMatcher, rules: [Rule]) -> Int {
-    var hits = 0
-    for ch in text {
-        if let trigger = matcher.feed(ch),
-           let rule = select(rules.filter { $0.trigger == trigger }, Snapshot(focus: .nothing)) {
-            hits += 1
-            print("keypipe matched \(rule.trigger)")
-            fflush(stdout)
-            let script: String
-            if case .shell(let command) = rule.output.primary { script = command }
-            else { script = "true" }
-            let outcome = runShell(script, input: "", env: [:], timeout: 30)
-            let status: Int32
-            switch outcome {
-            case .exited(let code, let output):
-                if !output.isEmpty { print(output) }
-                status = code
-            case .timedOut:
-                status = 124
-            }
-            print("keypipe action exit \(status)")
-            fflush(stdout)
-            matcher.reset()
-        }
-    }
-    return hits
+private func emit(_ line: String) {
+    print(line)
+    fflush(stdout)
 }
 
 let args = CommandLine.arguments
-let configFile = configPath(from: args)
+if args.contains("--probe") {
+    emit(#"{"trusted":false}"#)
+    exit(0)
+}
+
+let configFile = argument("--config", in: args) ?? "config.example.json"
 let loaded: KeypipeConfig
+let desktop: FakeDesktop
 do {
     loaded = try loadConfig(path: configFile)
+    if let path = argument("--context", in: args) { desktop = try FakeDesktop(path: path) }
+    else { desktop = FakeDesktop() }
 } catch {
     fputs("\(error)\n", stderr)
     exit(1)
 }
+var engine = Engine(config: loaded, desktop: desktop, shell: runShell, emit: emit)
 
-// TriggerMatcher is wired here for every mode. The live keystroke source
-// on macOS is the CGEventTap hook (MacKeyTap.swift); on Linux and in dev
-// the input arrives via --feed-stdin or --smoke-feed below.
-var matcher = TriggerMatcher(triggers: loaded.rules.map { $0.trigger })
-
-if let seed = smokeFeed(from: args) {
-    let hits = feedAndRun(seed, matcher: &matcher, rules: loaded.rules)
-    print("keypipe smoke-feed hits \(hits)")
-    fflush(stdout)
-    exit(hits > 0 ? 0 : 2)
+if let seed = argument("--smoke-feed", in: args) {
+    for character in seed {
+        desktop.key(character)
+        engine.key(character)
+    }
+    emit("keypipe smoke-feed hits \(engine.hits)")
+    emit("keypipe field \(jsonString(desktop.fieldText))")
+    exit(engine.hits > 0 ? 0 : 2)
 }
 
 if args.contains("--feed-stdin") {
-    print("keypipe started with \(loaded.rules.count) rule(s) from \(configFile)")
-    fflush(stdout)
+    emit("keypipe started with \(loaded.rules.count) rule(s) from \(configFile)")
     while let line = readLine(strippingNewline: false) {
-        _ = feedAndRun(line, matcher: &matcher, rules: loaded.rules)
+        for character in line {
+            desktop.key(character)
+            engine.key(character)
+        }
     }
+    emit("keypipe field \(jsonString(desktop.fieldText))")
     exit(0)
 }
 
 signal(SIGINT, handleSignal)
 signal(SIGTERM, handleSignal)
-
-print("keypipe started with \(loaded.rules.count) rule(s) from \(configFile)")
-fflush(stdout)
-while keepRunning {
-    Thread.sleep(forTimeInterval: 0.1)
-}
+emit("keypipe started with \(loaded.rules.count) rule(s) from \(configFile)")
+while keepRunning { Thread.sleep(forTimeInterval: 0.1) }

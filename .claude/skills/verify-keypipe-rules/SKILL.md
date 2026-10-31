@@ -48,7 +48,7 @@ Transcript lines the binary prints, in both harnesses.
 | `keypipe output-shell exit <status>` | output.shell finished |
 | `keypipe field <json-string>` | FakeDesktop only, final field text |
 
-Context JSON for `--context`: `{"app":"<bundle id>","focusIsTextField":true,"fieldText":"..."}`. Typed keys append to `fieldText`; erase removes from its end.
+Context JSON for `--context`: `{"app":"<bundle id>","focusIsTextField":true,"fieldText":"...","composing":false,"ignoresBackspace":false}`. Typed keys append to `fieldText`; erase removes from its end. A rule only reads the field when it declares `"when":{"focus":"textField"}` (design revision 3); `focus: any` rules get an empty input, so every item that asserts field text through `$1` or stdin declares `textField`.
 
 `--smoke-feed` exits 0 when at least one rule matched, 2 when none, 1 on invalid config.
 
