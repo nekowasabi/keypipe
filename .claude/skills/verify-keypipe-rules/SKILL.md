@@ -42,15 +42,20 @@ Transcript lines the binary prints, in both harnesses.
 | `keypipe started ...` | daemon ready |
 | `keypipe matched <trigger> rule <n>` | rule `n` (0-based config index) chosen |
 | `keypipe nomatch <trigger>` | trigger typed, no rule's `when` satisfied |
-| `keypipe erase <count>` | Backspaces sent for the trigger |
+| `keypipe composing <trigger>` | trigger typed mid-IME-composition, nothing fired |
+| `keypipe erase <count>` | Backspaces sent for the trigger (`0` when no text element is focused) |
+| `keypipe erase-rewrite` | the app ignored the Backspaces; the trigger was removed by writing `AXValue` |
 | `keypipe transform exit <status>` | transform finished |
-| `keypipe apply <sink> <json-string>` | builtin sink applied |
-| `keypipe output-shell exit <status>` | output.shell finished |
+| `keypipe transform timeout <seconds>` / `keypipe transform empty` | transform killed at the deadline / exited 0 with empty stdout; nothing is applied |
+| `keypipe apply <sink> <json-string>` | builtin sink applied (`replaceInput` only after the readback matches) |
+| `keypipe output-shell exit <status>` / `keypipe output-shell timeout <seconds>` | output.shell finished / killed at the deadline |
 | `keypipe field <json-string>` | FakeDesktop only, final field text |
 
-Context JSON for `--context`: `{"app":"<bundle id>","focusIsTextField":true,"fieldText":"...","composing":false,"ignoresBackspace":false}`. Typed keys append to `fieldText`; erase removes from its end. A rule only reads the field when it declares `"when":{"focus":"textField"}` (design revision 3); `focus: any` rules get an empty input, so every item that asserts field text through `$1` or stdin declares `textField`.
+Line names share prefixes (`erase`, `erase-rewrite`), so a `lacks` check on a bare name matches up to the trailing space: `'keypipe erase '`.
 
-`--smoke-feed` exits 0 when at least one rule matched, 2 when none, 1 on invalid config.
+Context JSON for `--context`: `{"app":"<bundle id>","focusIsTextField":true,"fieldText":"...","composing":false,"ignoresBackspace":false,"backspacePerRead":false}`. `backspacePerRead` delivers one queued Backspace per field read, like an app that processes key events between polls. Typed keys append to `fieldText`; erase removes from its end. A rule only reads the field when it declares `"when":{"focus":"textField"}` (design revision 3); `focus: any` rules get an empty input, so every item that asserts field text through `$1` or stdin declares `textField`.
+
+`--smoke-feed` exits 0 when at least one rule matched (even if a later stage failed), 2 when none, 1 on invalid config.
 
 Invalid configs print `invalid config: <reason>` with one of these reasons, which R2 matches literally: `empty trigger`, `unknown key <name>`, `unknown output <value>`, `empty output.shell`, `empty transform`, `unknown focus <value>`. A rejection with any other reason fails the item.
 
@@ -65,10 +70,14 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | R2a-f | invalid configs exit 1 with `invalid config` (empty trigger, old `action` key, unknown output, empty `output.shell`, empty `transform`, unknown `focus`) | fake |
 | R2g | minimal rule accepted with defaults | fake |
 | R3a-d | rule selection by focus, by app, none satisfied (no erase), config order on ties | fake |
+| R3e | `focus: any` in a text field: trigger erased, input empty, field untouched | fake |
 | R4a/b | trigger erased before the field is read | fake |
+| R4c | Backspaces delivered one per read: the engine waits for all of them, no rewrite | fake |
+| R4d | app ignores Backspace: trigger removed by `AXValue` rewrite (`erase-rewrite`) | fake |
 | R5a | transform gets input on stdin, `$1`, `KEYPIPE_INPUT`, and app in `KEYPIPE_APP` | fake |
 | R5b | one trailing newline stripped from transform output | fake |
 | R5c | failing transform applies nothing, notifies, keeps field | fake |
+| R5d | empty transform output applies nothing, notifies, keeps field | fake |
 | R6a/b | output.shell gets the result as `$1` and stdin (side-effect file) | fake |
 | R6c | output.shell drives a real tmux pane on an isolated socket | fake + tmux |
 | R7 | Japanese text intact end to end | fake |
@@ -102,4 +111,4 @@ Fake feeds are independent processes and can run in parallel. Live items cannot:
 
 ## Status
 
-Written before the implementation (design revision 2). Every R and M item is expected to FAIL until the code lands. Never executed yet; the first Mac run is the proof of this skill.
+Stages 1 to 5 of `docs/design/failure-fallback.md` are implemented on the fake harness: `--no-live` passes every R item (R1c skips without swift-format). The live items M0 to M4 wait for stage 6 (`MacKeyTap`, `MacDesktop`); `--probe` is a stub that prints `{"trusted":false}` until then.

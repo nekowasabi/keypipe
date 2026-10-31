@@ -29,6 +29,17 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
         (inputPipe + outputPipe).forEach { close($0) }
         return .exited(1, stdout: "")
     }
+    // Why: if the caller's 0, 1 or 2 is closed, pipe() reuses that number and the
+    // child's dup2/close sequence below would close the descriptor it just set up.
+    func above2(_ fd: Int32) -> Int32 {
+        guard fd <= 2 else { return fd }
+        let moved = fcntl(fd, F_DUPFD, 3)
+        close(fd)
+        return moved
+    }
+    inputPipe = inputPipe.map(above2)
+    outputPipe = outputPipe.map(above2)
+    errorPipe = errorPipe.map(above2)
     let descriptors = inputPipe + outputPipe + errorPipe
     for fd in descriptors { _ = fcntl(fd, F_SETFD, FD_CLOEXEC) }
 

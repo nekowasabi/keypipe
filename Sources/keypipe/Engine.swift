@@ -9,17 +9,20 @@ func performErase(_ field: Field, trigger: String, _ desktop: Desktop, emit: (St
     guard let before = desktop.text(field) else { return nil }
     desktop.backspace(trigger.count)
     emit("keypipe erase \(trigger.count)")
+    guard before.hasSuffix(trigger) else { return desktop.text(field) }
+    let expected = String(before.dropLast(trigger.count))
     let deadline = ProcessInfo.processInfo.systemUptime + 0.2
     var after = desktop.text(field)
-    // Why: Wait for delivered Backspaces before deciding to rewrite; late delivery could erase user text twice.
-    while after == before && ProcessInfo.processInfo.systemUptime < deadline {
+    // Why: Backspaces are delivered one key event at a time; reading after the first
+    // one lands would hand a partially erased trigger to the transform, and a rewrite
+    // issued then would be undone by the Backspaces still in flight.
+    while after != expected && ProcessInfo.processInfo.systemUptime < deadline {
         Thread.sleep(forTimeInterval: 0.005)
         after = desktop.text(field)
     }
     guard let current = after else { return nil }
-    if current == before && current.hasSuffix(trigger) {
-        let erased = String(current.dropLast(trigger.count))
-        guard desktop.setText(field, erased) else { return nil }
+    if current == before {
+        guard desktop.setText(field, expected) else { return nil }
         emit("keypipe erase-rewrite")
         return desktop.text(field)
     }
@@ -82,6 +85,12 @@ struct Engine {
                 emit("keypipe transform exit \(status)")
                 guard status == 0 else {
                     notify("\(trigger) transform failed: exit \(status)")
+                    return
+                }
+                // Why: an empty result would wipe the field through replaceInput.
+                guard !output.isEmpty else {
+                    emit("keypipe transform empty")
+                    notify("\(trigger) transform failed: empty")
                     return
                 }
                 result = output

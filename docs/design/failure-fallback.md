@@ -122,7 +122,7 @@ keypipe fallback output-shell exit 0
 | 3' | 書き戻しも無視、欄が消えた | エンジン | 固定。欄が消えたら発火を終える。それ以外は続行し `erase-failed <理由>` を出す。ルールごとに選ぶ価値が無い（中止すると遅い変換の結果ごと失う） |
 | 4 | `transform` 非ゼロ | シェルとエンジン | `onFail.transform`。既定は通知 |
 | 4' | `transform` 期限切れ | エンジンだけ | `onFail.transform`。期限は `shellTimeout` |
-| 5 | `transform` が 0 で空出力 | エンジン | 失敗 `empty` として `onFail.transform`。空を `replaceInput` に渡して欄を消さない |
+| 5 | `transform` が 0 で空出力 | エンジン | 失敗 `empty` として `onFail.transform`。空を `replaceInput` に渡して欄を消さない。「通知して止める」部分は段 5 で先行実装済み（R5d）。`onFail` への接続は段 7 |
 | 6 | `output.shell` 非ゼロ | シェルとエンジン | `onFail.output`。既定は記録だけ |
 | 7 | `replaceInput` の書き込み無視 | エンジンだけ | `onFail.output`。既定は結果を通知 |
 | 8 | 欄のハンドル失効 | エンジンだけ | 7 と同じ。今のフォーカスには書かない |

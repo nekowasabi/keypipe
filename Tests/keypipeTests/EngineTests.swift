@@ -36,6 +36,29 @@ final class EngineTests: XCTestCase {
         }
     }
 
+    func testEraseWaitsForEveryBackspaceBeforeReading() {
+        let desktop = FakeDesktop(focus: .text, fieldText: "hello", backspacePerRead: true)
+        let rule = Rule(trigger: "@@@", when: When(focus: .textField),
+                        transform: Guarded(primary: "tr"), output: Guarded(primary: .builtin(.replaceInput)))
+        let (_, lines) = run(rules: [rule], desktop: desktop) { _, input, _, _ in
+            XCTAssertEqual(input, "hello")
+            return .exited(0, stdout: "HELLO")
+        }
+        XCTAssertFalse(lines.contains("keypipe erase-rewrite"))
+        XCTAssertEqual(desktop.fieldText, "HELLO")
+    }
+
+    func testEmptyTransformOutputNotifiesInsteadOfWipingField() {
+        let desktop = FakeDesktop(focus: .text, fieldText: "hello")
+        let rule = Rule(trigger: "@@@", when: When(focus: .textField),
+                        transform: Guarded(primary: "true"), output: Guarded(primary: .builtin(.replaceInput)))
+        let (_, lines) = run(rules: [rule], desktop: desktop) { _, _, _, _ in .exited(0, stdout: "") }
+        XCTAssertTrue(lines.contains("keypipe transform empty"))
+        XCTAssertFalse(lines.contains { $0.hasPrefix("keypipe apply replaceInput") })
+        XCTAssertEqual(desktop.notifications, ["@@@ transform failed: empty"])
+        XCTAssertEqual(desktop.fieldText, "hello")
+    }
+
     func testAnySuppliesEmptyInputAndErasesOnlyInTextFields() {
         for focus in [Focus.text, .nothing] {
             let desktop = FakeDesktop(app: "editor", focus: focus, fieldText: "hello")

@@ -108,12 +108,21 @@ SEL2='{"rules":[
  {"trigger":"@@@","when":{"focus":"textField"},"output":"none"}]}'
 feed R3d "$SEL2" "$TXT" '@@@'
 check "R3d first satisfied rule in config order wins" "has R3d 'keypipe matched @@@ rule 0'" ""
+feed R3e "{\"rules\":[{\"trigger\":\"@@@\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/R3e.sent'\"}}]}" "$TXT" '@@@'
+check "R3e focus any in a text field: trigger erased, input empty, field untouched" \
+  "has R3e 'keypipe erase 3' && [ -f '$EV/R3e.sent' ] && [ ! -s '$EV/R3e.sent' ] && field R3e '\"hello\"'" "R3e.sent empty"
 
 # R4 erase then read the field
 UP='{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"transform":"tr a-z A-Z","output":"replaceInput"}]}'
 feed R4 "$UP" "$TXT" '@@@'
 check "R4a trigger erased" "has R4 'keypipe erase 3'" ""
 check "R4b field replaced without trigger chars" "field R4 '\"HELLO\"'" "field HELLO, not HELLO@@@"
+feed R4c "$UP" '{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"hello","backspacePerRead":true}' '@@@'
+check "R4c Backspaces delivered one per read: wait for all, no rewrite" \
+  "lacks R4c 'keypipe erase-rewrite' && field R4c '\"HELLO\"'" "field HELLO, not HE or HELLO@@"
+feed R4d "$UP" '{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"hello","ignoresBackspace":true}' '@@@'
+check "R4d app ignores Backspace: trigger removed by AXValue rewrite" \
+  "has R4d 'keypipe erase-rewrite' && field R4d '\"HELLO\"'" "field HELLO"
 
 # R5 transform contract
 CH='{"rules":[{"when":{"focus":"textField"},"trigger":"@@@","transform":"printf \"stdin=%s arg=%s env=%s app=%s\" \"$(cat)\" \"$1\" \"$KEYPIPE_INPUT\" \"$KEYPIPE_APP\"","output":"replaceInput"}]}'
@@ -125,6 +134,9 @@ check "R5b one trailing newline stripped" "field R5b '\"HELLO\"'" ""
 feed R5c '{"rules":[{"when":{"focus":"textField"},"trigger":"@@@","transform":"exit 3","output":"replaceInput"}]}' "$TXT" '@@@'
 check "R5c failing transform: no output, notify, field keeps text" \
   "has R5c 'keypipe transform exit 3' && lacks R5c 'keypipe apply replaceInput' && has R5c 'keypipe apply notify' && field R5c '\"hello\"'" ""
+feed R5d '{"rules":[{"when":{"focus":"textField"},"trigger":"@@@","transform":"true","output":"replaceInput"}]}' "$TXT" '@@@'
+check "R5d empty transform output: notify, field not wiped" \
+  "has R5d 'keypipe transform empty' && lacks R5d 'keypipe apply replaceInput' && has R5d 'keypipe apply notify' && field R5d '\"hello\"'" ""
 
 # R6 shell output (tmux, Herdr, Grok Bot, CotEditor stand in here)
 feed R6a "{\"rules\":[{\"when\":{\"focus\":\"textField\"},\"trigger\":\"@@@\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/R6a.sent'\"}}]}" "$TXT" '@@@'

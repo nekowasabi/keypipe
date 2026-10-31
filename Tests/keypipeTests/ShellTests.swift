@@ -52,6 +52,16 @@ final class ShellTests: XCTestCase {
         XCTAssertEqual(runShell(script, input: input, env: [:], timeout: 3), .exited(0, stdout: expected))
     }
 
+    func testCallerWithClosedStandardDescriptorsStillWiresPipes() {
+        let saved = dup(STDIN_FILENO)
+        close(STDIN_FILENO)
+        defer {
+            dup2(saved, STDIN_FILENO)
+            close(saved)
+        }
+        XCTAssertEqual(runShell("cat", input: "hello", env: [:], timeout: 2), .exited(0, stdout: "hello"))
+    }
+
     func testClosedStdinDoesNotKillCaller() {
         let input = String(repeating: "x", count: 70000)
         XCTAssertEqual(runShell("exit 0", input: input, env: [:], timeout: 2), .exited(0, stdout: ""))
