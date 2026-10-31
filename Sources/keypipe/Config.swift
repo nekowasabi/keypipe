@@ -15,7 +15,7 @@ struct Guarded<Value: Equatable>: Equatable {
 }
 
 struct Rule: Equatable {
-    var trigger: String
+    var trigger: Trigger
     var when: When = When()
     var transform: Guarded<String>? = nil
     var output: Guarded<Output> = Guarded(primary: .builtin(.none))
@@ -66,10 +66,19 @@ func loadConfig(path: String) throws -> KeypipeConfig {
         throw ConfigError.invalid("rules must be an array")
     }
     let rules = try values.map { value -> Rule in
-        let entry = try object(value, keys: ["trigger", "when", "transform", "output"])
-        let trigger = try nonempty(entry["trigger"] ?? NSNull(), name: "trigger")
-        guard trigger.count <= triggerMaxBuffer else {
-            throw ConfigError.invalid("rule trigger exceeds \(triggerMaxBuffer) characters and can never match")
+        let entry = try object(value, keys: ["trigger", "hotkey", "when", "transform", "output"])
+        let trigger: Trigger
+        switch (entry["trigger"], entry["hotkey"]) {
+        case (nil, nil): throw ConfigError.invalid("rule needs trigger or hotkey")
+        case (.some, .some): throw ConfigError.invalid("rule has both trigger and hotkey")
+        case (.some(let value), nil):
+            let text = try nonempty(value, name: "trigger")
+            guard text.count <= triggerMaxBuffer else {
+                throw ConfigError.invalid("rule trigger exceeds \(triggerMaxBuffer) characters and can never match")
+            }
+            trigger = .text(text)
+        case (nil, .some(let value)):
+            trigger = .hotkey(try Hotkey.parse(try nonempty(value, name: "hotkey")))
         }
         var when = When()
         if let value = entry["when"] {

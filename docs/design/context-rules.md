@@ -51,6 +51,7 @@
 意味。
 
 - `trigger` 直近のキー入力の末尾がこれに一致したら候補になる。
+- `hotkey`（2026-11-01 追加） `trigger` の代わりに書く修飾キー付きの組み合わせ。ルールにはどちらか一つ。`"ctrl+@"`、`"alt+cmd+x"`。修飾は `ctrl`/`alt`/`cmd`（別名 `control`/`option`/`command`）で最低一つ。shift は修飾ではなく文字に畳む（`"ctrl+A"`）。文字は `UCKeyTranslate` で keycode と shift から現在の配列で求める（合成事象に埋め込まれた文字列は shift を無視し、ctrl では制御文字になるため。プローブ `probes/chord.swift` で確認）。ホットキーは消さない（`erase 0`）。`textField` なら欄の全文が入力。どのルールにも無い組み合わせは desktop に触れず黙って捨てる（Cmd+C ごとに AX を呼ばない）。組み合わせは文字列バッファを空にする。tap は listen-only で前面アプリも必ず受け取るので、アプリ側の束縛を keypipe が検知して譲ることはできない。譲りたければ `when.app` で絞る。自動で譲るには非 listen-only の tap と別設計が要り、作らない。
 - `when` 省略したキーはワイルドカード。`app` は bundle id のどれか。同じトリガーの候補は設定順で最初に満たしたものが勝つ。
 - `when.focus` は「このルールが欄を使うか」を表す。
   - `textField` 欄を使うルール。フォーカスが AX のテキスト欄（`AXTextField` / `AXTextArea`）のときだけ発火する。トリガーを消し、欄の文字（トリガーを消した後）が入力になる。`replaceInput` を使えるのはこの値のときだけ（設定エラー `output replaceInput requires focus textField`）。

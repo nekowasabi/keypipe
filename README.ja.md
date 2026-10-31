@@ -81,6 +81,16 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   複数のルールが同じバッファに一致したら最長のトリガーが勝ちます。同じトリガーの
   ルールは、設定順で最初に `when` を満たすものが勝ちます。どれも満たさなければ
   何もしません（短いトリガーへは落ちません）。
+- `hotkey` は `trigger` の代わりに書くキーの組み合わせです（ルールにはどちらか一つ）。
+  `"ctrl+@"` や `"alt+cmd+x"` のように書きます。修飾キーは `ctrl`/`control`、
+  `alt`/`option`、`cmd`/`command` で、最低一つ必要です。shift は修飾キーではなく
+  文字側に含めます（ctrl+shift+a は `"ctrl+A"`）。文字は現在のキーボード配列が
+  生む文字です（JIS なら `ctrl+@` は `@` キー、US なら shift+2）。ホットキーは
+  何も消しません。`focus: textField` なら欄の全文が入力、`any` なら入力は空です。
+  どのルールにも無い組み合わせ（Cmd+C、Cmd+Tab）は行を出さずに無視します。
+  tap は listen-only なので前面アプリも必ず同じキーを受け取り、アプリがそのキーを
+  束縛しているかを keypipe は判別できません。アプリが `ctrl+@` を持っているなら
+  `when.app` で発火先を絞ってください。絞らなければ両方が動きます。
 - `when.app` は bundle id の一覧（省略で全アプリ）。`when.focus` は `textField` か
   `any`（既定）。`textField` のルールはテキスト要素にフォーカスがあるときだけ
   発火し、トリガーを消して欄を読み、それが入力になります。`any` のルールはどこでも

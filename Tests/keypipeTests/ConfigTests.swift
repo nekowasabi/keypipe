@@ -15,6 +15,10 @@ final class ConfigTests: XCTestCase {
             .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("config.example.json")
         XCTAssertEqual(try loadConfig(path: example.path).rules.first?.trigger, "@@@")
         XCTAssertEqual(try load(#"{"rules":[{"trigger":"@@@"}]}"#).rules, [Rule(trigger: "@@@")])
+        for (spec, canonical) in [("ctrl+@", "ctrl+@"), ("command+option+x", "alt+cmd+x"), ("ctrl++", "ctrl++")] {
+            let rule = try load(#"{"rules":[{"hotkey":"\#(spec)"}]}"#).rules.first
+            XCTAssertEqual(rule?.trigger.description, canonical)
+        }
     }
 
     func testRejectionReasons() {
@@ -28,6 +32,13 @@ final class ConfigTests: XCTestCase {
             (#"{"rules":[{"trigger":"@@@","output":"replaceInput"}]}"#, "output replaceInput requires focus textField"),
             (#"{"rules":[],"shellTimeout":1}"#, "unknown key shellTimeout"),
             (#"{"rules":[{"trigger":"@@@","onFail":{}}]}"#, "unknown key onFail"),
+            (#"{"rules":[{"output":"none"}]}"#, "rule needs trigger or hotkey"),
+            (#"{"rules":[{"trigger":"@@@","hotkey":"ctrl+@"}]}"#, "rule has both trigger and hotkey"),
+            (#"{"rules":[{"hotkey":"@"}]}"#, "hotkey needs a modifier"),
+            (#"{"rules":[{"hotkey":"meta+@"}]}"#, "unknown modifier meta"),
+            (#"{"rules":[{"hotkey":"ctrl+shift+a"}]}"#, "shift is written in the key (ctrl+A)"),
+            (#"{"rules":[{"hotkey":"ctrl+"}]}"#, "empty hotkey key"),
+            (#"{"rules":[{"hotkey":"ctrl+ab"}]}"#, "hotkey key must be one character"),
             (#"{"rules":[{"trigger":"@@@","when":{"apps":[]}}]}"#, "unknown key apps"),
             (#"{"rules":[{"trigger":"@@@","output":{"shell":"true","extra":true}}]}"#, "unknown key extra"),
         ]

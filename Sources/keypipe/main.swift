@@ -43,11 +43,19 @@ do {
     exit(1)
 }
 
-if let seed = argument("--smoke-feed", in: args) {
+let seed = argument("--smoke-feed", in: args)
+let chord = argument("--smoke-hotkey", in: args)
+if seed != nil || chord != nil {
     var engine = Engine(config: loaded, desktop: fake, shell: runShell, emit: emit)
-    for character in seed {
+    for character in seed ?? "" {
         fake.key(character)
         engine.key(character)
+    }
+    if let chord {
+        do { engine.hotkey(try Hotkey.parse(chord)) } catch {
+            fputs("\(error)\n", stderr)
+            exit(1)
+        }
     }
     emit("keypipe smoke-feed hits \(engine.hits)")
     emit("keypipe field \(jsonString(fake.fieldText))")
@@ -75,7 +83,14 @@ if args.contains("--feed-stdin") {
     var engine = Engine(config: loaded, desktop: MacDesktop(), shell: runShell, emit: emit)
     // Why: Engine.key blocks on shells and erase readback; the tap callback must not.
     let queue = DispatchQueue(label: "keypipe.engine")
-    guard let tap = MacKeyTap(onKey: { character in queue.async { engine.key(character) } }) else {
+    guard let tap = MacKeyTap(onInput: { input in
+        queue.async {
+            switch input {
+            case .char(let character): engine.key(character)
+            case .hotkey(let hotkey): engine.hotkey(hotkey)
+            }
+        }
+    }) else {
         fputs("keypipe: could not create the event tap\n", stderr)
         exit(1)
     }

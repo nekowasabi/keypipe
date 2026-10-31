@@ -53,6 +53,7 @@ struct Engine {
     private let shell: (String, String, [String: String], TimeInterval) -> ShellOutcome
     private let emit: (String) -> Void
     private var matcher: TriggerMatcher
+    private let hotkeys: Set<Hotkey>
     private(set) var hits = 0
 
     init(config: KeypipeConfig, desktop: Desktop,
@@ -62,12 +63,33 @@ struct Engine {
         self.desktop = desktop
         self.shell = shell
         self.emit = emit
-        self.matcher = TriggerMatcher(triggers: config.rules.map { $0.trigger })
+        var texts: [String] = []
+        var hotkeys = Set<Hotkey>()
+        for rule in config.rules {
+            switch rule.trigger {
+            case .text(let text): texts.append(text)
+            case .hotkey(let hotkey): hotkeys.insert(hotkey)
+            }
+        }
+        self.matcher = TriggerMatcher(triggers: texts)
+        self.hotkeys = hotkeys
     }
 
     mutating func key(_ character: Character) {
-        guard let trigger = matcher.feed(character) else { return }
+        guard let text = matcher.feed(character) else { return }
         matcher.reset()
+        fire(.text(text))
+    }
+
+    /// A chord breaks any text sequence in progress. Unconfigured chords
+    /// (Cmd+C, Cmd+Tab) return before touching the desktop.
+    mutating func hotkey(_ hotkey: Hotkey) {
+        matcher.reset()
+        guard hotkeys.contains(hotkey) else { return }
+        fire(.hotkey(hotkey))
+    }
+
+    private mutating func fire(_ trigger: Trigger) {
         let snapshot = desktop.snapshot()
         guard snapshot.focus != .composing else {
             emit("keypipe composing \(trigger)")
@@ -81,17 +103,25 @@ struct Engine {
         hits += 1
         emit("keypipe matched \(trigger) rule \(index)")
         let input: String
-        if rule.when.focus == .textField {
+        switch (trigger, rule.when.focus) {
+        case (.text(let text), .textField):
             guard let field = snapshot.field,
-                  let erased = performErase(field, trigger: trigger, desktop, emit: emit) else { return }
+                  let erased = performErase(field, trigger: text, desktop, emit: emit) else { return }
             input = erased
-        } else {
-            let count = snapshot.focus == .text ? trigger.count : 0
+        case (.hotkey, .textField):
+            emit("keypipe erase 0")
+            guard let field = snapshot.field, let current = desktop.text(field) else { return }
+            input = current
+        case (.text(let text), .any):
+            let count = snapshot.focus == .text ? text.count : 0
             if count > 0, let field = snapshot.field {
-                _ = waitForTrigger(field, trigger, desktop)
+                _ = waitForTrigger(field, text, desktop)
                 desktop.backspace(count)
             }
             emit("keypipe erase \(count)")
+            input = ""
+        case (.hotkey, .any):
+            emit("keypipe erase 0")
             input = ""
         }
         let environment = ["KEYPIPE_APP": snapshot.app ?? ""]

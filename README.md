@@ -83,6 +83,18 @@ out of scope). Path is passed with `--config` and defaults to
   trigger wins; among rules with the same trigger, the first one in config
   order whose `when` holds wins. If none holds, nothing fires (no fallback to
   a shorter trigger).
+- `hotkey` is the alternative to `trigger` (a rule has exactly one): a chord
+  such as `"ctrl+@"` or `"alt+cmd+x"`. Modifiers are `ctrl`/`control`,
+  `alt`/`option`, `cmd`/`command`, at least one. Shift is not a modifier but
+  part of the key: ctrl+shift+a is written `"ctrl+A"`. The key is the
+  character the current keyboard layout produces (`ctrl+@` is the `@` key on
+  a JIS keyboard, shift+2 on a US one). A hotkey erases nothing; under
+  `focus: textField` the whole field is the input, under `any` the input is
+  empty. Chords no rule names (Cmd+C, Cmd+Tab) are ignored without a
+  transcript line. The tap is listen-only, so the app in front always
+  receives the chord too; keypipe cannot tell whether the app binds it. If an
+  app owns `ctrl+@`, scope the rule with `when.app` so keypipe fires only
+  where you want it, otherwise both act.
 - `when.app` is a list of bundle ids (omit for any app). `when.focus` is
   `textField` or `any` (default). `textField` rules fire only when a text
   element is focused; they erase the trigger and read the field, which

@@ -14,6 +14,30 @@ final class EngineTests: XCTestCase {
         return (engine.hits, lines)
     }
 
+    func testHotkeyReadsFieldWithoutErasingAndIgnoresUnconfiguredChords() throws {
+        let ctrlAt = try Hotkey.parse("ctrl+@")
+        let desktop = FakeDesktop(focus: .text, fieldText: "hello")
+        let rules = [Rule(trigger: .hotkey(ctrlAt), when: When(focus: .textField),
+                          transform: Guarded(primary: "tr"), output: Guarded(primary: .builtin(.replaceInput))),
+                     Rule(trigger: "@@@")]
+        var lines: [String] = []
+        var engine = Engine(config: KeypipeConfig(rules: rules), desktop: desktop, shell: { _, input, _, _ in
+            XCTAssertEqual(input, "hello")
+            return .exited(0, stdout: "HELLO")
+        }) { lines.append($0) }
+        engine.hotkey(try Hotkey.parse("cmd+c"))
+        XCTAssertEqual(lines, [])
+        engine.key("@")
+        engine.key("@")
+        engine.hotkey(ctrlAt)
+        XCTAssertEqual(engine.hits, 1)
+        XCTAssertTrue(lines.contains("keypipe matched ctrl+@ rule 0"))
+        XCTAssertTrue(lines.contains("keypipe erase 0"))
+        XCTAssertEqual(desktop.fieldText, "HELLO")
+        engine.key("@")
+        XCTAssertEqual(engine.hits, 1, "chord resets the text buffer")
+    }
+
     func testComposingDoesNotFireOrErase() {
         let desktop = FakeDesktop(focus: .composing, fieldText: "hello")
         let (hits, lines) = run(rules: [Rule(trigger: "@@@")], desktop: desktop, shell: { _, _, _, _ in

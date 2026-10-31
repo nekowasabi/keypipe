@@ -92,6 +92,11 @@ bad R2e '{"rules":[{"trigger":"@@@","transform":""}]}' "empty transform"
 bad R2f '{"rules":[{"trigger":"@@@","when":{"focus":"window"}}]}' "unknown focus window"
 feed R2g '{"rules":[{"trigger":"@@@"}]}' "$TXT" '@@@'
 check "R2g minimal rule accepted" "exitis R2g 0 && has R2g 'keypipe matched @@@ rule 0'" "defaults: when any, identity, output none"
+bad R2h '{"rules":[{"output":"none"}]}' "rule needs trigger or hotkey"
+bad R2i '{"rules":[{"trigger":"@@@","hotkey":"ctrl+@"}]}' "rule has both trigger and hotkey"
+bad R2j '{"rules":[{"hotkey":"@"}]}' "hotkey needs a modifier"
+bad R2k '{"rules":[{"hotkey":"meta+@"}]}' "unknown modifier meta"
+bad R2l '{"rules":[{"hotkey":"ctrl+shift+a"}]}' "shift is written in the key (ctrl+A)"
 
 # R3 rule selection by context
 SEL='{"rules":[
@@ -169,6 +174,25 @@ feed R8 "{\"rules\":[{\"when\":{\"focus\":\"textField\"},\"trigger\":\"@@@\",\"t
 check "R8 field text with \$(), backticks, quotes is not executed and arrives byte-exact" \
   "[ ! -e '$EV/R8.pwned' ] && [ ! -e '$EV/R8.pwned2' ] && cmp -s '$EV/R8.sent' '$EV/R8.expected'" "R8.sent vs R8.expected"
 
+# R10 hotkeys: no erase, field is the input, unconfigured chords are silent
+HK='{"rules":[{"hotkey":"ctrl+@","when":{"focus":"textField"},"transform":"tr a-z A-Z","output":"replaceInput"}]}'
+printf '%s' "$HK" > "$EV/R10a.config.json"; printf '%s' "$TXT" > "$EV/R10a.context.json"
+cap 20 "$BIN" --config "$EV/R10a.config.json" --context "$EV/R10a.context.json" --smoke-hotkey 'control+@' > "$EV/R10a.out" 2>&1
+echo $? > "$EV/R10a.exit"
+check "R10a hotkey in a text field: field is the input, nothing erased, result written" \
+  "exitis R10a 0 && has R10a 'keypipe matched ctrl+@ rule 0' && has R10a 'keypipe erase 0' && lacks R10a 'keypipe erase-rewrite' && field R10a '\"HELLO\"'" "field HELLO, erase 0"
+HKANY="{\"rules\":[{\"hotkey\":\"ctrl+@\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/R10b.sent'\"}}]}"
+printf '%s' "$HKANY" > "$EV/R10b.config.json"; printf '%s' "$TXT" > "$EV/R10b.context.json"
+cap 20 "$BIN" --config "$EV/R10b.config.json" --context "$EV/R10b.context.json" --smoke-feed 'ab' --smoke-hotkey 'ctrl+@' > "$EV/R10b.out" 2>&1
+echo $? > "$EV/R10b.exit"
+check "R10b hotkey under focus any: empty input, field untouched" \
+  "exitis R10b 0 && has R10b 'keypipe erase 0' && [ -f '$EV/R10b.sent' ] && [ ! -s '$EV/R10b.sent' ] && field R10b '\"helloab\"'" "R10b.sent empty, field helloab"
+printf '%s' "$HK" > "$EV/R10c.config.json"; printf '%s' "$TXT" > "$EV/R10c.context.json"
+cap 20 "$BIN" --config "$EV/R10c.config.json" --context "$EV/R10c.context.json" --smoke-feed '@@' --smoke-hotkey 'cmd+c' > "$EV/R10c.out" 2>&1
+echo $? > "$EV/R10c.exit"
+check "R10c unconfigured chord: no transcript line, no nomatch, exit 2" \
+  "exitis R10c 2 && lacks R10c 'keypipe nomatch' && lacks R10c 'keypipe matched'" "cmd+c is silent"
+
 # M live macOS items: real CGEventTap and AX, driven through System Events
 if [ "${1:-}" = "--no-live" ] || [ "$(uname -s)" != Darwin ]; then
   sk "M1-M4 live macOS" "not Darwin or --no-live"
@@ -180,7 +204,8 @@ else
   LIVE="{\"rules\":[
    {\"trigger\":\"@@@\",\"when\":{\"focus\":\"textField\"},\"transform\":\"tr a-z A-Z\",\"output\":\"replaceInput\"},
    {\"trigger\":\";;;\",\"when\":{\"focus\":\"textField\"},\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/M2.sent'\"}},
-   {\"trigger\":\"///\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/M2b.sent'\"}}]}"
+   {\"trigger\":\"///\",\"output\":{\"shell\":\"printf %s \\\"\$1\\\" > '$EV/M2b.sent'\"}},
+   {\"hotkey\":\"ctrl+@\",\"when\":{\"focus\":\"textField\"},\"transform\":\"tr a-z A-Z\",\"output\":\"replaceInput\"}]}"
   printf '%s' "$LIVE" > "$EV/live.config.json"
   "$BIN" --config "$EV/live.config.json" > "$EV/daemon.log" 2>&1 &
   DPID=$!; STARTED_PIDS="$STARTED_PIDS $DPID"; echo "$DPID" > "$EV/daemon.pid"
@@ -227,6 +252,18 @@ if [ "${1:-}" != "--no-live" ] && [ "$(uname -s)" = Darwin ] && [ "${STARTED:-0}
         "[ -f '$EV/M2b.sent' ] && [ ! -s '$EV/M2b.sent' ] && [ \"\$(cat '$EV/M2b.text')\" = 1xyz ]" "M2b.sent empty, M2b.text"
     else
       ng "M2b TextEdit" "our document lost focus before typing; not typed"
+    fi
+    osa "tell application \"TextEdit\" to set text of document \"$DOC\" to \"\"" >/dev/null
+    if front_is_ours; then
+      osa 'tell application "System Events" to keystroke "1hello"' >/dev/null
+      sleep 1
+      osa 'tell application "System Events" to keystroke "@" using control down' >/dev/null
+      sleep 2
+      osa "tell application \"TextEdit\" to get text of document \"$DOC\"" > "$EV/M5.text"
+      check "M5 TextEdit: ctrl+@ hotkey uppercases the field without erasing" \
+        "[ \"\$(cat '$EV/M5.text')\" = 1HELLO ] && grep -q 'keypipe matched ctrl+@' '$EV/daemon.log'" "M5.text, daemon.log"
+    else
+      ng "M5 TextEdit" "our document lost focus before typing; not typed"
     fi
     osa "tell application \"TextEdit\" to close document \"$DOC\" saving no" >/dev/null
   fi

@@ -29,7 +29,7 @@ The script builds with `swift build` (R1a). There is no server for the fake harn
 
 Read-only. Reports the host OS, the swift toolchain, and, when the binary exists, `keypipe --probe` (Accessibility trust and the current snapshot). Run it first whenever anything looks off.
 
-Live items need two Accessibility grants in System Settings > Privacy & Security > Accessibility: the built `keypipe` binary (for the tap and AX) and the terminal running the script (for `System Events` keystrokes). The terminal also needs Automation grants for TextEdit and System Events; the first `osascript` call raises the dialog and blocks until it is answered (AppleEvent timeout -1712 after about 60 s). Set the input source to ABC. Any text expander (espanso) must not own a trigger that is a prefix of a test trigger (`@@` once was; it has been removed from the user's config, and the live run passes with espanso running). Live triggers use unshifted keys only (`@`, `;`, `/` on a JIS layout): a `System Events` keystroke for a shifted key carries the unshifted string in the event (shift+1 arrives as `1`), so a shifted trigger never reaches the matcher through this harness.
+Live items need two Accessibility grants in System Settings > Privacy & Security > Accessibility: the built `keypipe` binary (for the tap and AX) and the terminal running the script (for `System Events` keystrokes). The terminal also needs Automation grants for TextEdit and System Events; the first `osascript` call raises the dialog and blocks until it is answered (AppleEvent timeout -1712 after about 60 s). Set the input source to ABC. Any text expander (espanso) must not own a trigger that is a prefix of a test trigger (`@@` once was; it has been removed from the user's config, and the live run passes with espanso running). Keys are translated from keycode and shift with `UCKeyTranslate` on the current layout (since the hotkey change), so a `System Events` keystroke for a shifted key now arrives as the shifted character even though the event's stored string is unshifted (`probes/chord.swift` shows both). Live triggers still use `@`, `;`, `/`, which are unshifted on this JIS layout.
 
 Throwaway probes that settled the design's runtime risks live in [`probes/`](probes/) (`axprobe.swift`, `tap.swift`, `imsel.swift`); build each with `swiftc -O -o <out> <file>`. Results are in `docs/design/verification-plan.md`.
 
@@ -57,7 +57,9 @@ Context JSON for `--context`: `{"app":"<bundle id>","focusIsTextField":true,"fie
 
 `--smoke-feed` exits 0 when at least one rule matched (even if a later stage failed), 2 when none, 1 on invalid config.
 
-Invalid configs print `invalid config: <reason>` with one of these reasons, which R2 matches literally: `empty trigger`, `unknown key <name>`, `unknown output <value>`, `empty output.shell`, `empty transform`, `unknown focus <value>`. A rejection with any other reason fails the item.
+`--smoke-hotkey <spec>` feeds one chord (`ctrl+@`, `alt+cmd+x`) after the `--smoke-feed` characters, if any; either flag alone is enough.
+
+Invalid configs print `invalid config: <reason>` with one of these reasons, which R2 matches literally: `empty trigger`, `unknown key <name>`, `unknown output <value>`, `empty output.shell`, `empty transform`, `unknown focus <value>`, `rule needs trigger or hotkey`, `rule has both trigger and hotkey`, `hotkey needs a modifier`, `unknown modifier <name>`, `shift is written in the key (ctrl+A)`, `empty hotkey key`, `hotkey key must be one character`. A rejection with any other reason fails the item.
 
 `--probe` prints one JSON line: `{"trusted":bool,"app":...,"focus":"textField"|"composing"|"none","focusIsTextField":bool,"fieldText":...}` (`fieldText` only when `focus` is `textField`). It never prompts and exits 0 even when untrusted.
 
@@ -69,6 +71,7 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | R1a-c | build, `swift test`, `swift-format lint --strict` | build |
 | R2a-f | invalid configs exit 1 with `invalid config` (empty trigger, old `action` key, unknown output, empty `output.shell`, empty `transform`, unknown `focus`) | fake |
 | R2g | minimal rule accepted with defaults | fake |
+| R2h-l | hotkey config errors: `rule needs trigger or hotkey`, `rule has both trigger and hotkey`, `hotkey needs a modifier`, `unknown modifier <x>`, `shift is written in the key (ctrl+A)` | fake |
 | R3a-d | rule selection by focus, by app, none satisfied (no erase), config order on ties | fake |
 | R3e | `focus: any` in a text field: trigger erased, input empty, field untouched | fake |
 | R4a/b | trigger erased before the field is read | fake |
@@ -83,10 +86,14 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | R6c | output.shell drives a real tmux pane on an isolated socket | fake + tmux |
 | R7 | Japanese text intact end to end | fake |
 | R8 | field text with `$()`, backticks, quotes passes through transform and output.shell unexecuted and byte-exact | fake |
-| M0 | Accessibility granted to keypipe (M0a); daemon prints `keypipe started` within 5 s (M0b, gates M1-M4) | live |
+| R10a | `--smoke-hotkey ctrl+@` under `focus: textField`: field is the input, `erase 0`, no rewrite, result written | fake |
+| R10b | hotkey under `focus: any`: empty input, field untouched | fake |
+| R10c | unconfigured chord (`cmd+c`): no transcript line, exit 2 | fake |
+| M0 | Accessibility granted to keypipe (M0a); daemon prints `keypipe started` within 5 s (M0b, gates M1-M5) | live |
 | M1 | TextEdit `hello@@@` becomes `HELLO` | live |
 | M2 | TextEdit `1abc;;;` sends `1abc` to output.shell, field left as `1abc` (digit first: TextEdit auto-capitalizes `abc` to `Abc`) | live |
 | M2b | TextEdit `1xyz///` under a `focus: any` rule: only the trigger is erased (field `1xyz`), output.shell gets empty input | live |
+| M5 | TextEdit `1hello` then `keystroke "@" using control down` under a `ctrl+@` textField rule: field becomes `1HELLO`, nothing erased | live |
 | M3 | Finder frontmost, `@@@` is seen (`nomatch` +1), no rule fires, daemon still alive | live |
 | M4 | iTerm2 probe recorded (risk check, not a behavior claim) | live |
 
