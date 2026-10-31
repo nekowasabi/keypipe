@@ -4,7 +4,7 @@ REPO="${REPO:-/workspace/keypipe}"
 MVP_ROOT="${MVP_ROOT:-/workspace/keypipe-mvp}"
 BRANCH="${BRANCH:-feat/mvp-daemon}"
 SCRATCH="${SCRATCH:-/workspace/keypipe-mvp/scratch}"
-EVIDENCE="${EVIDENCE:-$SCRATCH/verify-$(date +%F-%H%M%S)}"
+EVIDENCE="${EVIDENCE:-$SCRATCH/verify-$(date +%F-%H%M%S)-$$}"
 mkdir -p "$EVIDENCE"
 export PATH="/home/box/swift/usr/bin:$PATH"
 if [ -d "/workspace/keypipe-mvp/scratch/swift-lib" ]; then
@@ -31,8 +31,8 @@ kp_timeout() {
   echo "repo=$REPO"
   echo "branch=$(git -C "$REPO" symbolic-ref --short HEAD 2>&1)"
   echo "uname=$(uname -a)"
-  if command -v swift >/dev/null 2>&1 && swift --version >/tmp/kp-swift-ver 2>&1; then
-    cat /tmp/kp-swift-ver
+  if command -v swift >/dev/null 2>&1 && swift --version >"$EVIDENCE/swift-ver.txt" 2>&1; then
+    cat "$EVIDENCE/swift-ver.txt"
   else
     echo "swift: missing or broken (libncurses.so.6 absent on this box)"
   fi
@@ -50,7 +50,7 @@ DOCTOR_ONLY=0
 
 cur="$(git -C "$REPO" symbolic-ref --short HEAD 2>/dev/null || echo UNKNOWN)"
 if [ "$cur" = "$BRANCH" ]; then vpass "V0 doctor on $BRANCH, $SWIFT_WHY" "env" "$SWIFT_WHY"; else vfail "V0 doctor" "env" "branch is $cur, want $BRANCH"; fi
-[ "$DOCTOR_ONLY" = 1 ] && { printf 'summary pass=%d fail=%d skip=%d\n' "$PASS" "$FAIL" "$SKIP"; [ "$FAIL" -eq 0 ]; }
+[ "$DOCTOR_ONLY" = 1 ] && { printf 'summary pass=%d fail=%d skip=%d\n' "$PASS" "$FAIL" "$SKIP"; [ "$FAIL" -eq 0 ]; exit; }
 cd "$REPO" || { vfail "V0 repo dir" "env" "cannot cd $REPO"; }
 
 # V1 S1 scaffold

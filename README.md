@@ -132,5 +132,5 @@ The project-local verification skill lives at
 `features/`. Run the full drive with:
 
 ```sh
-REPO=/workspace/keypipe ./verify.sh
+REPO=/workspace/keypipe .claude/skills/verify-keypipe/verify.sh
 ```
