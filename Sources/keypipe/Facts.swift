@@ -81,7 +81,6 @@ struct Conditions: Equatable {
         return .match
     }
 
-    var hasSlowTerm: Bool { terms.contains { $0.fact.cost == .slow } }
     var hasApp: Bool { terms.contains { $0.fact == .app } }
 }
 

@@ -100,7 +100,7 @@ struct Job: Codable, Equatable {
 /// --report's JSON and the voice-switch decision.
 enum FireResult: Equatable {
     /// A gate stopped the fire before any rule was looked at. The word is the transcript
-    /// token: terminal, composing, secure, deny.
+    /// token: terminal, composing, secure, deny, front-changed (the front moved during a slow read).
     case blocked(String)
     case noMatch
     /// A condition fact could not be read. The fire stops: it does not fall through to the

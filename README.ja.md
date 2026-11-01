@@ -119,7 +119,9 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   （例: `{"app": ["com.1password.1password"]}`）。どれかが満たされると、keypipe は
   ルールも欄の読み取りも行う前に止まります（`keypipe deny`）。`url` を書く項目には
   `app` も要ります。別のアプリが前面のときに、キー入力のトリガーがブラウザへ問い
-  合わせないためです。`deny` の `url` が読めないときも止まります。
+  合わせないためです。`deny` の `url` が読めないときも止まります。`--line` の経路
+  （zsh、音声）では事実をその場で読まないので、`url` を書いた `deny` の項目は一致せず、
+  その発火を止めません。
 - パスワード欄（`AXSecureTextField`）では何もしません（`keypipe secure`）。消さず、
   読まず、シェルも走らせません。
 - `when.app` は bundle id の一覧（省略で全アプリ）。`when.focus` は `textField` か
@@ -183,10 +185,11 @@ source ~/repos/keypipe/shell/keypipe.zsh   # 任意: KEYPIPE_APP=<bundle id>
 [--app <bundle id>]` は stdin でトリガーを除いた行を受け、そのアプリ（既定は前面
 アプリ）のフォーカスされたテキスト欄としてルールを走らせ、新しい行を stdout に
 出します。`replaceInput` なら結果、それ以外は行をそのままです。終了コードは一致 0、
-ルール無し 2（ウィジェットはトリガーを残す）、設定不正 1 です。記録は stderr に出ます。
+ルール無し・ゲート（deny）で止まった・引数の不正は 2（ウィジェットはトリガーを残す）、
+設定不正 1 です。記録は stderr に出ます。
 
 `--report` を付けると、新しい行の代わりに、発火の結果を JSON 1 行で出します（終了
-コードは書けたら 0、設定不正なら 1）。`outcome` は `replaced`・`delivered`・
+コードは書けたら 0、設定不正なら 1、引数の不正なら 2）。`outcome` は `replaced`・`delivered`・
 `started`・`failed`・`nomatch`・`blocked`・`unreadable`・`noinput` のどれかです。
 voice-switch の `keypipe` 配送はこれを読み、`replaced` のときだけ結果を貼ります。
 全種類の例は `Tests/keypipeTests/Fixtures/report-v1.jsonl` にあります。

@@ -128,6 +128,8 @@ out of scope). Path is passed with `--config` and defaults to
   before any rule and before reading the field (`keypipe deny`). An entry with
   `url` must also have `app`, so no keystroke trigger asks a browser while
   another app is in front. An unreadable `url` in `deny` also stops the fire.
+  On the `--line` path (zsh, voice) there is no live read, so a `deny` entry
+  with `url` never matches there and does not stop those fires.
 - keypipe never acts in a password field (`AXSecureTextField`): `keypipe
   secure`, no erase, no read, no shell.
 - `when.app` is a list of bundle ids (omit for any app). `when.focus` is
@@ -202,7 +204,8 @@ each text trigger once per line. `keypipe --config C --line <trigger> [--app
 <bundle id>]` reads the line (trigger removed) on stdin, runs the rule as a
 focused text field of that app (default: the front app), and prints the new
 line to stdout: the `replaceInput` result, otherwise the line unchanged. Exit
-0 matched, 2 no rule (the widget keeps the trigger), 1 invalid config. The
+0 matched, 2 no rule, a gate (deny) stopped it, or a bad argument (the widget
+keeps the trigger), 1 invalid config. The
 transcript goes to stderr.
 
 Only zsh is supported. The widget is ZLE code, so bash, fish and other
@@ -264,7 +267,7 @@ auto-paste off, see voice-switch's README, keypipe delivery):
 
 `keypipe --config C --line <trigger> --report [--app <bundle id>]` runs the
 same fire and prints one JSON line instead of the new line, exit 0 whenever a
-report was written (1 for a bad config, stderr only). voice-switch's
+report was written (1 for a bad config, 2 for a bad argument; stderr only). voice-switch's
 `keypipe` delivery uses it to paste only a `replaced` result and never the
 original text on failure.
 
@@ -275,7 +278,7 @@ original text on failure.
 | `started` | a background job did start | `rule` |
 | `failed` | a stage failed | `rule`, `stage` (`transform`, `output`, `spawn`), `failure` (the `KEYPIPE_FAILURE` token) |
 | `nomatch` | no rule for this trigger holds | |
-| `blocked` | a gate stopped the fire before any rule | `reason` (`terminal`, `composing`, `secure`, `deny`) |
+| `blocked` | a gate stopped the fire before any rule | `reason` (`terminal`, `composing`, `secure`, `deny`, `front-changed`) |
 | `unreadable` | a condition fact could not be read, so the fire stopped | `fact`, `reason` |
 | `noinput` | a rule matched but the field vanished | `rule` |
 
