@@ -241,10 +241,14 @@ else
 fi
 
 # V7 S7 gates
-if [ "$SWIFT_OK" = 1 ] && command -v swift-format >/dev/null 2>&1; then
-  if swift-format lint --strict --recursive Sources Tests > "$EVIDENCE/swift-format.log" 2>&1; then vpass "V7a formatter/lint verify exit 0" "S7" "swift-format lint --strict"; else vfail "V7a formatter/lint verify exit 0" "S7" "see swift-format.log"; fi
+# Same detection as R1c: Xcode ships the tool as `swift format` without swift-format on PATH.
+FORMAT=""
+if command -v swift-format >/dev/null 2>&1; then FORMAT="swift-format"
+elif [ "$SWIFT_OK" = 1 ] && swift format --version >/dev/null 2>&1; then FORMAT="swift format"; fi
+if [ "$SWIFT_OK" = 1 ] && [ -n "$FORMAT" ]; then
+  if $FORMAT lint --strict --recursive Sources Tests > "$EVIDENCE/swift-format.log" 2>&1; then vpass "V7a formatter/lint verify exit 0" "S7" "$FORMAT lint --strict"; else vfail "V7a formatter/lint verify exit 0" "S7" "see swift-format.log"; fi
 elif grep -qi 'swift-format\|format' README.md 2>/dev/null; then
-  vskip "V7a formatter/lint verify exit 0" "S7" "formatter documented but tool missing on Linux (MAC_UNVERIFIED)"
+  vskip "V7a formatter/lint verify exit 0" "S7" "formatter documented but neither swift-format nor swift format is available (MAC_UNVERIFIED)"
 else
   vfail "V7a formatter/lint verify exit 0" "S7" "no formatter tool or documented equivalent"
 fi

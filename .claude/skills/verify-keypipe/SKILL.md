@@ -57,7 +57,7 @@ V table (each row: exact command run by `verify.sh`, expected result):
 | V4 | S4 | `Context.swift` has `struct Snapshot` with `var app: String?` and `func matches(` + test reference | exit 0 |
 | V5 | S5 | `TriggerMatcher`/`feed` module + unit test asserting `@@@` detection; hook doc grep (`CGEvent\|AX\|tap`); `Engine.swift` builds the `TriggerMatcher` and `main.swift` builds the `Engine` for `--feed-stdin`/`--smoke-feed`; runtime `--smoke-feed '@@@'` and `'hi @@@ there'` with an `output.shell` rule must log `matched @@@` and `output-shell exit 0` and write `smoke.out` | exit 0; runtime parts SKIP as `MAC_UNVERIFIED` when swift is missing/broken |
 | V6 | S6 | skill files exist with frontmatter; `verify.sh` references S1..S5; `phase1.jsonl`/`phase2.jsonl` harness logs mention `create-verification-skill` and `poteto-mode` | files FAIL if absent; SKIP when harness logs are absent, FAIL when logs exist but a skill name is missing |
-| V7 | S7 | `swift-format lint --strict --recursive Sources Tests` (config: `.swift-format`, four spaces) exit 0; `swift test` exit 0; long builds/tests use a portable timeout (`timeout`, `gtimeout`, perl alarm, or none on Darwin) | SKIP as `MAC_UNVERIFIED` when the tool is missing on Linux |
+| V7 | S7 | `swift-format lint --strict --recursive Sources Tests` (config: `.swift-format`, four spaces) exit 0; `swift test` exit 0; long builds/tests use a portable timeout (`timeout`, `gtimeout`, perl alarm, or none on Darwin) | SKIP as `MAC_UNVERIFIED` when neither `swift-format` nor the toolchain's `swift format` is available (Xcode has the latter) |
 
 `verify.sh` exits 0 iff zero FAILs. SKIP never fails the run.
 

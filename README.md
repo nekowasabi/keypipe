@@ -345,7 +345,7 @@ the style (four spaces). The lint above must exit 0. With Xcode only,
 --recursive Sources Tests` fixes most of what it reports. On Linux the box
 toolchain additionally needs
 `LD_LIBRARY_PATH=/workspace/keypipe-mvp/scratch/swift-lib` for
-`libncurses.so.6` (`verify.sh` exports it when that dir exists).
+`libncurses.so.6` (`.claude/skills/verify-keypipe/verify.sh` exports it when that dir exists; the other verify scripts do not).
 
 ## Verification
 

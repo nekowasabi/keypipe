@@ -303,7 +303,7 @@ swift-format lint --strict --recursive Sources Tests
 `swift format format --in-place --recursive Sources Tests` で指摘の大半を直せます。
 Linux ではボックスのツールチェーンに追加で
 `LD_LIBRARY_PATH=/workspace/keypipe-mvp/scratch/swift-lib` が必要です
-（そのディレクトリが存在する場合、`verify.sh` がエクスポートします）。
+（そのディレクトリが存在する場合、`.claude/skills/verify-keypipe/verify.sh` がエクスポートします。ほかの verify スクリプトはしません）。
 
 ## 検証
 
