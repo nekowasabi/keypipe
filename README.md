@@ -141,7 +141,9 @@ out of scope). Path is passed with `--config` and defaults to
   `onFail.transform` runs if present, otherwise nothing is delivered and a
   notification says why.
 - `output` is `"replaceInput"` (writes the result back into the same field;
-  requires `focus: textField`), `"notify"`, `"none"` (default), or
+  requires `focus: textField`), `"typeText"` (types the result at the caret
+  with key events keypipe's own tap ignores; through `--line` there is no
+  caret, so it fails with `unsupported`), `"notify"`, `"none"` (default), or
   `{ "shell": "..." }`, which receives the result the same way a transform
   receives its input. Clipboard is `{ "shell": "pbcopy" }`, a webhook is
   `curl`.

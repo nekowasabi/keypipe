@@ -72,6 +72,30 @@
 
         func notify(_ text: String) { notifyUser(text) }
 
+        /// Posts the text as tagged Unicode key events, so keypipe's own tap drops them and the
+        /// typed text never re-enters the trigger matcher.
+        func typeText(_ text: String) -> Bool {
+            let source = CGEventSource(stateID: .combinedSessionState)
+            // Why: one event carries at most 20 UTF-16 units.
+            let units = Array(text.utf16)
+            var start = 0
+            while start < units.count {
+                var end = min(start + 20, units.count)
+                // Why: never split a surrogate pair (emoji) across two events.
+                if end < units.count, UTF16.isLeadSurrogate(units[end - 1]) { end -= 1 }
+                let chunk = Array(units[start..<end])
+                for down in [true, false] {
+                    guard let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down) else { return false }
+                    chunk.withUnsafeBufferPointer { event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress) }
+                    event.setIntegerValueField(.eventSourceUserData, value: keypipeEventTag)
+                    event.post(tap: .cgSessionEventTap)
+                }
+                usleep(5000)
+                start = end
+            }
+            return true
+        }
+
         func fact(_ name: FactName) -> FactRead {
             switch name {
             case .app:

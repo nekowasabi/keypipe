@@ -1,28 +1,5 @@
 import Foundation
 
-enum BuiltinSink: String { case none, replaceInput, notify }
-enum Output: Equatable {
-    case builtin(BuiltinSink), shell(ShellOutput)
-
-    var isBackground: Bool {
-        if case .shell(let shell) = self { return shell.background }
-        return false
-    }
-}
-
-/// background: the caller returns at once and a detached job runs transform and output.
-struct ShellOutput: Equatable, ExpressibleByStringLiteral {
-    var script: String
-    var background = false
-
-    init(script: String, background: Bool = false) {
-        self.script = script
-        self.background = background
-    }
-
-    init(stringLiteral script: String) { self.init(script: script) }
-}
-
 struct When: Equatable {
     enum Focus: String { case textField, any }
     var focus: Focus = .any
@@ -120,8 +97,8 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
             output = .shell(ShellOutput(script: try nonempty(sink["shell"] ?? NSNull(), name: "output.shell"),
                                         background: background))
         }
-        if output == .builtin(.replaceInput) && focus != .textField {
-            throw ConfigError.invalid("output replaceInput requires focus textField")
+        if output.needsTextField && focus != .textField {
+            throw ConfigError.invalid("output \(output.name) requires focus textField")
         }
         return output
     }
@@ -205,12 +182,12 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
                 transform?.onFail = try nonempty(value, name: "transform")
             }
             if let value = fallback["output"] {
-                guard output.primary != .builtin(.none), output.primary != .builtin(.notify) else {
+                guard output.primary.canFail else {
                     throw ConfigError.invalid("onFail.output requires an output that can fail")
                 }
                 output.onFail = try parseOutput(value, when.focus, primary: false)
-                if output.primary.isBackground && output.onFail == .builtin(.replaceInput) {
-                    throw ConfigError.invalid("a background output cannot fall back to replaceInput")
+                if output.primary.isBackground, let fallback = output.onFail, !fallback.detachable {
+                    throw ConfigError.invalid("a background output cannot fall back to \(fallback.name)")
                 }
             }
         }

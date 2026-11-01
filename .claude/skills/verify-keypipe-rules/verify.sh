@@ -293,6 +293,16 @@ check "R12f app switched during the URL read: no erase, nothing runs" \
 feed R12g '{"rules":[{"trigger":"@@@","when":{"app":["com.apple.*"]},"output":"none"}]}' "$TXT" '@@@'
 check "R12g app globs: com.apple.* matches TextEdit" "has R12g 'keypipe matched @@@ rule 0'" "R12g.out"
 
+# R13 native outputs from the sink table (PR3)
+TT='{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"transform":"printf X","output":"typeText"},{"trigger":";;;","when":{"focus":"textField"},"transform":"printf Y","output":"typeText","onFail":{"output":{"shell":"printf \"%s|%s\" \"$1\" \"$KEYPIPE_FAILURE\" > '"$EV"'/R13a.sent"}}}]}'
+feed R13a1 "$TT" "$TXT" '@@@'
+line R13a2 "$TT" '@@@' 'hello' --report
+line R13a3 "$TT" ';;;' 'hello' --report
+check "R13a typeText types at the caret; through --line it fails as unsupported and onFail.output gets it" \
+  "field R13a1 '\"helloX\"' && same R13a2 '{\"failure\":\"unsupported\",\"outcome\":\"failed\",\"rule\":0,\"stage\":\"output\",\"v\":1}' \
+   && same R13a3 '{\"fallback\":true,\"outcome\":\"delivered\",\"rule\":1,\"v\":1}' && [ \"\$(cat '$EV/R13a.sent')\" = 'Y|unsupported' ]" \
+  "R13a*.out R13a.sent"
+
 # M live macOS items: real CGEventTap and AX, driven through System Events
 if [ "${1:-}" = "--no-live" ] || [ "$(uname -s)" != Darwin ]; then
   sk "M1-M4 live macOS" "not Darwin or --no-live"

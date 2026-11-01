@@ -112,6 +112,13 @@ final class FakeDesktop: Desktop {
                         field: focus == .text ? Field(token: 0) : nil, secure: secure)
     }
 
+    /// Like a real app: text lands at the end of a focused text field, and nowhere else.
+    func typeText(_ text: String) -> Bool {
+        guard focus == .text && !gone else { return false }
+        fieldText.append(text)
+        return true
+    }
+
     func fact(_ name: FactName) -> FactRead {
         reads.append(name)
         return facts[name] ?? .absent

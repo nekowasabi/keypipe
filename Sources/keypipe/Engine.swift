@@ -6,8 +6,10 @@ func jsonString(_ text: String) -> String {
 }
 
 /// Why a stage failed. The token is both the transcript word and KEYPIPE_FAILURE.
-enum Failure: Error, Equatable {
+enum Failure: Error, Hashable {
     case exit(Int32), timeout, empty, ignored, gone
+    /// The desktop cannot do it at all (typeText through --line: there is no caret).
+    case unsupported
 
     var token: String {
         switch self {
@@ -16,6 +18,7 @@ enum Failure: Error, Equatable {
         case .empty: return "empty"
         case .ignored: return "ignored"
         case .gone: return "gone"
+        case .unsupported: return "unsupported"
         }
     }
 }
@@ -277,7 +280,7 @@ struct Engine {
             }
         }
         func success(_ output: Output, viaFallback: Bool) -> FireResult {
-            output == .builtin(.replaceInput)
+            output.writesField
                 ? .replaced(rule: index, text: result, viaFallback: viaFallback)
                 : .delivered(rule: index, viaFallback: viaFallback)
         }
@@ -287,7 +290,7 @@ struct Engine {
         guard let fallback = rule.output.onFail else {
             // Why: without a fallback the text must not be lost, and a sync shell's own
             // failure is already visible in the transcript; nobody watches a job's.
-            if rule.output.primary == .builtin(.replaceInput) { notify(result) }
+            if case .builtin = rule.output.primary { notify(result) }
             else if rule.output.primary.isBackground { notify("\(trigger) output failed: \(failure.token)") }
             return .failed(rule: index, stage: .output, failure: failure.token)
         }
@@ -333,30 +336,17 @@ struct Engine {
         }
     }
 
-    /// nil on success. notify and none cannot fail.
+    /// nil on success. A sink that cannot fail (spec.failures empty) always returns nil.
     private func apply(_ output: Output, _ result: String, _ env: [String: String], _ field: Field?, prefix: String)
         -> Failure?
     {
         switch output {
-        case .builtin(.replaceInput):
-            let outcome = field.map { performWrite($0, result, desktop) } ?? .gone
-            switch outcome {
-            case .written:
-                emit("keypipe \(prefix)apply replaceInput \(jsonString(result))")
-                return nil
-            case .ignored:
-                emit("keypipe \(prefix)apply-failed replaceInput ignored")
-                return .ignored
-            case .gone:
-                emit("keypipe \(prefix)apply-failed replaceInput gone")
-                return .gone
+        case .builtin(let sink):
+            if let failure = sink.perform(result, field: field, desktop) {
+                emit("keypipe \(prefix)apply-failed \(sink.rawValue) \(failure.token)")
+                return failure
             }
-        case .builtin(.notify):
-            desktop.notify(result)
-            emit("keypipe \(prefix)apply notify \(jsonString(result))")
-            return nil
-        case .builtin(.none):
-            emit("keypipe \(prefix)apply none \(jsonString(result))")
+            emit("keypipe \(prefix)apply \(sink.rawValue) \(jsonString(result))")
             return nil
         case .shell(let shell):
             if case .failure(let failure) = shellStage(shell.script, result, env, prefix: prefix, stage: "output-shell") {
