@@ -242,7 +242,7 @@ keypipe:
 - `b44fc40` URL を読めるブラウザの一覧を1か所にし、テストはその一覧を（入っているものだけ）コンパイルする。
 - `dbb4e06`・`2e33ff3`・`bd121ba`・`a0a9081` 引数を1回だけ解析する。`--help` は使い方を出して 0。知らない引数、値の無いフラグ、`--line` 無しの `--report`/`--app`、同じフラグの2回は、使い方を出して 2 で止まる（以前は黙ってデーモンが起動した）。値がフラグ名と同じでも値として読む（`--line --report` の `--report` はトリガー）。R2q・R2r・R2u・R2v・R2x。
 - `b3651f0` `app`/`url` の空の一覧を設定不正として拒否する。`{"app":["com.google.Chrome"],"url":[]}` の deny は何も止めずに素通りしていた。
-- `a00a5e8`・`211bb3e` Linux でビルドできなかった Shell.swift を直した（`5ae1475` から）。Linux のジョブが親の fd を受け継いでいた（glibc に `POSIX_SPAWN_CLOEXEC_DEFAULT` が無い）ので閉じる。setsid と fd の継承を ShellTests で固定し、R1d で Docker の `swift:6.0` に build と `swift test` をかける。
+- `a00a5e8`・`211bb3e`・`81fb62d` ほか Linux でビルドできなかった Shell.swift を直した（`5ae1475` から）。Linux のジョブが親の fd を受け継いでいた（glibc に `POSIX_SPAWN_CLOEXEC_DEFAULT` が無い）ので、`/proc/self/fd` に並ぶ開いた fd を閉じる（65536 までの走査では fd 70000 が漏れた）。一覧を取れないとき（`/proc` が無い chroot など）はジョブを起動しない。setsid と fd の継承（低い番号と fd 70000）を ShellTests で固定し、R1d で Docker の `swift:6.0` に build と `swift test` をかける（`--init`、`--ulimit nofile=131072`、コンテナ内の `timeout -k 30 900`。docker の CLI は SIGALRM を無視するので外側の上限は効かない）。
 - `17f781d`・`f8bead6`・`8a95fa7` README: 音声の節に voice-switch の keypipe 配送の例。日本語版に抜けていた `when.url`・`deny`・パスワード欄・`typeText`・端末の hotkey 例外。設定が不正なとき widget が黙ることと、理由の確かめ方。
 
 voice-switch（`feat/keypipe-delivery`）:
@@ -251,4 +251,4 @@ voice-switch（`feat/keypipe-delivery`）:
 - `4f18b72` keypipe の報告が読めないときに通知する。`7b45b0f` `keypipe.binary`/`config` が絶対パスか `~` でなければ読み込み時に拒否する。
 - `2a62a7c`・`7b0329a` `make url-test-linux`。verify-voice-switch-mac に keypipe 配送の検証項目（KD1〜KD6）を足し、KD1 と KD4 をテストで押さえた。
 
-残したこと: `Term` は大文字と小文字を区別して照合する（`com.google.chrome` と書くと `com.google.Chrome` に一致しない）。照合の意味を変えるので、利用者の判断に残す。`--line ""` は exit 1、値の無い `--line` は exit 2 のまま。
+残したこと: Linux で fd の一覧を取ってから spawn するまでに別のスレッドが開いた fd は漏れる（Linux ではデーモンが動かないので、glibc 2.34 の `closefrom` 系は使わない）。fd 70000 の検査が効くのは上限を上げた R1d だけ。`Term` は大文字と小文字を区別して照合する（`com.google.chrome` と書くと `com.google.Chrome` に一致しない）。照合の意味を変えるので、利用者の判断に残す。`--line ""` は exit 1、値の無い `--line` は exit 2 のまま。

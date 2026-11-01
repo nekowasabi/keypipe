@@ -84,6 +84,19 @@ final class ShellTests: XCTestCase {
         XCTAssertEqual(open, [0], "stdin is open and nothing of \(held) is inherited")
     }
 
+    /// Linux closes the job's inherited descriptors from a listing; without one the job must not start.
+    func testDetachedJobDoesNotStartWhenDescriptorsCannotBeListed() throws {
+        #if canImport(Glibc)
+            let marker = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+            defer { try? FileManager.default.removeItem(atPath: marker) }
+            XCTAssertFalse(spawnDetached("/bin/sh", ["-c", ": > \"$0\"", marker], stdin: Data(), descriptors: "/nonexistent/fd"))
+            Thread.sleep(forTimeInterval: 0.3)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: marker), "the job ran without its descriptors closed")
+        #else
+            throw XCTSkip("macOS closes them with POSIX_SPAWN_CLOEXEC_DEFAULT")
+        #endif
+    }
+
     func testPipesAreDrainedWhileInputIsWritten() {
         let input = String(repeating: "x", count: 70000)
         let script = "dd if=/dev/zero bs=100000 count=2 2>/dev/null; cat"

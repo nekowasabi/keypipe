@@ -168,7 +168,10 @@ func notifyUser(_ text: String) {
 
 /// Starts `path args` in its own session with `stdin` as its standard input and
 /// /dev/null for output, and returns without waiting. false if it did not start.
-func spawnDetached(_ path: String, _ args: [String], stdin payload: Data) -> Bool {
+/// `descriptors` is where Linux lists the open descriptors to close (a parameter only so a test can
+/// make the listing fail).
+func spawnDetached(_ path: String, _ args: [String], stdin payload: Data,
+                   descriptors: String = "/proc/self/fd") -> Bool {
     signal(SIGPIPE, SIG_IGN)
     var fds: [Int32] = [0, 0]
     guard pipe(&fds) == 0 else { return false }
@@ -200,7 +203,12 @@ func spawnDetached(_ path: String, _ args: [String], stdin payload: Data) -> Boo
         // After the dup2 above, so fds[0] is already stdin; fds[1] has its own close.
         // ponytail: a descriptor another thread opens between this listing and the spawn still leaks;
         // nothing on Linux runs such a thread (no daemon), so closefrom is not worth an extra glibc floor.
-        let open = (try? FileManager.default.contentsOfDirectory(atPath: "/proc/self/fd")) ?? []
+        // Without the listing (no /proc, a chroot) the job would inherit everything, so it does not start.
+        guard let open = try? FileManager.default.contentsOfDirectory(atPath: descriptors) else {
+            close(fds[0])
+            close(fds[1])
+            return false
+        }
         for fd in open.compactMap({ Int32($0) }) where fd > 2 && fd != fds[1] && fcntl(fd, F_GETFD) != -1 {
             posix_spawn_file_actions_addclose(&actions, fd)
         }

@@ -75,7 +75,7 @@ fi
 DOCKER_BIN=${DOCKER:-$(command -v docker)}
 if [ -n "$DOCKER_BIN" ] && "$DOCKER_BIN" info > /dev/null 2>&1; then
   check "R1d Linux build and swift test (swift:6.0)" \
-    "'$DOCKER_BIN' run --rm --init --ulimit nofile=1048576:1048576 -v '$REPO':/src:ro swift:6.0 bash -c 'mkdir /w && cd /src && tar --exclude=.build --exclude=.verify-evidence -cf - . | tar -xf - -C /w && cd /w && timeout 900 swift test' > '$EV/linux.log' 2>&1" "linux.log"
+    "'$DOCKER_BIN' run --rm --init --ulimit nofile=131072:131072 -v '$REPO':/src:ro swift:6.0 bash -c 'mkdir /w && cd /src && tar --exclude=.build --exclude=.verify-evidence -cf - . | tar -xf - -C /w && cd /w && timeout -k 30 900 swift test' > '$EV/linux.log' 2>&1" "linux.log"
 else
   sk "R1d Linux build and swift test" "docker not available (set DOCKER=)"
 fi
