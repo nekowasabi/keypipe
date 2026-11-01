@@ -302,6 +302,8 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
 
 順序の理由。1 で消してから形を変えるので各段の差分が小さい。期限（3）を実機（6）より前に入れるのは、実機で最初に `claude -p` が固まった時点で daemon が止まるのを防ぐため。6 を 7 より先にするのは、M1〜M3 が MVP の合格条件で、`ignored` と `gone` を実機の `performWrite` で確かめられるのが 6 の後だから。
 
-## Next implementation step
+## 実装の記録
 
-段 1。`Actions.swift` の `log` 分岐と `KeypipeConfig.logPath` を消し、`swift test` を通す。
+- 段 1〜5（2026-10-31）、段 6（2026-11-01、実機 M0〜M6）、段 7（2026-11-01、R9a〜l）まで実装済み。残りは段 8（保留）。
+- 段 7 で設計から変えた点。`Engine.runStage` は `runTransform` / `shellStage` / `apply` の 3 関数になった。`fallback` の出力行は代替の試行すべてに `fallback ` を前置する（`fallback apply replaceInput ...` も含む）。`performErase` は欄が消えたときだけ nil を返し、`trigger-absent` と `rewrite-ignored` は行を出して続行する。`FakeDesktop` の `fieldGoneAfter: "erase"` は「消去後の最初の書き込みが失敗し、以後の読みが nil」として近似した（消去の読み戻し中に消えると発火が終わるだけで `gone` の経路に入らないため）。`ignoresWrite` は結果が欄と同じ文字のとき観測できない（読み戻しが一致する）。
+- 次の候補。段 8 は Electron で `AXValue` 無視を測ってから。

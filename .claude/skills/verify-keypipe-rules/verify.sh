@@ -174,6 +174,39 @@ feed R8 "{\"rules\":[{\"when\":{\"focus\":\"textField\"},\"trigger\":\"@@@\",\"t
 check "R8 field text with \$(), backticks, quotes is not executed and arrives byte-exact" \
   "[ ! -e '$EV/R8.pwned' ] && [ ! -e '$EV/R8.pwned2' ] && cmp -s '$EV/R8.sent' '$EV/R8.expected'" "R8.sent vs R8.expected"
 
+# R9 fallbacks: onFail per stage, shellTimeout, KEYPIPE_FAILURE
+FB='"when":{"focus":"textField"},"trigger":"@@@"'
+feed R9a "{\"shellTimeout\":1,\"rules\":[{$FB,\"transform\":\"sleep 5\",\"output\":\"replaceInput\",\"onFail\":{\"transform\":\"tr a-z A-Z\"}}]}" "$TXT" '@@@'
+check "R9a transform timeout falls back to onFail.transform" \
+  "exitis R9a 0 && has R9a 'keypipe transform timeout 1' && has R9a 'keypipe fallback transform exit 0' && field R9a '\"HELLO\"'" "field HELLO within cap 20"
+feed R9b "{\"rules\":[{$FB,\"transform\":\"exit 3\",\"output\":\"replaceInput\",\"onFail\":{\"transform\":\"exit 4\"}}]}" "$TXT" '@@@'
+check "R9b fallback failure notifies once, field kept" \
+  "has R9b 'keypipe fallback transform exit 4' && has R9b 'keypipe apply notify \"@@@ transform failed: exit 4\"' && lacks R9b 'keypipe apply replaceInput' && field R9b '\"hello\"'" ""
+feed R9c "{\"rules\":[{$FB,\"transform\":\"true\",\"output\":\"replaceInput\"}]}" "$TXT" '@@@'
+check "R9c empty output without onFail notifies, field kept" \
+  "has R9c 'keypipe transform empty' && has R9c 'keypipe apply notify' && field R9c '\"hello\"'" ""
+feed R9d "{\"rules\":[{$FB,\"output\":{\"shell\":\"exit 1\"},\"onFail\":{\"output\":{\"shell\":\"printf '%s|%s' \\\"\$1\\\" \\\"\$KEYPIPE_FAILURE\\\" > '$EV/R9d.sent'\"}}}]}" "$TXT" '@@@'
+check "R9d output.shell failure runs onFail.output with \$1 and KEYPIPE_FAILURE" \
+  "has R9d 'keypipe output-shell exit 1' && has R9d 'keypipe fallback output-shell exit 0' && [ \"\$(cat '$EV/R9d.sent' 2>/dev/null)\" = 'hello|exit 1' ]" "R9d.sent"
+feed R9e "{\"rules\":[{$FB,\"transform\":\"tr a-z A-Z\",\"output\":\"replaceInput\",\"onFail\":{\"output\":{\"shell\":\"printf '%s|%s' \\\"\$1\\\" \\\"\$KEYPIPE_FAILURE\\\" > '$EV/R9e.sent'\"}}}]}" \
+  '{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"hello","ignoresWrite":true}' '@@@'
+check "R9e ignored AXValue write falls back to onFail.output with the result" \
+  "has R9e 'keypipe apply-failed replaceInput ignored' && lacks R9e 'keypipe apply replaceInput' && [ \"\$(cat '$EV/R9e.sent' 2>/dev/null)\" = 'HELLO|ignored' ]" "R9e.sent"
+feed R9f "{\"rules\":[{$FB,\"transform\":\"tr a-z A-Z\",\"output\":\"replaceInput\"}]}" \
+  '{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"hello","fieldGoneAfter":"erase"}' '@@@'
+check "R9f field gone after erase: no write elsewhere, result notified" \
+  "has R9f 'keypipe apply-failed replaceInput gone' && has R9f 'keypipe apply notify \"HELLO\"'" ""
+feed R9g "{\"shellTimeout\":1,\"rules\":[{$FB,\"transform\":\"sleep 5\",\"output\":\"replaceInput\",\"onFail\":{\"transform\":\"sleep 5\"}}]}" "$TXT" '@@@'
+check "R9g fallback also times out: two shells, then notify" \
+  "has R9g 'keypipe fallback transform timeout 1' && has R9g 'keypipe apply notify \"@@@ transform failed: timeout\"' && field R9g '\"hello\"'" "finishes inside cap 20"
+bad R9h "{\"rules\":[{$FB,\"onFail\":{\"transform\":\"x\"}}]}" "onFail.transform requires transform"
+bad R9i "{\"rules\":[{$FB,\"output\":\"notify\",\"onFail\":{\"output\":\"none\"}}]}" "onFail.output requires an output that can fail"
+bad R9j "{\"rules\":[{$FB,\"onFail\":{\"erase\":\"x\"}}]}" "unknown key erase"
+bad R9k '{"shellTimeout":0,"rules":[]}' "shellTimeout must be positive"
+feed R9l '{"rules":[{"trigger":"@@@","when":{"app":["com.example.other"]}},{"trigger":"@@@"}]}' "$TXT" '@@@'
+check "R9l catch-all rule (same trigger, no when) fires when the first rule does not hold" \
+  "has R9l 'keypipe matched @@@ rule 1' && lacks R9l 'keypipe nomatch'" ""
+
 # R10 hotkeys: no erase, field is the input, unconfigured chords are silent
 HK='{"rules":[{"hotkey":"ctrl+@","when":{"focus":"textField"},"transform":"tr a-z A-Z","output":"replaceInput"}]}'
 printf '%s' "$HK" > "$EV/R10a.config.json"; printf '%s' "$TXT" > "$EV/R10a.context.json"

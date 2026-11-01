@@ -104,16 +104,35 @@ out of scope). Path is passed with `--config` and defaults to
 - `transform` is optional, a shell command run as `/bin/sh -c`. The input is
   on stdin, in `$1`, and in `KEYPIPE_INPUT`; the front app is in
   `KEYPIPE_APP`. Its stdout, minus one trailing newline, is the result. A
-  non-zero exit, a timeout (30 s), or empty output delivers nothing and
-  notifies.
+  non-zero exit, a timeout (`shellTimeout`), or empty output is a failure:
+  `onFail.transform` runs if present, otherwise nothing is delivered and a
+  notification says why.
 - `output` is `"replaceInput"` (writes the result back into the same field;
   requires `focus: textField`), `"notify"`, `"none"` (default), or
   `{ "shell": "..." }`, which receives the result the same way a transform
   receives its input. Clipboard is `{ "shell": "pbcopy" }`, a webhook is
   `curl`.
+- `onFail` names a fallback per stage, written exactly like the stage:
+  `"onFail": { "transform": "curl ...", "output": { "shell": "pbcopy" } }`.
+  `onFail.transform` runs once with the same input when `transform` exits
+  non-zero, times out, or prints nothing; its stdout then goes to `output`.
+  `onFail.output` runs once with the same result when `output` fails: a
+  non-zero or timed-out `output.shell`, or a `replaceInput` whose AXValue
+  write did not stick (`ignored`) or whose field vanished during the
+  transform (`gone`). The fallback shell sees the reason in
+  `KEYPIPE_FAILURE` (`exit <n>`, `timeout`, `empty`, `ignored`, `gone`).
+  There is no fallback of a fallback: if it fails too, keypipe notifies.
+  Without `onFail`, a failed `replaceInput` notifies the result so the text
+  is not lost, and a failed `output.shell` is only logged. A plain retry of
+  the same command belongs in the shell (`claude ... || curl ...`); `onFail`
+  is for a different destination or for failures the shell cannot see.
+- `shellTimeout` (top level, seconds, default 30) is the deadline for every
+  shell keypipe runs. Past it, the whole process group is killed.
 - Unknown keys, an empty `trigger`, `transform`, or `output.shell`, an
-  unknown `output` or `focus`, and `replaceInput` without `focus: textField`
-  are rejected at load with `invalid config: <reason>` and exit 1.
+  unknown `output` or `focus`, `replaceInput` without `focus: textField`,
+  `onFail.transform` without `transform`, `onFail.output` on an output that
+  cannot fail (`none`, `notify`), and a non-positive `shellTimeout` are
+  rejected at load with `invalid config: <reason>` and exit 1.
 
 ## macOS key tap and Accessibility
 

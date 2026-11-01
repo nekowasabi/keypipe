@@ -46,20 +46,24 @@ Transcript lines the binary prints, in both harnesses.
 | `keypipe erase <count>` | Backspaces sent for the trigger (`0` when no text element is focused) |
 | `keypipe erase-rewrite` | the app ignored the Backspaces; the trigger was removed by writing `AXValue` |
 | `keypipe transform exit <status>` | transform finished |
-| `keypipe transform timeout <seconds>` / `keypipe transform empty` | transform killed at the deadline / exited 0 with empty stdout; nothing is applied |
+| `keypipe transform timeout <seconds>` / `keypipe transform empty` | transform killed at `shellTimeout` / exited 0 with empty stdout; a failure, so `onFail.transform` runs if present |
+| `keypipe fallback transform exit <n>` / `... timeout <s>` / `... empty` | result of `onFail.transform` (run once with the same input and `KEYPIPE_FAILURE`) |
 | `keypipe apply <sink> <json-string>` | builtin sink applied (`replaceInput` only after the readback matches) |
-| `keypipe output-shell exit <status>` / `keypipe output-shell timeout <seconds>` | output.shell finished / killed at the deadline |
+| `keypipe apply-failed replaceInput ignored` / `gone` | the AXValue write did not stick / the field handle died; `onFail.output` runs if present, else the result is notified |
+| `keypipe output-shell exit <status>` / `keypipe output-shell timeout <seconds>` | output.shell finished / killed at the deadline; nonzero or timeout runs `onFail.output` if present |
+| `keypipe fallback output-shell exit <n>` / `keypipe fallback apply ...` | result of `onFail.output`; if it fails too, `apply notify "<trigger> output failed: <reason>"` |
+| `keypipe erase-failed trigger-absent` / `rewrite-ignored` | the field did not end with the trigger / the rewrite did not stick; the fire continues with the field as read |
 | `keypipe field <json-string>` | FakeDesktop only, final field text |
 
 Line names share prefixes (`erase`, `erase-rewrite`), so a `lacks` check on a bare name matches up to the trailing space: `'keypipe erase '`.
 
-Context JSON for `--context`: `{"app":"<bundle id>","focusIsTextField":true,"fieldText":"...","composing":false,"ignoresBackspace":false,"backspacePerRead":false}`. `backspacePerRead` delivers one queued Backspace per field read, like an app that processes key events between polls; `keysPerRead` does the same for typed keys, like the tap seeing a key before the app has appended it. Typed keys append to `fieldText`; erase removes from its end. A rule only reads the field when it declares `"when":{"focus":"textField"}` (design revision 3); `focus: any` rules get an empty input, so every item that asserts field text through `$1` or stdin declares `textField`.
+Context JSON for `--context`: `{"app":"<bundle id>","focusIsTextField":true,"fieldText":"...","composing":false,"ignoresBackspace":false,"backspacePerRead":false}`. `backspacePerRead` delivers one queued Backspace per field read, like an app that processes key events between polls; `keysPerRead` does the same for typed keys, like the tap seeing a key before the app has appended it. `ignoresWrite` accepts `setText` but keeps the old text (only observable when the result differs from the field). `"fieldGoneAfter":"erase"` makes the first write after the erase fail and later reads return nil, like a window closed during a slow transform. Typed keys append to `fieldText`; erase removes from its end. A rule only reads the field when it declares `"when":{"focus":"textField"}` (design revision 3); `focus: any` rules get an empty input, so every item that asserts field text through `$1` or stdin declares `textField`.
 
 `--smoke-feed` exits 0 when at least one rule matched (even if a later stage failed), 2 when none, 1 on invalid config.
 
 `--smoke-hotkey <spec>` feeds one chord (`ctrl+@`, `alt+cmd+x`) after the `--smoke-feed` characters, if any; either flag alone is enough.
 
-Invalid configs print `invalid config: <reason>` with one of these reasons, which R2 matches literally: `empty trigger`, `unknown key <name>`, `unknown output <value>`, `empty output.shell`, `empty transform`, `unknown focus <value>`, `rule needs trigger or hotkey`, `rule has both trigger and hotkey`, `hotkey needs a modifier`, `unknown modifier <name>`, `shift is written in the key (ctrl+A)`, `empty hotkey key`, `hotkey key must be one character`. A rejection with any other reason fails the item.
+Invalid configs print `invalid config: <reason>` with one of these reasons, which R2 matches literally: `empty trigger`, `unknown key <name>`, `unknown output <value>`, `empty output.shell`, `empty transform`, `unknown focus <value>`, `rule needs trigger or hotkey`, `rule has both trigger and hotkey`, `hotkey needs a modifier`, `unknown modifier <name>`, `shift is written in the key (ctrl+A)`, `empty hotkey key`, `hotkey key must be one character`, `onFail.transform requires transform`, `onFail.output requires an output that can fail`, `shellTimeout must be positive`. A rejection with any other reason fails the item.
 
 `--probe` prints one JSON line: `{"trusted":bool,"app":...,"focus":"textField"|"composing"|"none","focusIsTextField":bool,"fieldText":...}` (`fieldText` only when `focus` is `textField`). It never prompts and exits 0 even when untrusted.
 
@@ -86,6 +90,15 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | R6c | output.shell drives a real tmux pane on an isolated socket | fake + tmux |
 | R7 | Japanese text intact end to end | fake |
 | R8 | field text with `$()`, backticks, quotes passes through transform and output.shell unexecuted and byte-exact | fake |
+| R9a | `shellTimeout: 1`, `transform: sleep 5`, `onFail.transform: tr`: `transform timeout 1`, `fallback transform exit 0`, field `HELLO` | fake |
+| R9b | transform and fallback both nonzero: `fallback transform exit 4`, one notify, field kept | fake |
+| R9c | empty output, no `onFail`: `transform empty`, notify, field kept | fake |
+| R9d | `output.shell` exits 1: `onFail.output.shell` gets `$1` and `KEYPIPE_FAILURE=exit 1` | fake |
+| R9e | `ignoresWrite`: `apply-failed replaceInput ignored`, fallback shell gets the result and `ignored` | fake |
+| R9f | `fieldGoneAfter: erase`, no `onFail`: `apply-failed replaceInput gone`, `apply notify "HELLO"` | fake |
+| R9g | fallback also times out: `fallback transform timeout 1`, notify, finishes inside `cap 20` | fake |
+| R9h-k | rejections: `onFail.transform requires transform`, `onFail.output requires an output that can fail`, `unknown key erase`, `shellTimeout must be positive` | fake |
+| R9l | catch-all rule (same trigger, no `when`) fires as `rule 1` when rule 0 does not hold | fake |
 | R10a | `--smoke-hotkey ctrl+@` under `focus: textField`: field is the input, `erase 0`, no rewrite, result written | fake |
 | R10b | hotkey under `focus: any`: empty input, field untouched | fake |
 | R10c | unconfigured chord (`cmd+c`): no transcript line, exit 2 | fake |
@@ -121,4 +134,4 @@ Fake feeds are independent processes and can run in parallel. Live items cannot:
 
 ## Status
 
-Stages 1 to 6 of `docs/design/failure-fallback.md` are implemented: `--no-live` passes every R item (R1c skips without swift-format), and the live items M0 to M4 run against the real CGEventTap and AX (`MacKeyTap`, `MacDesktop`). Stage 7 (`onFail`, `shellTimeout`, R9) is next.
+Stages 1 to 7 of `docs/design/failure-fallback.md` are implemented: `--no-live` passes every R item (R1c skips without swift-format), the live items M0 to M6 run against the real CGEventTap and AX (`MacKeyTap`, `MacDesktop`), and per-stage fallbacks (`onFail`, `shellTimeout`, `KEYPIPE_FAILURE`) are covered by R9. Stage 8 (select-all and paste) waits on an Electron measurement.

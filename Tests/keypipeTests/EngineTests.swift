@@ -38,6 +38,85 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(engine.hits, 1, "chord resets the text buffer")
     }
 
+    func testTransformFallbackRunsOnceWithSameInputAndFailureReason() {
+        for (outcome, token) in [(ShellOutcome.exited(3, stdout: "junk"), "exit 3"), (.timedOut(seconds: 1), "timeout"), (.exited(0, stdout: ""), "empty")] {
+            let desktop = FakeDesktop(focus: .text, fieldText: "hello")
+            let rule = Rule(trigger: "@@@", when: When(focus: .textField),
+                            transform: Guarded(primary: "primary", onFail: "fallback"), output: Guarded(primary: .builtin(.replaceInput)))
+            var calls: [String] = []
+            let (_, lines) = run(rules: [rule], desktop: desktop) { script, input, env, timeout in
+                calls.append(script)
+                XCTAssertEqual(input, "hello")
+                XCTAssertEqual(timeout, 30)
+                if script == "primary" {
+                    XCTAssertNil(env["KEYPIPE_FAILURE"])
+                    return outcome
+                }
+                XCTAssertEqual(env["KEYPIPE_FAILURE"], token)
+                return .exited(0, stdout: "HELLO")
+            }
+            XCTAssertEqual(calls, ["primary", "fallback"])
+            XCTAssertTrue(lines.contains("keypipe fallback transform exit 0"), token)
+            XCTAssertEqual(desktop.fieldText, "HELLO", token)
+            XCTAssertEqual(desktop.notifications, [], token)
+        }
+    }
+
+    func testFallbackFailureNotifiesWithoutRetrying() {
+        let desktop = FakeDesktop(focus: .text, fieldText: "hello")
+        let rule = Rule(trigger: "@@@", when: When(focus: .textField),
+                        transform: Guarded(primary: "exit 3", onFail: "exit 4"), output: Guarded(primary: .builtin(.replaceInput)))
+        var calls = 0
+        let (_, lines) = run(rules: [rule], desktop: desktop) { script, _, _, _ in
+            calls += 1
+            return .exited(script == "exit 3" ? 3 : 4, stdout: "")
+        }
+        XCTAssertEqual(calls, 2)
+        XCTAssertTrue(lines.contains("keypipe fallback transform exit 4"))
+        XCTAssertEqual(desktop.notifications, ["@@@ transform failed: exit 4"])
+        XCTAssertEqual(desktop.fieldText, "hello")
+    }
+
+    func testOutputFallbackReceivesResultAndReason() {
+        let desktop = FakeDesktop(focus: .text, fieldText: "hello")
+        let rule = Rule(trigger: "@@@", when: When(focus: .textField),
+                        output: Guarded(primary: .shell("send"), onFail: .shell("keep")))
+        var seen: [(String, String?)] = []
+        let (_, lines) = run(rules: [rule], desktop: desktop) { script, input, env, _ in
+            seen.append((script, env["KEYPIPE_FAILURE"]))
+            XCTAssertEqual(input, "hello")
+            return script == "send" ? .timedOut(seconds: 30) : .exited(0, stdout: "")
+        }
+        XCTAssertEqual(seen.map(\.0), ["send", "keep"])
+        XCTAssertEqual(seen.last?.1, "timeout")
+        XCTAssertTrue(lines.contains("keypipe output-shell timeout 30"))
+        XCTAssertTrue(lines.contains("keypipe fallback output-shell exit 0"))
+    }
+
+    func testIgnoredWriteFallsBackAndGoneFieldNotifiesByDefault() {
+        let ignoring = FakeDesktop(focus: .text, fieldText: "hello", ignoresWrite: true)
+        let withFallback = Rule(trigger: "@@@", when: When(focus: .textField), transform: Guarded(primary: "tr"),
+                                output: Guarded(primary: .builtin(.replaceInput), onFail: .shell("pbcopy")))
+        var copied: String?
+        let (_, lines) = run(rules: [withFallback], desktop: ignoring) { script, input, env, _ in
+            guard script == "pbcopy" else { return .exited(0, stdout: "HELLO") }
+            copied = input
+            XCTAssertEqual(env["KEYPIPE_FAILURE"], "ignored")
+            return .exited(0, stdout: "")
+        }
+        XCTAssertTrue(lines.contains("keypipe apply-failed replaceInput ignored"))
+        XCTAssertFalse(lines.contains { $0.hasPrefix("keypipe apply replaceInput") })
+        XCTAssertEqual(copied, "HELLO")
+        XCTAssertEqual(ignoring.fieldText, "hello")
+
+        let vanishing = FakeDesktop(focus: .text, fieldText: "hello", goneAfterErase: true)
+        let plain = Rule(trigger: "@@@", when: When(focus: .textField),
+                         transform: Guarded(primary: "tr"), output: Guarded(primary: .builtin(.replaceInput)))
+        let (_, lines2) = run(rules: [plain], desktop: vanishing) { _, _, _, _ in .exited(0, stdout: "HELLO") }
+        XCTAssertTrue(lines2.contains("keypipe apply-failed replaceInput gone"))
+        XCTAssertEqual(vanishing.notifications, ["HELLO"])
+    }
+
     func testComposingDoesNotFireOrErase() {
         let desktop = FakeDesktop(focus: .composing, fieldText: "hello")
         let (hits, lines) = run(rules: [Rule(trigger: "@@@")], desktop: desktop, shell: { _, _, _, _ in

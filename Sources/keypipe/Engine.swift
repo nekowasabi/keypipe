@@ -5,6 +5,21 @@ func jsonString(_ text: String) -> String {
     return String(decoding: data, as: UTF8.self)
 }
 
+/// Why a stage failed. The token is both the transcript word and KEYPIPE_FAILURE.
+enum Failure: Error, Equatable {
+    case exit(Int32), timeout, empty, ignored, gone
+
+    var token: String {
+        switch self {
+        case .exit(let status): return "exit \(status)"
+        case .timeout: return "timeout"
+        case .empty: return "empty"
+        case .ignored: return "ignored"
+        case .gone: return "gone"
+        }
+    }
+}
+
 /// Field text once the trigger has landed, or the latest text after 100 ms.
 /// Why: the tap sees the last trigger key before the app has appended it;
 /// erasing then would remove text typed before the trigger.
@@ -19,11 +34,17 @@ func waitForTrigger(_ field: Field, _ trigger: String, _ desktop: Desktop) -> St
     return text
 }
 
+/// Erases the trigger and returns the field text to use as input. nil means the
+/// field is gone. Erase failures other than that are reported and carried on,
+/// so a slow transform's result is never thrown away over a stray trigger.
 func performErase(_ field: Field, trigger: String, _ desktop: Desktop, emit: (String) -> Void) -> String? {
     guard let before = waitForTrigger(field, trigger, desktop) else { return nil }
     desktop.backspace(trigger.count)
     emit("keypipe erase \(trigger.count)")
-    guard before.hasSuffix(trigger) else { return desktop.text(field) }
+    guard before.hasSuffix(trigger) else {
+        emit("keypipe erase-failed trigger-absent")
+        return desktop.text(field)
+    }
     let expected = String(before.dropLast(trigger.count))
     let deadline = ProcessInfo.processInfo.systemUptime + 0.2
     var after = desktop.text(field)
@@ -35,16 +56,21 @@ func performErase(_ field: Field, trigger: String, _ desktop: Desktop, emit: (St
         after = desktop.text(field)
     }
     guard let current = after else { return nil }
-    if current == before {
-        guard desktop.setText(field, expected) else { return nil }
+    guard current == before else { return current }
+    guard desktop.setText(field, expected), let rewritten = desktop.text(field) else { return nil }
+    if rewritten == expected {
         emit("keypipe erase-rewrite")
-        return desktop.text(field)
+    } else {
+        emit("keypipe erase-failed rewrite-ignored")
     }
-    return current
+    return rewritten
 }
 
-func performWrite(_ field: Field, _ text: String, _ desktop: Desktop) -> Bool {
-    desktop.setText(field, text) && desktop.text(field) == text
+enum WriteOutcome: Equatable { case written, ignored, gone }
+
+func performWrite(_ field: Field, _ text: String, _ desktop: Desktop) -> WriteOutcome {
+    guard desktop.setText(field, text), let readback = desktop.text(field) else { return .gone }
+    return readback == text ? .written : .ignored
 }
 
 struct Engine {
@@ -127,42 +153,90 @@ struct Engine {
         let environment = ["KEYPIPE_APP": snapshot.app ?? ""]
         var result = input
         if let transform = rule.transform {
-            switch shell(transform.primary, input, environment, 30) {
-            case .exited(let status, let output):
-                emit("keypipe transform exit \(status)")
-                guard status == 0 else {
-                    notify("\(trigger) transform failed: exit \(status)")
-                    return
-                }
-                // Why: an empty result would wipe the field through replaceInput.
-                guard !output.isEmpty else {
-                    emit("keypipe transform empty")
-                    notify("\(trigger) transform failed: empty")
-                    return
-                }
-                result = output
-            case .timedOut(let seconds):
-                emit("keypipe transform timeout \(seconds)")
-                notify("\(trigger) transform failed: timeout \(seconds)")
+            switch runTransform(transform, input, environment) {
+            case .success(let output): result = output
+            case .failure(let failure):
+                notify("\(trigger) transform failed: \(failure.token)")
                 return
             }
         }
-        switch rule.output.primary {
+        guard let failure = apply(rule.output.primary, result, environment, snapshot.field, prefix: "") else { return }
+        guard let fallback = rule.output.onFail else {
+            // Why: without a fallback the text must not be lost, and a shell's own
+            // failure is already visible in the transcript.
+            if rule.output.primary == .builtin(.replaceInput) { notify(result) }
+            return
+        }
+        var environment2 = environment
+        environment2["KEYPIPE_FAILURE"] = failure.token
+        if let second = apply(fallback, result, environment2, snapshot.field, prefix: "fallback ") {
+            notify("\(trigger) output failed: \(second.token)")
+        }
+    }
+
+    /// Primary once, then onFail once with the same input and KEYPIPE_FAILURE set.
+    private func runTransform(_ transform: Guarded<String>, _ input: String, _ env: [String: String])
+        -> Result<String, Failure>
+    {
+        switch shellStage(transform.primary, input, env, prefix: "", stage: "transform") {
+        case .success(let output): return .success(output)
+        case .failure(let failure):
+            guard let fallback = transform.onFail else { return .failure(failure) }
+            var env = env
+            env["KEYPIPE_FAILURE"] = failure.token
+            return shellStage(fallback, input, env, prefix: "fallback ", stage: "transform")
+        }
+    }
+
+    private func shellStage(_ script: String, _ input: String, _ env: [String: String], prefix: String, stage: String)
+        -> Result<String, Failure>
+    {
+        switch shell(script, input, env, config.shellTimeout) {
+        case .exited(let status, let output):
+            emit("keypipe \(prefix)\(stage) exit \(status)")
+            guard status == 0 else { return .failure(.exit(status)) }
+            if stage == "transform" && output.isEmpty {
+                // Why: an empty result would wipe the field through replaceInput.
+                emit("keypipe \(prefix)\(stage) empty")
+                return .failure(.empty)
+            }
+            return .success(output)
+        case .timedOut(let seconds):
+            emit("keypipe \(prefix)\(stage) timeout \(seconds)")
+            return .failure(.timeout)
+        }
+    }
+
+    /// nil on success. notify and none cannot fail.
+    private func apply(_ output: Output, _ result: String, _ env: [String: String], _ field: Field?, prefix: String)
+        -> Failure?
+    {
+        switch output {
         case .builtin(.replaceInput):
-            if let field = snapshot.field, performWrite(field, result, desktop) {
-                emit("keypipe apply replaceInput \(jsonString(result))")
-            } else {
-                notify(result)
+            let outcome = field.map { performWrite($0, result, desktop) } ?? .gone
+            switch outcome {
+            case .written:
+                emit("keypipe \(prefix)apply replaceInput \(jsonString(result))")
+                return nil
+            case .ignored:
+                emit("keypipe \(prefix)apply-failed replaceInput ignored")
+                return .ignored
+            case .gone:
+                emit("keypipe \(prefix)apply-failed replaceInput gone")
+                return .gone
             }
         case .builtin(.notify):
-            notify(result)
+            desktop.notify(result)
+            emit("keypipe \(prefix)apply notify \(jsonString(result))")
+            return nil
         case .builtin(.none):
-            emit("keypipe apply none \(jsonString(result))")
+            emit("keypipe \(prefix)apply none \(jsonString(result))")
+            return nil
         case .shell(let script):
-            switch shell(script, result, environment, 30) {
-            case .exited(let status, _): emit("keypipe output-shell exit \(status)")
-            case .timedOut(let seconds): emit("keypipe output-shell timeout \(seconds)")
+            if case .failure(let failure) = shellStage(script, result, env, prefix: prefix, stage: "output-shell") {
+                return failure
             }
+            return nil
         }
     }
 

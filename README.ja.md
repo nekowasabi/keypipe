@@ -98,14 +98,30 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   何も発火しません。
 - `transform` は省略可で、`/bin/sh -c` で走るシェルコマンドです。入力は stdin、
   `$1`、`KEYPIPE_INPUT` で受け、前面アプリは `KEYPIPE_APP` です。stdout から末尾の
-  改行を 1 つ落としたものが結果です。非ゼロ終了、期限切れ（30 秒）、空の出力は
-  何も送らず通知します。
+  改行を 1 つ落としたものが結果です。非ゼロ終了、期限切れ（`shellTimeout`）、空の
+  出力は失敗です。`onFail.transform` があればそれを走らせ、無ければ何も送らず
+  理由を通知します。
 - `output` は `"replaceInput"`（同じ欄に結果を書き戻す。`focus: textField` が必要）、
   `"notify"`、`"none"`（既定）、または `{ "shell": "..." }`（変換と同じ経路で結果を
   受ける）。クリップボードは `{ "shell": "pbcopy" }`、webhook は `curl` で書きます。
+- `onFail` は段ごとの代替で、その段と同じ書き方です。
+  `"onFail": { "transform": "curl ...", "output": { "shell": "pbcopy" } }`。
+  `onFail.transform` は `transform` が非ゼロ終了、期限切れ、空出力のとき同じ入力で
+  一度だけ走り、その stdout が `output` へ進みます。`onFail.output` は `output` が
+  失敗したとき同じ結果で一度だけ走ります。失敗とは `output.shell` の非ゼロか期限切れ、
+  `replaceInput` の書き込みが反映されない（`ignored`）か変換中に欄が消えた（`gone`）
+  ことです。代替のシェルは理由を `KEYPIPE_FAILURE`（`exit <n>` / `timeout` / `empty` /
+  `ignored` / `gone`）で受けます。代替の代替はありません。代替も失敗したら通知します。
+  `onFail` が無いときは、`replaceInput` の失敗は結果を通知して文字を失わず、
+  `output.shell` の失敗は記録だけです。同じコマンドの言い換えはシェルの `||` で
+  書き、別の行き先へ逃がすときやシェルから見えない失敗を拾うときに `onFail` を使います。
+- `shellTimeout`（最上位、秒、既定 30）は keypipe が走らせる全シェルの期限です。
+  過ぎたらプロセスグループごと止めます。
 - 未知のキー、空の `trigger` / `transform` / `output.shell`、未知の `output` や
-  `focus`、`focus: textField` の無い `replaceInput` は読み込み時に
-  `invalid config: <理由>` で拒否し、終了コード 1 です。
+  `focus`、`focus: textField` の無い `replaceInput`、`transform` の無い
+  `onFail.transform`、失敗しない送り先（`none`、`notify`）への `onFail.output`、
+  正でない `shellTimeout` は読み込み時に `invalid config: <理由>` で拒否し、
+  終了コード 1 です。
 
 ## macOS のキー取得と Accessibility
 

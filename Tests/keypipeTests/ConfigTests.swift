@@ -15,6 +15,11 @@ final class ConfigTests: XCTestCase {
             .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("config.example.json")
         XCTAssertEqual(try loadConfig(path: example.path).rules.first?.trigger, "@@@")
         XCTAssertEqual(try load(#"{"rules":[{"trigger":"@@@"}]}"#).rules, [Rule(trigger: "@@@")])
+        XCTAssertEqual(try load(#"{"rules":[]}"#).shellTimeout, 30)
+        let guarded = try load(#"{"shellTimeout":2.5,"rules":[{"trigger":"@@@","when":{"focus":"textField"},"transform":"a","output":"replaceInput","onFail":{"transform":"b","output":{"shell":"c"}}}]}"#)
+        XCTAssertEqual(guarded.shellTimeout, 2.5)
+        XCTAssertEqual(guarded.rules.first?.transform, Guarded(primary: "a", onFail: "b"))
+        XCTAssertEqual(guarded.rules.first?.output, Guarded(primary: .builtin(.replaceInput), onFail: .shell("c")))
         for (spec, canonical) in [("ctrl+@", "ctrl+@"), ("command+option+x", "alt+cmd+x"), ("ctrl++", "ctrl++")] {
             let rule = try load(#"{"rules":[{"hotkey":"\#(spec)"}]}"#).rules.first
             XCTAssertEqual(rule?.trigger.description, canonical)
@@ -30,9 +35,15 @@ final class ConfigTests: XCTestCase {
             (#"{"rules":[{"trigger":"@@@","transform":""}]}"#, "empty transform"),
             (#"{"rules":[{"trigger":"@@@","when":{"focus":"window"}}]}"#, "unknown focus window"),
             (#"{"rules":[{"trigger":"@@@","output":"replaceInput"}]}"#, "output replaceInput requires focus textField"),
-            (#"{"rules":[],"shellTimeout":1}"#, "unknown key shellTimeout"),
-            (#"{"rules":[{"trigger":"@@@","onFail":{}}]}"#, "unknown key onFail"),
             (#"{"rules":[{"output":"none"}]}"#, "rule needs trigger or hotkey"),
+            (#"{"rules":[{"trigger":"@@@","onFail":{"transform":"x"}}]}"#, "onFail.transform requires transform"),
+            (#"{"rules":[{"trigger":"@@@","output":"notify","onFail":{"output":"none"}}]}"#, "onFail.output requires an output that can fail"),
+            (#"{"rules":[{"trigger":"@@@","output":{"shell":"x"},"onFail":{"output":"replaceInput"}}]}"#, "output replaceInput requires focus textField"),
+            (#"{"rules":[{"trigger":"@@@","onFail":{"erase":"x"}}]}"#, "unknown key erase"),
+            (#"{"rules":[{"trigger":"@@@","transform":"x","onFail":{"transform":""}}]}"#, "empty transform"),
+            (#"{"rules":[{"trigger":"@@@","output":{"shell":"x"},"onFail":{"output":{"shell":""}}}]}"#, "empty output.shell"),
+            (#"{"shellTimeout":0,"rules":[]}"#, "shellTimeout must be positive"),
+            (#"{"shellTimeout":"5","rules":[]}"#, "shellTimeout must be positive"),
             (#"{"rules":[{"trigger":"@@@","hotkey":"ctrl+@"}]}"#, "rule has both trigger and hotkey"),
             (#"{"rules":[{"hotkey":"@"}]}"#, "hotkey needs a modifier"),
             (#"{"rules":[{"hotkey":"meta+@"}]}"#, "unknown modifier meta"),

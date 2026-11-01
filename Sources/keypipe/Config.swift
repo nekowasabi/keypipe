@@ -23,6 +23,8 @@ struct Rule: Equatable {
 
 struct KeypipeConfig: Equatable {
     var rules: [Rule]
+    /// Deadline for every shell keypipe runs: transform, output.shell, and their fallbacks.
+    var shellTimeout: TimeInterval = 30
 }
 
 enum ConfigError: Error, CustomStringConvertible {
@@ -61,12 +63,35 @@ func loadConfig(path: String) throws -> KeypipeConfig {
     let json: Any
     do { json = try JSONSerialization.jsonObject(with: data) }
     catch { throw ConfigError.invalid("JSON decoding failed: \(error.localizedDescription)") }
-    let root = try object(json, keys: ["rules"])
+    func parseOutput(_ value: Any, _ focus: When.Focus) throws -> Output {
+        let output: Output
+        if let name = value as? String {
+            guard let sink = BuiltinSink(rawValue: name) else {
+                throw ConfigError.invalid("unknown output \(name)")
+            }
+            output = .builtin(sink)
+        } else {
+            let sink = try object(value, keys: ["shell"])
+            output = .shell(try nonempty(sink["shell"] ?? NSNull(), name: "output.shell"))
+        }
+        if output == .builtin(.replaceInput) && focus != .textField {
+            throw ConfigError.invalid("output replaceInput requires focus textField")
+        }
+        return output
+    }
+    let root = try object(json, keys: ["rules", "shellTimeout"])
+    var shellTimeout: TimeInterval = 30
+    if let value = root["shellTimeout"] {
+        guard let seconds = value as? Double, seconds > 0 else {
+            throw ConfigError.invalid("shellTimeout must be positive")
+        }
+        shellTimeout = seconds
+    }
     guard let values = root["rules"] as? [Any] else {
         throw ConfigError.invalid("rules must be an array")
     }
     let rules = try values.map { value -> Rule in
-        let entry = try object(value, keys: ["trigger", "hotkey", "when", "transform", "output"])
+        let entry = try object(value, keys: ["trigger", "hotkey", "when", "transform", "output", "onFail"])
         let trigger: Trigger
         switch (entry["trigger"], entry["hotkey"]) {
         case (nil, nil): throw ConfigError.invalid("rule needs trigger or hotkey")
@@ -99,25 +124,24 @@ func loadConfig(path: String) throws -> KeypipeConfig {
                 when.focus = focus
             }
         }
-        let transform = try entry["transform"].map {
+        var transform = try entry["transform"].map {
             Guarded(primary: try nonempty($0, name: "transform"))
         }
-        var output: Output = .builtin(.none)
-        if let value = entry["output"] {
-            if let name = value as? String {
-                guard let sink = BuiltinSink(rawValue: name) else {
-                    throw ConfigError.invalid("unknown output \(name)")
+        var output = Guarded(primary: try entry["output"].map { try parseOutput($0, when.focus) } ?? .builtin(.none))
+        if let value = entry["onFail"] {
+            let fallback = try object(value, keys: ["transform", "output"])
+            if let value = fallback["transform"] {
+                guard transform != nil else { throw ConfigError.invalid("onFail.transform requires transform") }
+                transform?.onFail = try nonempty(value, name: "transform")
+            }
+            if let value = fallback["output"] {
+                guard output.primary != .builtin(.none), output.primary != .builtin(.notify) else {
+                    throw ConfigError.invalid("onFail.output requires an output that can fail")
                 }
-                output = .builtin(sink)
-            } else {
-                let sink = try object(value, keys: ["shell"])
-                output = .shell(try nonempty(sink["shell"] ?? NSNull(), name: "output.shell"))
+                output.onFail = try parseOutput(value, when.focus)
             }
         }
-        if output == .builtin(.replaceInput) && when.focus != .textField {
-            throw ConfigError.invalid("output replaceInput requires focus textField")
-        }
-        return Rule(trigger: trigger, when: when, transform: transform, output: Guarded(primary: output))
+        return Rule(trigger: trigger, when: when, transform: transform, output: output)
     }
-    return KeypipeConfig(rules: rules)
+    return KeypipeConfig(rules: rules, shellTimeout: shellTimeout)
 }
