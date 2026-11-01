@@ -220,6 +220,29 @@ does for the zsh widget. What differs from the keyboard:
 
 voice-switch's README (Shell command delivery) covers the action's own keys.
 
+### `--report`: what the fire did
+
+`keypipe --config C --line <trigger> --report [--app <bundle id>]` runs the
+same fire and prints one JSON line instead of the new line, exit 0 whenever a
+report was written (1 for a bad config, stderr only). voice-switch's
+`keypipe` delivery uses it to paste only a `replaced` result and never the
+original text on failure.
+
+| `outcome` | Meaning | Extra keys |
+| --- | --- | --- |
+| `replaced` | `replaceInput` wrote the result | `rule`, `text`, `fallback` if `onFail.output` did it |
+| `delivered` | any other output succeeded | `rule`, `fallback` |
+| `started` | a background job did start | `rule` |
+| `failed` | a stage failed | `rule`, `stage` (`transform`, `output`, `spawn`), `failure` (the `KEYPIPE_FAILURE` token) |
+| `nomatch` | no rule for this trigger holds | |
+| `blocked` | a gate stopped the fire before any rule | `reason` (`terminal`, `composing`, `secure`, `deny`) |
+| `unreadable` | a condition fact could not be read, so the fire stopped | `fact`, `reason` |
+| `noinput` | a rule matched but the field vanished | `rule` |
+
+Every line carries `"v":1`. Keys are only ever added within v1. The full set
+is `Tests/keypipeTests/Fixtures/report-v1.jsonl`, which voice-switch's tests
+decode too.
+
 ## macOS key tap and Accessibility
 
 `Sources/keypipe/MacKeyTap.swift` installs a listen-only CGEventTap, drops

@@ -49,9 +49,11 @@ let defaultConfigFile: String = {
 }()
 let configFile = argument("--config", in: args) ?? defaultConfigFile
 let loaded: KeypipeConfig
+let configBytes: Data
 let fake: FakeDesktop
 do {
-    loaded = try loadConfig(path: configFile)
+    configBytes = try readConfigData(path: configFile)
+    loaded = try loadConfig(data: configBytes)
     if let path = argument("--context", in: args) { fake = try FakeDesktop(path: path) }
     else { fake = FakeDesktop() }
 } catch {
@@ -62,7 +64,7 @@ do {
     exit(1)
 }
 
-let spawnJob: (Job) -> Void = { startJob($0, configPath: configFile, emit: emit) }
+let spawnJob: (Job) -> Bool = { startJob($0, configPath: configFile, configBytes: configBytes, emit: emit) }
 
 if args.contains("--triggers") {
     var seen = Set<String>()
@@ -87,9 +89,15 @@ if args.contains("--line") {
     // Why: stdout carries only the line, so the transcript goes to stderr.
     let toStderr: (String) -> Void = { fputs($0 + "\n", stderr) }
     var engine = Engine(config: loaded, desktop: desktop, shell: runShell, emit: toStderr,
-                        background: { startJob($0, configPath: configFile, emit: toStderr) })
-    engine.fire(.text(trigger))
-    guard engine.hits > 0 else { exit(2) }
+                        background: { startJob($0, configPath: configFile, configBytes: configBytes, emit: toStderr) })
+    let result = engine.fire(.text(trigger))
+    // Why: --report is for callers that act on the outcome (voice-switch). Plain --line keeps
+    // the zsh widget's contract byte for byte: the line on stdout, exit 0 on a hit, 2 otherwise.
+    if args.contains("--report") {
+        FileHandle.standardOutput.write(Data((result.reportJSON + "\n").utf8))
+        exit(0)
+    }
+    guard result.isHit else { exit(2) }
     FileHandle.standardOutput.write(Data((desktop.line ?? input).utf8))
     exit(0)
 }

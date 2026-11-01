@@ -62,10 +62,17 @@ enum ConfigError: Error, CustomStringConvertible {
 }
 
 func loadConfig(path: String) throws -> KeypipeConfig {
-    let data: Data
-    do { data = try Data(contentsOf: URL(fileURLWithPath: path)) }
-    catch { throw ConfigError.unreadable(error.localizedDescription) }
+    try loadConfig(data: readConfigData(path: path))
+}
 
+func readConfigData(path: String) throws -> Data {
+    do { return try Data(contentsOf: URL(fileURLWithPath: path)) }
+    catch { throw ConfigError.unreadable(error.localizedDescription) }
+}
+
+/// The parse itself. A background job parses the bytes its parent loaded, so the rule index
+/// it carries always points into the rules the parent matched, even after the file changed.
+func loadConfig(data: Data) throws -> KeypipeConfig {
     func object(_ value: Any, keys: Set<String>) throws -> [String: Any] {
         guard let object = value as? [String: Any] else {
             throw ConfigError.invalid("expected object")

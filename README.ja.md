@@ -163,6 +163,12 @@ source ~/repos/keypipe/shell/keypipe.zsh   # 任意: KEYPIPE_APP=<bundle id>
 出します。`replaceInput` なら結果、それ以外は行をそのままです。終了コードは一致 0、
 ルール無し 2（ウィジェットはトリガーを残す）、設定不正 1 です。記録は stderr に出ます。
 
+`--report` を付けると、新しい行の代わりに、発火の結果を JSON 1 行で出します（終了
+コードは書けたら 0、設定不正なら 1）。`outcome` は `replaced`・`delivered`・
+`started`・`failed`・`nomatch`・`blocked`・`unreadable`・`noinput` のどれかです。
+voice-switch の `keypipe` 配送はこれを読み、`replaced` のときだけ結果を貼ります。
+全種類の例は `Tests/keypipeTests/Fixtures/report-v1.jsonl` にあります。
+
 対応するシェルは zsh だけです。ウィジェットは ZLE のコードなので、bash や fish
 などではターミナルでルールが動きません。ターミナル内の全画面プログラム（nvim、
 less、REPL）でも動きません。他のシェルで使うには、同じ `--triggers` と `--line`

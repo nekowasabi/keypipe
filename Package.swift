@@ -6,6 +6,6 @@ let package = Package(
     platforms: [.macOS(.v13)],
     targets: [
         .executableTarget(name: "keypipe"),
-        .testTarget(name: "keypipeTests", dependencies: ["keypipe"]),
+        .testTarget(name: "keypipeTests", dependencies: ["keypipe"], exclude: ["Fixtures"]),
     ]
 )

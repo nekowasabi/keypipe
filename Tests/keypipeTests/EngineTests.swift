@@ -271,14 +271,62 @@ final class EngineTests: XCTestCase {
         var engine = Engine(config: KeypipeConfig(rules: [rule]), desktop: desktop, shell: { _, _, _, _ in
             XCTFail("the job, not the caller, runs the stages")
             return .exited(0, stdout: "")
-        }, emit: { lines.append($0) }, background: { jobs.append($0) })
-        for character in "&&&" {
+        }, emit: { lines.append($0) }, background: { jobs.append($0); return true })
+        for character in "&&" {
             desktop.key(character)
             engine.key(character)
         }
+        desktop.key("&")
+        XCTAssertEqual(engine.fire("&&&"), .started(rule: 0))
         XCTAssertEqual(jobs, [Job(rule: 0, input: "note", environment: ["KEYPIPE_APP": "editor"])])
         XCTAssertEqual(lines.last, "keypipe background rule 0")
         XCTAssertEqual(desktop.fieldText, "note")
+    }
+
+    /// P2: a job that never started is not reported as started.
+    func testFailedSpawnIsReportedAsFailedNotStarted() {
+        let desktop = FakeDesktop(app: "editor", focus: .text, fieldText: "note&&&")
+        let rule = Rule(trigger: "&&&", when: When(focus: .textField),
+                        output: Guarded(primary: .shell(ShellOutput(script: "curl", background: true))))
+        var engine = Engine(config: KeypipeConfig(rules: [rule]), desktop: desktop,
+                            shell: { _, _, _, _ in .exited(0, stdout: "") }, emit: { _ in }, background: { _ in false })
+        XCTAssertEqual(engine.fire("&&&"), .failed(rule: 0, stage: .spawn, failure: "spawn"))
+        XCTAssertEqual(engine.hits, 1)
+    }
+
+    /// P3: the job runs the parent's rules even after the file on disk changed.
+    func testJobParsesTheParentsBytesNotTheFile() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        let parent = Data(#"{"rules":[{"trigger":"a","output":{"shell":"first"}},{"trigger":"b","output":{"shell":"second"}}]}"#.utf8)
+        try #"{"rules":[{"trigger":"b","output":{"shell":"second"}},{"trigger":"a","output":{"shell":"first"}}]}"#
+            .write(toFile: path, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let request = JobRequest(config: path, configBytes: parent, job: Job(rule: 0, input: "", environment: [:]))
+        let decoded = try JSONDecoder().decode(JobRequest.self, from: JSONEncoder().encode(request))
+        XCTAssertEqual(try jobConfig(decoded).rules[0].output.primary, .shell("first"))
+        let legacy = JobRequest(config: path, configBytes: nil, job: request.job)
+        XCTAssertEqual(try jobConfig(legacy).rules[0].output.primary, .shell("second"), "an older parent still works")
+    }
+
+    func testFireReportsWhatHappened() {
+        func fire(_ rules: [Rule], _ desktop: FakeDesktop, _ shell: @escaping (String, String, [String: String], TimeInterval) -> ShellOutcome = { _, input, _, _ in .exited(0, stdout: input.uppercased()) }) -> FireResult {
+            var engine = Engine(config: KeypipeConfig(rules: rules), desktop: desktop, shell: shell, emit: { _ in })
+            return engine.fire("@@@")
+        }
+        let replace = Rule(trigger: "@@@", when: When(focus: .textField), transform: Guarded(primary: "up"),
+                           output: Guarded(primary: .builtin(.replaceInput)))
+        XCTAssertEqual(fire([replace], FakeDesktop(focus: .text, fieldText: "hi@@@")), .replaced(rule: 0, text: "HI", viaFallback: false))
+        XCTAssertEqual(fire([replace], FakeDesktop(focus: .nothing)), .noMatch)
+        XCTAssertEqual(fire([replace], FakeDesktop(focus: .composing, fieldText: "hi@@@")), .blocked("composing"))
+        XCTAssertEqual(fire([replace], FakeDesktop(focus: .terminal)), .blocked("terminal"))
+        XCTAssertEqual(fire([replace], FakeDesktop(focus: .text, fieldText: "hi@@@")) { _, _, _, _ in .exited(2, stdout: "") },
+                       .failed(rule: 0, stage: .transform, failure: "exit 2"))
+        XCTAssertEqual(fire([replace], FakeDesktop(focus: .text, fieldText: "hi@@@", goneAfterErase: true)),
+                       .failed(rule: 0, stage: .output, failure: "gone"))
+        let send = Rule(trigger: "@@@", output: Guarded(primary: .shell("send"), onFail: .builtin(.notify)))
+        XCTAssertEqual(fire([send], FakeDesktop(focus: .nothing)), .delivered(rule: 0, viaFallback: false))
+        XCTAssertEqual(fire([send], FakeDesktop(focus: .nothing)) { _, _, _, _ in .exited(1, stdout: "") },
+                       .delivered(rule: 0, viaFallback: true))
     }
 
     func testJobRunsStagesAndNotifiesOnlyWhenTheShellFails() {

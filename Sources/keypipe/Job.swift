@@ -5,21 +5,32 @@ import Foundation
 #endif
 
 /// What a background fire sends to `keypipe --job` on stdin. The input never rides in argv.
+/// `config` is the path, kept for the jobs.log line. `configBytes` is what the parent parsed;
+/// the child parses those bytes, not the file, so `job.rule` indexes the rules the parent
+/// matched even if the file was edited since. nil only from an older parent binary.
 struct JobRequest: Codable {
     var config: String
+    var configBytes: Data?
     var job: Job
 }
 
-/// Re-executes this binary as a detached `--job`. Reports through `emit` when it cannot start.
-func startJob(_ job: Job, configPath: String, emit: (String) -> Void) {
-    let request = JobRequest(config: URL(fileURLWithPath: configPath).path, job: job)
+/// Re-executes this binary as a detached `--job`. Returns false, and reports through `emit`,
+/// when it cannot start.
+func startJob(_ job: Job, configPath: String, configBytes: Data, emit: (String) -> Void) -> Bool {
+    let request = JobRequest(config: URL(fileURLWithPath: configPath).path, configBytes: configBytes, job: job)
     guard let executable = Bundle.main.executablePath,
           let payload = try? JSONEncoder().encode(request),
           spawnDetached(executable, ["--job"], stdin: payload) else {
         emit("keypipe background-failed spawn")
         notifyUser("keypipe: background job did not start")
-        return
+        return false
     }
+    return true
+}
+
+/// The config a job runs: the parent's bytes, never the file (it may have been edited since).
+func jobConfig(_ request: JobRequest) throws -> KeypipeConfig {
+    try request.configBytes.map { try loadConfig(data: $0) } ?? loadConfig(path: request.config)
 }
 
 /// ${XDG_STATE_HOME:-~/.local/state}/keypipe/jobs.log
@@ -62,7 +73,7 @@ func runJobProcess() -> Never {
     let config: KeypipeConfig
     do {
         request = try JSONDecoder().decode(JobRequest.self, from: data)
-        config = try loadConfig(path: request.config)
+        config = try jobConfig(request)
     } catch {
         emit("keypipe job-failed \(jsonString("\(error)"))")
         notifyUser("keypipe: background job failed: \(error)")

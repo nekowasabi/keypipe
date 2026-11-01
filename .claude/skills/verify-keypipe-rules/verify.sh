@@ -229,6 +229,37 @@ echo $? > "$EV/R10c.exit"
 check "R10c unconfigured chord: no transcript line, no nomatch, exit 2" \
   "exitis R10c 2 && lacks R10c 'keypipe nomatch' && lacks R10c 'keypipe matched'" "cmd+c is silent"
 
+# R11 --line --report (PR1 of docs/design/extension-architecture.md)
+# line <name> <config-json> <trigger> <stdin> [extra args...]: stdout to .out, stderr to .err
+line() {
+  local name=$1 cfg=$2 trig=$3 input=$4; shift 4
+  printf '%s' "$cfg" > "$EV/$name.config.json"
+  printf '%s' "$input" | cap 20 "$BIN" --config "$EV/$name.config.json" --line "$trig" "$@" > "$EV/$name.out" 2> "$EV/$name.err"
+  echo $? > "$EV/$name.exit"
+}
+same() { [ "$(cat "$EV/$1.out")" = "$2" ]; }
+LR='{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"transform":"tr a-z A-Z","output":"replaceInput"},{"trigger":";;;","when":{"focus":"textField"},"transform":"exit 3"},{"trigger":"///","when":{"focus":"textField"},"output":{"shell":"cat > /dev/null"}}]}'
+line R11a1 "$LR" '@@@' 'hello' --report
+line R11a2 "$LR" ';;;' 'hello' --report
+line R11a3 "$LR" '///' 'hello' --report
+line R11a4 "$LR" 'zz' 'hello' --report
+line R11a5 "$LR" ';;;' 'hello'
+line R11a6 "$LR" 'zz' 'hello'
+check "R11a --report: one JSON line per outcome, exit 0; plain --line unchanged" \
+  "exitis R11a1 0 && same R11a1 '{\"outcome\":\"replaced\",\"rule\":0,\"text\":\"HELLO\",\"v\":1}' \
+   && same R11a2 '{\"failure\":\"exit 3\",\"outcome\":\"failed\",\"rule\":1,\"stage\":\"transform\",\"v\":1}' \
+   && same R11a3 '{\"outcome\":\"delivered\",\"rule\":2,\"v\":1}' \
+   && exitis R11a4 0 && same R11a4 '{\"outcome\":\"nomatch\",\"v\":1}' \
+   && exitis R11a5 0 && same R11a5 'hello' && exitis R11a6 2 && same R11a6 ''" \
+  "R11a*.out: failed transform is still a hit for plain --line (exit 0, line unchanged)"
+# R11b: a background output reports started only with a job that did spawn. The failing spawn
+# is covered in-process (EngineTests.testFailedSpawnIsReportedAsFailedNotStarted): breaking
+# posix_spawn from outside the binary is not reliable.
+line R11b '{"rules":[{"trigger":"&&&","when":{"focus":"textField"},"output":{"shell":"true","background":true}}]}' '&&&' 'note' --report
+check "R11b background spawn reports started, and never next to background-failed spawn" \
+  "same R11b '{\"outcome\":\"started\",\"rule\":0,\"v\":1}' && ! grep -qF 'background-failed spawn' '$EV/R11b.err'" \
+  "R11b.out/.err"
+
 # M live macOS items: real CGEventTap and AX, driven through System Events
 if [ "${1:-}" = "--no-live" ] || [ "$(uname -s)" != Darwin ]; then
   sk "M1-M4 live macOS" "not Darwin or --no-live"
