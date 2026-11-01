@@ -144,7 +144,7 @@ checks are in `verify-keypipe-trigger` (P1-P10).
 | R12g | PR2 | `when.app: ["com.apple.*"]` matches TextEdit; every existing R3 config still selects the same rule | fake |
 | R12h | PR2 | a URL rule with a late trigger key (`keysPerRead`): the re-check after the slow read waits for the key like the fast path, so the rule fires (no `front-changed`) | fake |
 | M8 | PR2 | Chrome on a `file://` page with a `github.com/*` rule: first fire prompts for Automation; after granting, `hello@@@` becomes the transform result; TextEdit never prompts | live |
-| R13a | PR3 | `typeText` via `--line`: `failed ... unsupported`, `onFail.output: notify` runs | fake |
+| R13a | PR3 | `typeText` via `--line`: `failed ... unsupported`, `onFail.output: notify` runs. Moving the front (another app, a terminal, a password field, another field) during the transform types nothing and fails as `gone`, primary and `onFail.output` alike (`SinksTests.testTypeTextTypesNothingWhenTheFrontMovedDuringTheTransform`, R1b) | fake |
 | M9 | PR3 | `typeText` in TextEdit types the transform result after the erased trigger, tagged events not re-matched (no second fire) | live |
 
 ## Evidence

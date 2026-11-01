@@ -322,7 +322,7 @@ struct Engine {
             }
             return .started(rule: index)
         }
-        return run(rule, index, input, environment, snapshot.field)
+        return run(rule, index, input, environment, snapshot)
     }
 
     /// The detached half of a background fire: same stages, no field to write.
@@ -337,7 +337,7 @@ struct Engine {
 
     private func run(
         _ rule: Rule, _ index: Int, _ input: String, _ environment: [String: String],
-        _ field: Field?
+        _ origin: Snapshot?
     ) -> FireResult {
         let trigger = rule.trigger
         var result = input
@@ -354,7 +354,7 @@ struct Engine {
                 ? .replaced(rule: index, text: result, viaFallback: viaFallback)
                 : .delivered(rule: index, viaFallback: viaFallback)
         }
-        guard let failure = apply(rule.output.primary, result, environment, field, prefix: "")
+        guard let failure = apply(rule.output.primary, result, environment, origin, prefix: "")
         else {
             return success(rule.output.primary, viaFallback: false)
         }
@@ -370,7 +370,7 @@ struct Engine {
         }
         var environment2 = environment
         environment2["KEYPIPE_FAILURE"] = failure.token
-        if let second = apply(fallback, result, environment2, field, prefix: "fallback ") {
+        if let second = apply(fallback, result, environment2, origin, prefix: "fallback ") {
             notify("\(trigger) output failed: \(second.token)")
             return .failed(rule: index, stage: .output, failure: second.token)
         }
@@ -416,13 +416,14 @@ struct Engine {
 
     /// nil on success. A sink that cannot fail (spec.failures empty) always returns nil.
     private func apply(
-        _ output: Output, _ result: String, _ env: [String: String], _ field: Field?, prefix: String
+        _ output: Output, _ result: String, _ env: [String: String], _ origin: Snapshot?,
+        prefix: String
     )
         -> Failure?
     {
         switch output {
         case .builtin(let sink):
-            if let failure = sink.perform(result, field: field, desktop) {
+            if let failure = sink.perform(result, origin: origin, desktop) {
                 emit("keypipe \(prefix)apply-failed \(sink.rawValue) \(failure.token)")
                 return failure
             }

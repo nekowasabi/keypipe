@@ -89,6 +89,67 @@ final class SinksTests: XCTestCase {
         XCTAssertEqual(saved["save"], "hi|unsupported")
     }
 
+    /// The keys go only where the rule fired: if the front moved during the transform (an app deny
+    /// would have stopped, a terminal, a password field, another field), nothing is typed and the
+    /// output fails as gone, for the primary output and for onFail.output alike.
+    func testTypeTextTypesNothingWhenTheFrontMovedDuringTheTransform() {
+        final class Moving: Desktop {
+            var front: Snapshot
+            var typed: [String] = []
+            init(_ front: Snapshot) { self.front = front }
+            func snapshot() -> Snapshot { front }
+            func backspace(_ count: Int) {}
+            func text(_ field: Field) -> String? { "x@@@" }
+            func setText(_ field: Field, _ text: String) -> Bool { true }
+            func notify(_ text: String) {}
+            func typeText(_ text: String) -> Bool {
+                typed.append(text)
+                return true
+            }
+        }
+        let origin = Snapshot(app: "allowed.app", focus: .text, field: Field(token: 0))
+        let moves = [
+            Snapshot(app: "denied.app", focus: .text, field: Field(token: 0)),
+            Snapshot(app: "allowed.app", focus: .terminal),
+            Snapshot(app: "allowed.app", focus: .nothing, secure: true),
+            Snapshot(app: "allowed.app", focus: .text, field: Field(token: 1)),
+        ]
+        for onFail in [nil, Output.builtin(.typeText)] {
+            for later in moves {
+                let desktop = Moving(origin)
+                let rule = Rule(
+                    trigger: "@@@", when: When(app: ["allowed.app"], focus: .textField),
+                    transform: Guarded(primary: "slow"),
+                    output: Guarded(primary: .builtin(.typeText), onFail: onFail))
+                var engine = Engine(
+                    config: KeypipeConfig(
+                        rules: [rule], deny: [Conditions([Term(fact: .app, globs: ["denied.app"])])]
+                    ),
+                    desktop: desktop,
+                    shell: { _, _, _, _ in
+                        desktop.front = later
+                        return .exited(0, stdout: "SECRET")
+                    }, emit: { _ in })
+                XCTAssertEqual(
+                    engine.fire("@@@"), .failed(rule: 0, stage: .output, failure: "gone"),
+                    "\(later)")
+                XCTAssertEqual(desktop.typed, [], "typed into \(later)")
+            }
+        }
+        // Unmoved, it types.
+        let desktop = Moving(origin)
+        var engine = Engine(
+            config: KeypipeConfig(rules: [
+                Rule(
+                    trigger: "@@@", when: When(focus: .textField),
+                    output: Guarded(primary: .builtin(.typeText)))
+            ]),
+            desktop: desktop, shell: { _, input, _, _ in .exited(0, stdout: input) }, emit: { _ in }
+        )
+        XCTAssertEqual(engine.fire("@@@"), .delivered(rule: 0, viaFallback: false))
+        XCTAssertEqual(desktop.typed.count, 1, "unmoved, the result is typed once")
+    }
+
     /// The fake keeps MacDesktop's contract: no caret with nothing focused or in a password field.
     func testTypeTextNeedsACaretOnEveryDesktop() {
         XCTAssertFalse(FakeDesktop(focus: .nothing).typeText("x"))

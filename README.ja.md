@@ -134,7 +134,8 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   理由を通知します。
 - `output` は `"replaceInput"`（同じ欄に結果を書き戻す。`focus: textField` が必要）、
   `"typeText"`（キャレットの位置に結果をキーイベントで打つ。keypipe 自身の tap は
-  このイベントを無視する。`--line` にはキャレットが無いので `unsupported` で失敗）、
+  このイベントを無視する。`--line` にはキャレットが無いので `unsupported` で失敗。変換のあいだに前面の
+  アプリ・フォーカス・欄が変わったら何も打たず `gone` で失敗）、
   `"notify"`、`"none"`（既定）、または `{ "shell": "..." }`（変換と同じ経路で結果を
   受ける）。クリップボードは `{ "shell": "pbcopy" }`、webhook は `curl` で書きます。
   `{ "shell": "...", "background": true }` はすぐ戻ります。切り離したジョブ（独自の
@@ -148,7 +149,7 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   失敗したとき同じ結果で一度だけ走ります。失敗とは `output.shell` の非ゼロか期限切れ、
   `replaceInput` の書き込みが反映されない（`ignored`）か変換中に欄が消えた（`gone`）
   ことです。代替のシェルは理由を `KEYPIPE_FAILURE`（`exit <n>` / `timeout` / `empty` /
-  `ignored` / `gone`）で受けます。代替の代替はありません。代替も失敗したら通知します。
+  `ignored` / `gone` / `unsupported`）で受けます。代替の代替はありません。代替も失敗したら通知します。
   `onFail` が無いときは、`replaceInput` の失敗は結果を通知して文字を失わず、
   `output.shell` の失敗は記録だけです。同じコマンドの言い換えはシェルの `||` で
   書き、別の行き先へ逃がすときやシェルから見えない失敗を拾うときに `onFail` を使います。

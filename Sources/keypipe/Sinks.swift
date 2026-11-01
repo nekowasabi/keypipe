@@ -18,12 +18,14 @@ enum BuiltinSink: String, CaseIterable {
             return SinkSpec(
                 failures: [.ignored, .gone], needsTextField: true, writesField: true,
                 detachable: false)
-        case .typeText: return SinkSpec(failures: [.unsupported], detachable: false)
+        case .typeText: return SinkSpec(failures: [.gone, .unsupported], detachable: false)
         }
     }
 
     /// The side effect. nil on success. Emits nothing: Engine writes the transcript line.
-    func perform(_ text: String, field: Field?, _ desktop: Desktop) -> Failure? {
+    /// `origin` is the snapshot the fire's gates passed on; nil for a job.
+    func perform(_ text: String, origin: Snapshot?, _ desktop: Desktop) -> Failure? {
+        let field = origin?.field
         switch self {
         case .none: return nil
         case .notify:
@@ -36,7 +38,21 @@ enum BuiltinSink: String, CaseIterable {
             case .gone: return .gone
             }
         case .typeText:
+            // Why: a transform can take seconds, and the keys go to whatever is in front then. deny,
+            // the terminal gate and the password gate held only for the front at the fire.
+            guard let origin, stillAt(origin, desktop) else { return .gone }
             return desktop.typeText(text) ? nil : .unsupported
+        }
+    }
+
+    /// The same app, kind of focus and field as `origin`, and no password field.
+    private func stillAt(_ origin: Snapshot, _ desktop: Desktop) -> Bool {
+        let now = desktop.snapshot()
+        guard now.app == origin.app, now.focus == origin.focus, !now.secure else { return false }
+        switch (origin.field, now.field) {
+        case (nil, nil): return true
+        case (let before?, let after?): return desktop.sameField(before, after)
+        default: return false
         }
     }
 }

@@ -145,7 +145,8 @@ out of scope). Path is passed with `--config` and defaults to
 - `output` is `"replaceInput"` (writes the result back into the same field;
   requires `focus: textField`), `"typeText"` (types the result at the caret
   with key events keypipe's own tap ignores; through `--line` there is no
-  caret, so it fails with `unsupported`), `"notify"`, `"none"` (default), or
+  caret, so it fails with `unsupported`; if the front app, focus or field changed
+  while the transform ran, nothing is typed and it fails with `gone`), `"notify"`, `"none"` (default), or
   `{ "shell": "..." }`, which receives the result the same way a transform
   receives its input. Clipboard is `{ "shell": "pbcopy" }`, a webhook is
   `curl`.
@@ -162,7 +163,8 @@ out of scope). Path is passed with `--config` and defaults to
   non-zero or timed-out `output.shell`, or a `replaceInput` whose AXValue
   write did not stick (`ignored`) or whose field vanished during the
   transform (`gone`). The fallback shell sees the reason in
-  `KEYPIPE_FAILURE` (`exit <n>`, `timeout`, `empty`, `ignored`, `gone`).
+  `KEYPIPE_FAILURE` (`exit <n>`, `timeout`, `empty`, `ignored`, `gone`,
+  `unsupported`).
   There is no fallback of a fallback: if it fails too, keypipe notifies.
   Without `onFail`, a failed `replaceInput` notifies the result so the text
   is not lost, and a failed `output.shell` is only logged. A plain retry of
