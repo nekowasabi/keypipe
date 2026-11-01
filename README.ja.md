@@ -235,7 +235,9 @@ cmd のどれかが押されていればホットキー、それ以外は文字�
 - `Package.swift`: Swift パッケージ `keypipe`、実行ターゲット `keypipe`、
   テストターゲット `keypipeTests`。
 - `Sources/keypipe/main.swift`: エントリーポイント、`--config`、`--context`、
-  `--smoke-feed`、`--feed-stdin`、`--probe`、macOS のデーモンループ。
+  `--smoke-feed`、`--feed-stdin`、`--probe`、`--triggers`、`--line`、macOS の
+  デーモンループ。`--help` は使い方を出します。知らない引数は使い方を出して
+  終了コード 2 で止まり、デーモンは起動しません。
 - `Sources/keypipe/Config.swift`: 唯一の JSON 境界。理由付きで拒否する
   `loadConfig(path:)`。
 - `Sources/keypipe/Context.swift`: `Focus`、`Field`、`Snapshot` と純粋なルール選択

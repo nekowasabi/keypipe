@@ -295,7 +295,9 @@ TextEdit and System Events.
 - `Package.swift`: Swift package `keypipe`, executable target `keypipe`,
   test target `keypipeTests`.
 - `Sources/keypipe/main.swift`: entrypoint, `--config`, `--context`,
-  `--smoke-feed`, `--feed-stdin`, `--probe`, and the macOS daemon loop.
+  `--smoke-feed`, `--feed-stdin`, `--probe`, `--triggers`, `--line`, and the
+  macOS daemon loop. `--help` prints the usage; an unknown argument prints it
+  and exits 2 instead of starting the daemon.
 - `Sources/keypipe/Config.swift`: the only JSON boundary, `loadConfig(path:)`
   with reason-specific rejections.
 - `Sources/keypipe/Context.swift`: `Focus`, `Field`, `Snapshot`, and the

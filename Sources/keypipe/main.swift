@@ -18,6 +18,30 @@ private func emit(_ line: String) {
 }
 
 let args = CommandLine.arguments
+let usage = """
+    usage: keypipe [--config FILE]                          run the daemon (macOS)
+           keypipe [--config FILE] --line TRIGGER [--app BUNDLE_ID] [--report] < line
+           keypipe [--config FILE] --triggers
+           keypipe [--config FILE] [--context FILE] --smoke-feed KEYS [--smoke-hotkey CHORD]
+           keypipe [--config FILE] [--context FILE] --feed-stdin
+           keypipe --probe
+    """
+// Why: an unknown argument (a typo, --help) used to fall through and start the daemon silently.
+do {
+    let takesValue: Set = ["--config", "--context", "--line", "--app", "--smoke-feed", "--smoke-hotkey"]
+    let alone: Set = ["--job", "--probe", "--triggers", "--report", "--feed-stdin"]
+    var index = 1
+    while index < args.count {
+        let arg = args[index]
+        if arg == "--help" || arg == "-h" { emit(usage); exit(0) }
+        if takesValue.contains(arg) { index += 2; continue }
+        guard alone.contains(arg) else {
+            fputs("keypipe: unknown argument \(arg)\n\(usage)\n", stderr)
+            exit(2)
+        }
+        index += 1
+    }
+}
 if args.contains("--job") { runJobProcess() }
 if args.contains("--probe") {
     var probe: [String: Any] = ["trusted": false, "focus": "none", "focusIsTextField": false]

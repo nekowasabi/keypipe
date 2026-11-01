@@ -93,6 +93,9 @@ bad R2f '{"rules":[{"trigger":"@@@","when":{"focus":"window"}}]}' "unknown focus
 feed R2g '{"rules":[{"trigger":"@@@"}]}' "$TXT" '@@@'
 check "R2g minimal rule accepted" "exitis R2g 0 && has R2g 'keypipe matched @@@ rule 0'" "defaults: when any, identity, output none"
 bad R2h '{"rules":[{"output":"none"}]}' "rule needs trigger or hotkey"
+# An unknown argument must stop with the usage, not start the daemon (cap kills a daemon, so exit is not 2).
+cap 10 "$BIN" --config "$EV/R2g.config.json" --hepl > "$EV/R2u.out" 2>&1; echo $? > "$EV/R2u.exit"
+check "R2u unknown argument: usage, exit 2, no daemon" "exitis R2u 2 && has R2u 'keypipe: unknown argument --hepl' && has R2u 'usage: keypipe'" ""
 bad R2i '{"rules":[{"trigger":"@@@","hotkey":"ctrl+@"}]}' "rule has both trigger and hotkey"
 bad R2j '{"rules":[{"hotkey":"@"}]}' "hotkey needs a modifier"
 bad R2k '{"rules":[{"hotkey":"meta+@"}]}' "unknown modifier meta"
