@@ -293,6 +293,10 @@ check "R12f app switched during the URL read: no erase, nothing runs" \
   "has R12f 'keypipe front-changed @@@' && lacks R12f 'keypipe matched' && field R12f '\"hiz@@@\"'" "R12f.out"
 feed R12g '{"rules":[{"trigger":"@@@","when":{"app":["com.apple.*"]},"output":"none"}]}' "$TXT" '@@@'
 check "R12g app globs: com.apple.* matches TextEdit" "has R12g 'keypipe matched @@@ rule 0'" "R12g.out"
+feed R12h '{"rules":[{"trigger":"@@@","when":{"focus":"textField","url":["*"]},"transform":"tr a-z A-Z","output":"replaceInput"}]}' \
+  '{"app":"com.google.Chrome","focusIsTextField":true,"fieldText":"hello","keysPerRead":true,"facts":{"url":"https://example.com/"}}' '@@@'
+check "R12h a URL rule still waits for a late trigger key (R4e with a slow fact): fires, no front-changed" \
+  "exitis R12h 0 && lacks R12h 'front-changed' && field R12h '\"HELLO\"'" "R12h.out"
 
 # R13 native outputs from the sink table (PR3)
 TT='{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"transform":"printf X","output":"typeText"},{"trigger":";;;","when":{"focus":"textField"},"transform":"printf Y","output":"typeText","onFail":{"output":{"shell":"printf \"%s|%s\" \"$1\" \"$KEYPIPE_FAILURE\" > '"$EV"'/R13a.sent"}}}]}'

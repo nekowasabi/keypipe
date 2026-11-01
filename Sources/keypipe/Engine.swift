@@ -250,8 +250,15 @@ struct Engine {
         if sheet.readSlow {
             let now = desktop.snapshot()
             var moved = now.app != snapshot.app || now.focus != snapshot.focus || now.secure
+            // Another field of the same app: the old one still ends with the trigger, but the
+            // Backspaces would land in the new one.
+            if !moved, let before = snapshot.field, let after = now.field, !desktop.sameField(before, after) {
+                moved = true
+            }
+            // Why waitForTrigger and not one read: a trigger key the tap saw may still be on its way
+            // into the field, exactly as on the fast path (R4e).
             if !moved, case .text(let text) = trigger, snapshot.focus == .text, let field = snapshot.field {
-                moved = !(desktop.text(field)?.hasSuffix(text) ?? false)
+                moved = !(waitForTrigger(field, text, desktop)?.hasSuffix(text) ?? false)
             }
             if moved {
                 emit("keypipe front-changed \(trigger)")

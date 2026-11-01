@@ -181,6 +181,7 @@ final class FactsTests: XCTestCase {
             func setText(_ field: Field, _ text: String) -> Bool { true }
             func notify(_ text: String) {}
             func fact(_ name: FactName) -> FactRead { .value("https://github.com/") }
+            func sameField(_ a: Field, _ b: Field) -> Bool { a == b }
         }
         let rule = Rule(trigger: "@@@", when: When(focus: .textField, facts: [Term(fact: .url, globs: ["*"])]),
                         output: Guarded(primary: .shell("x")))
@@ -188,6 +189,7 @@ final class FactsTests: XCTestCase {
         let cases: [(Snapshot, String)] = [
             (Snapshot(app: "com.google.Chrome", focus: .nothing, secure: true), "x@@@"),  // moved to a password field
             (field, "x@@@ more"),                                                      // kept typing
+            (Snapshot(app: "com.google.Chrome", focus: .text, field: Field(token: 1)), "x@@@"),  // another field, same app
         ]
         for (later, text) in cases {
             let desktop = Shifting([field, later], text: text)
@@ -198,6 +200,20 @@ final class FactsTests: XCTestCase {
             XCTAssertEqual(engine.fire("@@@"), .blocked("front-changed"), "\(later)")
             XCTAssertEqual(desktop.backspaces, 0, "\(later)")
         }
+    }
+
+    /// The re-check after a slow read waits for a trigger key still on its way, like the fast path (R4e):
+    /// a late key is a normal fire, not a moved-on field.
+    func testSlowReadStillWaitsForALateTriggerKey() {
+        let desktop = FakeDesktop(app: "com.google.Chrome", focus: .text, fieldText: "hello", keysPerRead: true,
+                                  facts: [.url: .value("https://example.com/")])
+        let rule = Rule(trigger: "@@@", when: When(focus: .textField, facts: [Term(fact: .url, globs: ["*"])]),
+                        transform: Guarded(primary: "up"), output: Guarded(primary: .builtin(.replaceInput)))
+        var engine = Engine(config: KeypipeConfig(rules: [rule]), desktop: desktop,
+                            shell: { _, input, _, _ in .exited(0, stdout: input.uppercased()) }, emit: { _ in })
+        for c in "@@@" { desktop.key(c) }
+        XCTAssertEqual(engine.fire("@@@"), .replaced(rule: 0, text: "HELLO", viaFallback: false))
+        XCTAssertEqual(desktop.fieldText, "HELLO")
     }
 
     /// P7: deny parsing and its fail-safe evaluation.

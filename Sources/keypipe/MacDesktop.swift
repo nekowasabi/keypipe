@@ -119,11 +119,16 @@
                     let url = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
                     return url.isEmpty ? .absent : .value(url)
                 case .exited(let status, _):
-                    // The script returns "" for every error except a denied Automation permission.
-                    return .unreadable("Automation not allowed for keypipe (osascript exit \(status))")
+                    // The script returns "" only for a missing window or tab, so this is a real failure.
+                    return .unreadable("osascript exit \(status): Automation not allowed, or the browser did not answer")
                 case .timedOut: return .unreadable("timeout")
                 }
             }
+        }
+
+        func sameField(_ a: Field, _ b: Field) -> Bool {
+            guard let x = element(a), let y = element(b) else { return false }
+            return CFEqual(x, y)
         }
 
         private func element(_ field: Field) -> AXUIElement? {
@@ -149,13 +154,14 @@ func frontTabURLScript(_ bundleID: String) -> String? {
     if chromium.contains(bundleID) { query = "URL of active tab of front window" }
     else if safari.contains(bundleID) { query = "URL of front document" }
     else { return nil }
-    // -1743 is a denied Automation permission: the only error that must not read as "no URL".
+    // Only "no such window or tab" (-1728, -1719) means there is no URL. Every other error, a denied
+    // Automation permission (-1743) above all, must stay an error: a deny entry has to stop on it.
     return """
     try
     tell application id "\(bundleID)" to return \(query)
-    on error number n
-    if n is -1743 then error "not allowed" number n
-    return ""
+    on error message m number n
+    if n is -1728 or n is -1719 then return ""
+    error m number n
     end try
     """
 }

@@ -8,6 +8,9 @@ protocol Desktop {
     func fact(_ name: FactName) -> FactRead
     /// Types text at the caret. false: this desktop cannot type (the --line bridge, a job).
     func typeText(_ text: String) -> Bool
+    /// Whether two handles from two snapshots are the same element. A handle is a fresh token each
+    /// time, so tokens alone cannot say it.
+    func sameField(_ a: Field, _ b: Field) -> Bool
 }
 
 extension Desktop {
@@ -18,4 +21,6 @@ extension Desktop {
     func fact(_ name: FactName) -> FactRead { .absent }
 
     func typeText(_ text: String) -> Bool { false }
+
+    func sameField(_ a: Field, _ b: Field) -> Bool { a == b }
 }
