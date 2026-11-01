@@ -23,6 +23,11 @@
                 return Snapshot(app: app?.bundleIdentifier, focus: .nothing)
             }
             let field = element as! AXUIElement
+            // Why: a password field is never read or written. It is reported before the role
+            // check so even a focus-any rule stops there (its trigger would be typed into it).
+            if attribute(field, kAXSubroleAttribute) as? String == kAXSecureTextFieldSubrole {
+                return Snapshot(app: app?.bundleIdentifier, focus: .nothing, secure: true)
+            }
             let role = attribute(field, kAXRoleAttribute) as? String
             guard role == kAXTextFieldRole || role == kAXTextAreaRole else {
                 return Snapshot(app: app?.bundleIdentifier, focus: .nothing)
@@ -67,6 +72,26 @@
 
         func notify(_ text: String) { notifyUser(text) }
 
+        func fact(_ name: FactName) -> FactRead {
+            switch name {
+            case .app:
+                return NSWorkspace.shared.frontmostApplication?.bundleIdentifier.map(FactRead.value) ?? .absent
+            case .url:
+                guard let id = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+                      let script = frontTabURLScript(id) else { return .absent }
+                // Why: osascript, not NSAppleScript: the engine runs on a background queue, and
+                // a process can be killed at the deadline. The first read asks macOS for
+                // Automation permission for keypipe; that fire ends unreadable and notifies.
+                switch runShell("osascript -e \"$1\"", input: script, env: [:], timeout: 1) {
+                case .exited(0, let stdout):
+                    let url = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return url.isEmpty ? .absent : .value(url)
+                case .exited(let status, _): return .unreadable("osascript exit \(status) (allow keypipe under Automation)")
+                case .timedOut: return .unreadable("timeout")
+                }
+            }
+        }
+
         private func element(_ field: Field) -> AXUIElement? {
             lock.lock()
             defer { lock.unlock() }
@@ -80,6 +105,16 @@
         }
     }
 #endif
+
+/// The AppleScript that returns the front tab's URL of a known browser, or nil for any other app.
+func frontTabURLScript(_ bundleID: String) -> String? {
+    let chromium: Set = ["com.google.Chrome", "com.google.Chrome.canary", "com.brave.Browser",
+                         "com.microsoft.edgemac", "com.vivaldi.Vivaldi", "company.thebrowser.Browser"]
+    let safari: Set = ["com.apple.Safari", "com.apple.SafariTechnologyPreview"]
+    if chromium.contains(bundleID) { return "tell application id \"\(bundleID)\" to get URL of active tab of front window" }
+    if safari.contains(bundleID) { return "tell application id \"\(bundleID)\" to get URL of front document" }
+    return nil
+}
 
 #if os(macOS)
     /// Whether `pid` has /dev/ptmx open, which is what makes an app a terminal emulator.

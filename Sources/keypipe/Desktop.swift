@@ -4,4 +4,14 @@ protocol Desktop {
     func text(_ field: Field) -> String?
     func setText(_ field: Field, _ text: String) -> Bool
     func notify(_ text: String)
+    /// One condition fact that is not in the snapshot.
+    func fact(_ name: FactName) -> FactRead
+}
+
+extension Desktop {
+    /// A desktop with no live readers (the --line bridge from zsh or voice, a background job)
+    /// has no such fact: a rule that needs one does not hold, and the next rule may fire.
+    /// Why: on the voice path the target app is restored only after keypipe returns, so a
+    /// live read would describe some other window.
+    func fact(_ name: FactName) -> FactRead { .absent }
 }

@@ -25,8 +25,14 @@ struct ShellOutput: Equatable, ExpressibleByStringLiteral {
 
 struct When: Equatable {
     enum Focus: String { case textField, any }
-    var app: [String]? = nil
     var focus: Focus = .any
+    /// Every other `when` key: one glob term per condition fact, in cost order.
+    var conditions = Conditions()
+
+    init(app: [String]? = nil, focus: Focus = .any, facts: [Term] = []) {
+        self.focus = focus
+        self.conditions = Conditions((app.map { [Term(fact: .app, globs: $0)] } ?? []) + facts)
+    }
 }
 
 struct Guarded<Value: Equatable>: Equatable {
@@ -43,6 +49,9 @@ struct Rule: Equatable {
 
 struct KeypipeConfig: Equatable {
     var rules: [Rule]
+    /// Top-level gates: when one entry holds, the fire stops before any rule is looked at and
+    /// before any field is read. An entry whose fact cannot be read also stops it (fail safe).
+    var deny: [Conditions] = []
     /// Deadline for every shell keypipe runs: transform, output.shell, and their fallbacks.
     var shellTimeout: TimeInterval = 30
     /// Deadline for a whole background job, transform and fallbacks included.
@@ -116,7 +125,34 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
         }
         return output
     }
-    let root = try object(json, keys: ["rules", "shellTimeout", "backgroundTimeout"])
+    /// Every fact key of a `when` or `deny` object: an array of globs.
+    func conditions(_ object: [String: Any]) throws -> Conditions {
+        var terms: [Term] = []
+        for fact in FactName.allCases {
+            guard let value = object[fact.rawValue] else { continue }
+            guard let globs = value as? [String] else {
+                throw ConfigError.invalid("\(fact.rawValue) must be an array of strings")
+            }
+            terms.append(Term(fact: fact, globs: globs))
+        }
+        return Conditions(terms)
+    }
+    let root = try object(json, keys: ["rules", "deny", "shellTimeout", "backgroundTimeout"])
+    var deny: [Conditions] = []
+    if let value = root["deny"] {
+        guard let entries = value as? [Any] else { throw ConfigError.invalid("deny must be an array") }
+        deny = try entries.map { entry in
+            let entry = try conditions(object(entry, keys: Set(FactName.allCases.map(\.rawValue))))
+            // Why: an empty entry would stop every fire.
+            guard !entry.terms.isEmpty else { throw ConfigError.invalid("empty deny entry") }
+            // Why: deny runs on every fire in every app; a slow fact alone would ask the browser
+            // on each keystroke trigger even in a text editor.
+            if let slow = entry.terms.first(where: { $0.fact.cost == .slow }), !entry.hasApp {
+                throw ConfigError.invalid("deny \(slow.fact.rawValue) requires app")
+            }
+            return entry
+        }
+    }
     func seconds(_ name: String, default value: TimeInterval) throws -> TimeInterval {
         guard let raw = root[name] else { return value }
         guard let seconds = raw as? Double, seconds > 0 else {
@@ -146,13 +182,8 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
         }
         var when = When()
         if let value = entry["when"] {
-            let condition = try object(value, keys: ["app", "focus"])
-            if let value = condition["app"] {
-                guard let apps = value as? [String] else {
-                    throw ConfigError.invalid("app must be an array of strings")
-                }
-                when.app = apps
-            }
+            let condition = try object(value, keys: Set(["focus"] + FactName.allCases.map(\.rawValue)))
+            when.conditions = try conditions(condition)
             if let value = condition["focus"] {
                 guard let name = value as? String else {
                     throw ConfigError.invalid("focus must be a string")
@@ -185,5 +216,5 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
         }
         return Rule(trigger: trigger, when: when, transform: transform, output: output)
     }
-    return KeypipeConfig(rules: rules, shellTimeout: shellTimeout, backgroundTimeout: backgroundTimeout)
+    return KeypipeConfig(rules: rules, deny: deny, shellTimeout: shellTimeout, backgroundTimeout: backgroundTimeout)
 }

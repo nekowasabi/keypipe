@@ -169,19 +169,57 @@ struct Engine {
     @discardableResult
     mutating func fire(_ trigger: Trigger) -> FireResult {
         let snapshot = desktop.snapshot()
-        guard snapshot.focus != .terminal else {
-            emit("keypipe terminal \(trigger)")
-            return .blocked("terminal")
+        // Gates, before any rule and before any field read.
+        var candidates = config.rules.indices.filter { config.rules[$0].trigger == trigger }
+        if snapshot.focus == .terminal {
+            // Why: a terminal's AX field is the whole pane. A text trigger there belongs to the
+            // zsh widget; only a hotkey rule that reads no field may still run (empty input).
+            candidates = trigger.isHotkey ? candidates.filter { config.rules[$0].when.focus == .any } : []
+            guard !candidates.isEmpty else {
+                emit("keypipe terminal \(trigger)")
+                return .blocked("terminal")
+            }
         }
         guard snapshot.focus != .composing else {
             emit("keypipe composing \(trigger)")
             return .blocked("composing")
         }
-        guard let rule = select(config.rules.filter { $0.trigger == trigger }, snapshot),
-              let index = config.rules.firstIndex(of: rule) else {
+        guard !snapshot.secure else {
+            emit("keypipe secure \(trigger)")
+            return .blocked("secure")
+        }
+        let sheet = FactSheet(snapshot, desktop: desktop)
+        for entry in config.deny where entry.evaluate(sheet) != .noMatch {
+            emit("keypipe deny \(trigger)")
+            return .blocked("deny")
+        }
+        var chosen: Int?
+        for candidate in candidates {
+            // In a terminal the filter above already kept only focus-any rules; evaluate() itself
+            // treats a terminal as matching nothing, which is right for every other caller.
+            let when = config.rules[candidate].when
+            let verdict = snapshot.focus == .terminal ? when.conditions.evaluate(sheet) : evaluate(when, sheet)
+            if verdict == .noMatch { continue }
+            if case .unreadable(let fact, let reason) = verdict {
+                // Why: a rule meant for one site must not turn into the next rule of the trigger.
+                emit("keypipe unreadable \(trigger) \(fact.rawValue)")
+                notify("\(trigger): cannot read \(fact.rawValue): \(reason)")
+                return .unreadable(fact: fact.rawValue, reason: reason)
+            }
+            chosen = candidate
+            break
+        }
+        guard let index = chosen else {
             emit("keypipe nomatch \(trigger)")
             return .noMatch
         }
+        // Why: a slow read can take up to a second. If the user switched apps meanwhile, the
+        // Backspaces would land in the new front app, so nothing is erased or run.
+        if sheet.readSlow && desktop.snapshot().app != snapshot.app {
+            emit("keypipe front-changed \(trigger)")
+            return .noMatch
+        }
+        let rule = config.rules[index]
         hits += 1
         emit("keypipe matched \(trigger) rule \(index)")
         let input: String

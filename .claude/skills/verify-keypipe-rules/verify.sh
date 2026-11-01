@@ -260,6 +260,39 @@ check "R11b background spawn reports started, and never next to background-faile
   "same R11b '{\"outcome\":\"started\",\"rule\":0,\"v\":1}' && ! grep -qF 'background-failed spawn' '$EV/R11b.err'" \
   "R11b.out/.err"
 
+# R12 condition facts, deny and gates (PR2). Facts come from the context's "facts" by name.
+URLR='{"rules":[{"trigger":"@@@","when":{"app":["com.google.Chrome"],"focus":"textField","url":["https://github.com/*"]},"transform":"tr a-z A-Z","output":"replaceInput"},{"trigger":"@@@","when":{"focus":"textField"},"transform":"tr a-z A-Y","output":"replaceInput"}]}'
+CHROME='{"app":"com.google.Chrome","focusIsTextField":true,"fieldText":"hiz"'
+feed R12a1 "$URLR" "$CHROME"',"facts":{"url":"https://github.com/a/b"}}' '@@@'
+feed R12a2 "$URLR" "$CHROME"',"facts":{"url":"https://example.com/"}}' '@@@'
+check "R12a url rule fires only on its site; elsewhere the next rule does" \
+  "has R12a1 'keypipe matched @@@ rule 0' && field R12a1 '\"HIZ\"' && has R12a2 'keypipe matched @@@ rule 1' && field R12a2 '\"HIY\"'" "R12a*.out"
+feed R12b1 "$URLR" "$CHROME"',"unreadableFacts":{"url":"timeout"}}' '@@@'
+feed R12b2 "$URLR" '{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"hiz"}' '@@@'
+check "R12b unreadable url stops the fire (no erase, no next rule); another app never reads it" \
+  "has R12b1 'keypipe unreadable @@@ url' && lacks R12b1 'keypipe matched' && field R12b1 '\"hiz@@@\"' \
+   && exitis R12b1 2 && has R12b2 'keypipe matched @@@ rule 1'" "R12b*.out"
+bad R12c1 '{"deny":[{"url":["*bank*"]}],"rules":[]}' 'deny url requires app'
+DENY='{"deny":[{"app":["com.google.Chrome"],"url":["*bank.example*"]}],"rules":[{"trigger":"@@@"}]}'
+feed R12c2 "$DENY" '{"app":"com.google.Chrome","focusIsTextField":false,"fieldText":"","facts":{"url":"https://bank.example/x"}}' '@@@'
+feed R12c3 "$DENY" '{"app":"com.google.Chrome","focusIsTextField":false,"fieldText":"","unreadableFacts":{"url":"timeout"}}' '@@@'
+feed R12c4 "$DENY" '{"app":"com.google.Chrome","focusIsTextField":false,"fieldText":"","facts":{"url":"https://github.com"}}' '@@@'
+check "R12c deny with app+url blocks on match and when unreadable, passes elsewhere" \
+  "has R12c2 'keypipe deny @@@' && has R12c3 'keypipe deny @@@' && has R12c4 'keypipe matched @@@ rule 0'" "R12c*.out"
+feed R12d '{"rules":[{"trigger":"@@@","output":{"shell":"echo ran > '"$EV"'/R12d.sent"}}]}' '{"app":"x","focusIsTextField":false,"fieldText":"","secure":true}' '@@@'
+check "R12d password field: keypipe secure, nothing runs" \
+  "has R12d 'keypipe secure @@@' && lacks R12d 'keypipe matched' && [ ! -e '$EV/R12d.sent' ]" "R12d.out"
+TERMHK='{"rules":[{"hotkey":"ctrl+@","when":{"focus":"textField"},"output":{"shell":"echo no >> '"$EV"'/R12e.sent"}},{"hotkey":"ctrl+@","output":{"shell":"printf \"[%s]\" \"$1\" >> '"$EV"'/R12e.sent"}},{"trigger":"@@@","output":{"shell":"echo text >> '"$EV"'/R12e.sent"}}]}'
+printf '%s' "$TERMHK" > "$EV/R12e.config.json"; printf '%s' '{"app":"com.example.term","ownsPty":true,"focusIsTextField":true,"fieldText":"pane-secret"}' > "$EV/R12e.context.json"
+cap 20 "$BIN" --config "$EV/R12e.config.json" --context "$EV/R12e.context.json" --smoke-feed '@@@' --smoke-hotkey 'ctrl+@' > "$EV/R12e.out" 2>&1
+check "R12e terminal: a focus-any hotkey runs with empty input; text triggers and textField rules stay blocked" \
+  "has R12e 'keypipe terminal @@@' && has R12e 'keypipe matched ctrl+@ rule 1' && [ \"\$(cat '$EV/R12e.sent')\" = '[]' ]" "R12e.out R12e.sent"
+feed R12f '{"rules":[{"trigger":"@@@","when":{"focus":"textField","url":["*"]},"output":{"shell":"true"}}]}' "$CHROME"',"facts":{"url":"https://x/"},"appAfterSlowRead":"com.apple.TextEdit"}' '@@@'
+check "R12f app switched during the URL read: no erase, nothing runs" \
+  "has R12f 'keypipe front-changed @@@' && lacks R12f 'keypipe matched' && field R12f '\"hiz@@@\"'" "R12f.out"
+feed R12g '{"rules":[{"trigger":"@@@","when":{"app":["com.apple.*"]},"output":"none"}]}' "$TXT" '@@@'
+check "R12g app globs: com.apple.* matches TextEdit" "has R12g 'keypipe matched @@@ rule 0'" "R12g.out"
+
 # M live macOS items: real CGEventTap and AX, driven through System Events
 if [ "${1:-}" = "--no-live" ] || [ "$(uname -s)" != Darwin ]; then
   sk "M1-M4 live macOS" "not Darwin or --no-live"

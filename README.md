@@ -109,6 +109,25 @@ out of scope). Path is passed with `--config` and defaults to
   receives the chord too; keypipe cannot tell whether the app binds it. If an
   app owns `ctrl+@`, scope the rule with `when.app` so keypipe fires only
   where you want it, otherwise both act.
+- `when.url` is a list of globs over the front browser tab's URL (Chrome,
+  Arc, Brave, Edge, Vivaldi, Safari; read through `osascript`, so macOS asks
+  once to let keypipe control the browser). The URL is read only when the
+  rule's cheaper conditions (`app`, `focus`) already hold, at most once per
+  fire. When a browser is in front but the URL cannot be read (permission
+  denied, a 1 s timeout), the fire stops with a notification instead of
+  falling through to the next rule of the same trigger. In a non-browser
+  app, and on the `--line` path (zsh, voice), `url` simply does not match.
+  If the front app changes while the URL is read, nothing is erased or run
+  (`keypipe front-changed`).
+- Every fact condition (`app`, `url`) is a list of globs (`fnmatch`, `*`
+  crosses `/`), so `"app": ["com.apple.*"]` works and an exact id stays exact.
+- `deny` (top level) is a list of `when`-shaped objects without `focus`, such
+  as `{"app": ["com.1password.1password"]}`. When one holds, keypipe stops
+  before any rule and before reading the field (`keypipe deny`). An entry with
+  `url` must also have `app`, so no keystroke trigger asks a browser while
+  another app is in front. An unreadable `url` in `deny` also stops the fire.
+- keypipe never acts in a password field (`AXSecureTextField`): `keypipe
+  secure`, no erase, no read, no shell.
 - `when.app` is a list of bundle ids (omit for any app). `when.focus` is
   `textField` or `any` (default). `textField` rules fire only when a text
   element is focused; they erase the trigger and read the field, which
@@ -161,8 +180,10 @@ out of scope). Path is passed with `--config` and defaults to
 
 A terminal shows its whole pane as one AX text field, so the daemon does
 nothing when the front app holds a pty master (`/dev/ptmx`): no erase, no
-read, no shell (`keypipe terminal <trigger>`). At a zsh prompt the ZLE widget
-runs the same JSON rules on the line being typed:
+read, no shell (`keypipe terminal <trigger>`). The one exception is a
+`hotkey` rule with `focus: any`: it reads no field, so it still runs there
+with empty input (a pane summary, a notification). At a zsh prompt the ZLE
+widget runs the same JSON rules on the line being typed:
 
 ```sh
 # .zshrc

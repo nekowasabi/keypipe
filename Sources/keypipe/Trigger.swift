@@ -48,6 +48,11 @@ enum Trigger: Equatable, CustomStringConvertible, ExpressibleByStringLiteral {
 
     init(stringLiteral value: String) { self = .text(value) }
 
+    var isHotkey: Bool {
+        if case .hotkey = self { return true }
+        return false
+    }
+
     var description: String {
         switch self {
         case .text(let text): return text
