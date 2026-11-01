@@ -203,12 +203,25 @@ keypipe は zsh ウィジェットのときと同じく、その文章をその�
 - 動くのは `trigger` ルールだけで、`hotkey` ルールは動きません。
 - 文章を受け取るルールには `"when": {"focus": "textField"}` が要ります。既定の
   `focus: any` のままだと、ルールは空の入力で動きます。
-- `replaceInput` は何も起こしません。書き換えた行は stdout に出ますが、voice-switch が
-  捨てます。代わりに `output.shell`、`notify`、`background` を使ってください。
+- `command` のアクションでは、`replaceInput` は何も起こしません。書き換えた行は
+  stdout に出ますが、voice-switch が捨てます。代わりに `output.shell`、`notify`、
+  `background` を使うか、下の `keypipe` 配送を使ってください。
 - `VOICE_SWITCH_APP` が空のときは `--app` ごと省きます。`--app ""` は `""` という
   アプリ名であって、前面アプリにはならないためです。
 
 アクション側のキーは voice-switch の README（シェルコマンドへの受け渡し）にあります。
+
+`replaceInput` の結果を貼り付けたいときは、`command` の代わりに voice-switch の
+`keypipe` 配送を使います（Mac のみ）。voice-switch は `--line --report` で keypipe を
+動かし、`replaced` の結果だけを貼ります。`superwhisperMode` には自動貼り付けが
+オフのモードを指定します（voice-switch の README、keypipe delivery）。
+
+```json
+"keypipe": { "binary": "/usr/local/bin/keypipe", "config": "~/.config/keypipe/config.json" },
+"macOS": { "actions": [
+  { "name": "keigo", "wakeWords": ["けいご"], "keypipe": "@@@k", "superwhisperMode": "voice_switch" }
+] }
+```
 
 ## macOS のキー取得と Accessibility
 

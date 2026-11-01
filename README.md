@@ -244,6 +244,17 @@ does for the zsh widget. What differs from the keyboard:
 
 voice-switch's README (Shell command delivery) covers the action's own keys.
 
+To have a `replaceInput` result pasted, use voice-switch's `keypipe` delivery
+instead of a `command` (Mac; `superwhisperMode` must name a mode with
+auto-paste off, see voice-switch's README, keypipe delivery):
+
+```json
+"keypipe": { "binary": "/usr/local/bin/keypipe", "config": "~/.config/keypipe/config.json" },
+"macOS": { "actions": [
+  { "name": "keigo", "wakeWords": ["けいご"], "keypipe": "@@@k", "superwhisperMode": "voice_switch" }
+] }
+```
+
 ### `--report`: what the fire did
 
 `keypipe --config C --line <trigger> --report [--app <bundle id>]` runs the
