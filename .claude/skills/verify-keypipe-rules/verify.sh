@@ -94,8 +94,14 @@ feed R2g '{"rules":[{"trigger":"@@@"}]}' "$TXT" '@@@'
 check "R2g minimal rule accepted" "exitis R2g 0 && has R2g 'keypipe matched @@@ rule 0'" "defaults: when any, identity, output none"
 bad R2h '{"rules":[{"output":"none"}]}' "rule needs trigger or hotkey"
 # An unknown argument must stop with the usage, not start the daemon (cap kills a daemon, so exit is not 2).
-cap 10 "$BIN" --config "$EV/R2g.config.json" --hepl > "$EV/R2u.out" 2>&1; echo $? > "$EV/R2u.exit"
+argv() { local id=$1; shift; cap 10 "$BIN" "$@" > "$EV/$id.out" 2>&1; echo $? > "$EV/$id.exit"; }
+argv R2u --config "$EV/R2g.config.json" --hepl
 check "R2u unknown argument: usage, exit 2, no daemon" "exitis R2u 2 && has R2u 'keypipe: unknown argument --hepl' && has R2u 'usage: keypipe'" ""
+argv R2v --help; argv R2w -h
+check "R2v --help and -h print the usage, exit 0" "exitis R2v 0 && has R2v 'usage: keypipe' && exitis R2w 0 && has R2w 'usage: keypipe'" ""
+argv R2x --config "$EV/R2g.config.json" --report; argv R2y --config "$EV/R2g.config.json" --smoke-feed
+check "R2x a modifier without --line, a flag without its value: exit 2, no daemon" \
+  "exitis R2x 2 && has R2x 'keypipe: --report needs --line' && exitis R2y 2 && has R2y 'keypipe: --smoke-feed needs a value'" ""
 bad R2i '{"rules":[{"trigger":"@@@","hotkey":"ctrl+@"}]}' "rule has both trigger and hotkey"
 bad R2j '{"rules":[{"hotkey":"@"}]}' "hotkey needs a modifier"
 bad R2k '{"rules":[{"hotkey":"meta+@"}]}' "unknown modifier meta"

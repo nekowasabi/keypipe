@@ -30,16 +30,28 @@ let usage = """
 do {
     let takesValue: Set = ["--config", "--context", "--line", "--app", "--smoke-feed", "--smoke-hotkey"]
     let alone: Set = ["--job", "--probe", "--triggers", "--report", "--feed-stdin"]
+    func refuse(_ why: String) -> Never {
+        fputs("keypipe: \(why)\n\(usage)\n", stderr)
+        exit(2)
+    }
+    var flags = Set<String>()
     var index = 1
     while index < args.count {
         let arg = args[index]
         if arg == "--help" || arg == "-h" { emit(usage); exit(0) }
-        if takesValue.contains(arg) { index += 2; continue }
-        guard alone.contains(arg) else {
-            fputs("keypipe: unknown argument \(arg)\n\(usage)\n", stderr)
-            exit(2)
+        if takesValue.contains(arg) {
+            guard index + 1 < args.count else { refuse("\(arg) needs a value") }
+            flags.insert(arg)
+            index += 2
+            continue
         }
+        guard alone.contains(arg) else { refuse("unknown argument \(arg)") }
+        flags.insert(arg)
         index += 1
+    }
+    // A modifier without its mode would fall through to the daemon as well.
+    for modifier in ["--report", "--app"] where flags.contains(modifier) && !flags.contains("--line") {
+        refuse("\(modifier) needs --line")
     }
 }
 if args.contains("--job") { runJobProcess() }
