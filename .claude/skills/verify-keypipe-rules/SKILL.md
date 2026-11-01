@@ -115,10 +115,13 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 
 Feature recipes live in [`features/`](features/README.md).
 
-## Planned items (extension design, not implemented)
+## Items for the extension design
 
-For `docs/design/extension-architecture.md`. Add each item to `verify.sh` in the
-PR that implements it; until then they are a to-do, not a claim. Property-style
+For `docs/design/extension-architecture.md`. R11a, R11b, R12a-g and R13a are in
+`verify.sh` and run with `--no-live`. R11c is covered in-process
+(`EngineTests.testJobParsesTheParentsBytesNotTheFile`) because a job reads its
+config at start and cannot be raced from outside. M8 and M9 are live items that
+are still to do: they need a person at the Mac (Automation prompt, real typing). Property-style
 checks are in `verify-keypipe-trigger` (P1-P10).
 
 | ID | PR | What | Harness |

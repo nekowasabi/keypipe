@@ -236,8 +236,9 @@ does for the zsh widget. What differs from the keyboard:
 - Only `trigger` rules fire; `hotkey` rules do not.
 - A rule needs `"when": {"focus": "textField"}` to receive the text. With the
   default `focus: any`, the rule runs with empty input.
-- `replaceInput` has no visible effect: the rewritten line goes to stdout,
-  which voice-switch discards. Use `output.shell`, `notify`, or `background`.
+- With a `command` action, `replaceInput` has no visible effect: the rewritten
+  line goes to stdout, which voice-switch discards. voice-switch's `keypipe`
+  action runs `--line --report` instead and pastes a `replaced` result.
 - `--app` is left out when `VOICE_SWITCH_APP` is empty, because `--app ""` is
   the app name `""`, not the front app.
 

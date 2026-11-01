@@ -1,6 +1,6 @@
 # 拡張点の設計（条件・出力・voice-switch 境界）
 
-状態: 設計スケッチ（本体は未実装）。型とシグネチャは `docs/design/extension-sketch/` にある。`Sources/` の外に置いているので、ビルドには入らない。2026-11-01、/architect で3案を比較して1案にまとめ、ateam review（Claude・Codex・Grok の3名、相互検証つき）の指摘を受けて折衷案に改めた。
+状態: 実装済み（keypipe `feat/extension-architecture`、voice-switch `feat/keypipe-delivery`）。スケッチは設計時の記録として残す。実装との差分は末尾の「実装メモ」。型とシグネチャは `docs/design/extension-sketch/` にある。`Sources/` の外に置いているので、ビルドには入らない。2026-11-01、/architect で3案を比較して1案にまとめ、ateam review（Claude・Codex・Grok の3名、相互検証つき）の指摘を受けて折衷案に改めた。
 
 ## Problem
 
@@ -178,3 +178,16 @@ Context.swift 残す（V4a が照合する Snapshot と matches はここ）
 2. **PR2**: `Facts.swift`（app・focus のみ）と `Conditions` を `When` の中に足し、`FactSheet` の遅延取得、`deny`、secure ゲート、terminal ゲートの緩和（M18）、消去直前の前面再確認。最初の事実として `url`。着手前に未決1を実機で確かめる。
 3. **PR3**: `Sinks.swift`。`Engine.apply` の switch と `parseOutput` の sink 名を消す。typeText が要るときに足す。
 4. **後で**: M5（選択範囲）、M2・M3、`KEYPIPE_<FACT>`。
+
+## 実装メモ（2026-11-01）
+
+設計から変えた点:
+
+- **M18 は hotkey だけ**: 端末前面で動くのは `focus: any` の **hotkey** ルールだけにした。文字トリガーは zsh widget が受け持つので、デーモンも動かすと同じトリガーで二重に発火するため。
+- **live の事実が無い経路では「無い」（absent）**: `--line`（zsh・音声）と background job の desktop は事実を読めない。これを「読めない」（unreadable）にすると URL ルールが毎回その発火を止めてしまうので、「その事実は無い」として不一致に倒し、次のルールに進めるようにした。ブラウザ以外のアプリの URL も同じ。「読めない」で止めるのは、ブラウザが前面なのに読めなかったときだけ。
+- **事実の値は配列だけ**: `"app": "x"` を不正とする既存のテストに合わせ、`url` も文字列の配列にした。
+- **`--report` に `rule` を入れた**: どのルールが動いたかをログで追えるように、一致したときは index を付ける。
+- **ネイティブ出力が fallback なしで失敗したら結果を通知**: 今までは replaceInput だけだった。typeText も同じく結果を失わない。
+- **`KEYPIPE_<FACT>` は出していない**（設計どおり後回し）。
+
+確かめたこと: `swift test` 61 件成功、verify-keypipe-rules `--no-live` 62 件、verify-keypipe-terminals `--no-live` 35 件、verify-keypipe `--no-live` 25 件、verify-keypipe-trigger の 254 入力、voice-switch の url-actions 106 件（静的変異 33 件を含む）。実機の M8（Chrome の Automation 許可）と M9（typeText を実際に打つ）、voice-switch での音声からの貼り付けは未確認。

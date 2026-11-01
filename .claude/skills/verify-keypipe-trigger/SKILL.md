@@ -104,12 +104,23 @@ The check kept passing across that span because `--smoke-feed` followed the
 loop into `Engine.key`; only the description (line ranges, the test comment, the
 `contextMatches` stub note) was stale. No property changed.
 
-## Planned checks for the extension design (not implemented yet)
+## Checks for the extension design
 
-These describe what `docs/design/extension-architecture.md` promises. None of
-them can run today: the types do not exist. Each PR must add its check in the
-same change, show it failing on a deliberate break, then record the sync commit
-here. Behavioural items (fake-desktop feeds, live items) go to
+These describe what `docs/design/extension-architecture.md` promises. They are
+implemented on branch `feat/extension-architecture` and run in `swift test`
+(and so in `verify-keypipe` V7b and `verify-keypipe-rules` R1b). Where they live:
+P1 `ReportTests`; P2 `EngineTests.testFailedSpawnIsReportedAsFailedNotStarted`;
+P3 `EngineTests.testJobParsesTheParentsBytesNotTheFile`; P4
+`FactsTests.testLazyReadsOverEveryTermAndOutcome`; P5
+`FactsTests.testUnreadableStopsWithoutFallingThrough`; P6
+`FactsTests.testGatesNeverReadTheField` and `testTerminalAllowsOnlyFocusAnyHotkeys`;
+P7 `FactsTests.testDenyNeedsAppNextToASlowFactAndBlocksWhenUnreadable`; P8
+`FactsTests.testGlobsKeepExactIdsExact`; P9
+`SinksTests.testValidityIsDerivedFromEverySinkSpec`; P10
+`SinksTests.testTypeTextWithoutACaretFailsAsUnsupported`. Proven able to fail
+(each break caught, then reverted): no memo in FactSheet (P4), unreadable falls
+through (P5), secure gate removed (P6), front-change check removed (R12f),
+LineDesktop types text (P10). The original plan follows. Behavioural items (fake-desktop feeds, live items) go to
 `verify-keypipe-rules` and `verify-keypipe-terminals` (see their "Planned
 items"); this list is the exhaustive / property part.
 
