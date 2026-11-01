@@ -223,3 +223,8 @@ Context.swift 残す（V4a が照合する Snapshot と matches はここ）
 - 遅れて届く打鍵を待つ間（最大 0.1 秒）に欄が移る窓を、待った後にもう一度 app・focus・パスワード欄・同じ欄かを確かめて閉じた。
 
 未確認のまま残るもの: 実機の Chrome・Safari で `CFEqual` が同じ欄を同じと判定するか、M8（URL ルールと Automation 許可）、M9（typeText、IME オン）、voice-switch からの実際の貼り付けと HUD。
+
+### 4回目・5回目のレビュー
+
+- 4回目: 3回目の製品修正（AppleScript の構文、待った後の再確認）は3名とも正しく回帰なしと判定。新しいテストの移植性（Chrome の無い Mac、osascript の無い環境、出力未確認、.scpt の残留）を `eb3b447` で直した。
+- 5回目: `eb3b447` は3名とも確定指摘なし。残した P3: Chromium 用の問い合わせ文（`URL of active tab of front window`）はテストでコンパイルしていない（Chrome の無い Mac で誤って落ちないよう、必ずある Safari だけをコンパイルしている）。実機の M8 で確かめる。
