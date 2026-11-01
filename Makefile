@@ -9,7 +9,7 @@ CONFIG  ?=
 CONFIG_FLAG := $(if $(CONFIG),--config $(CONFIG),)
 
 .DEFAULT_GOAL := dev
-.PHONY: help dev build start stop restart status log test verify
+.PHONY: help dev build start stop restart status log test verify verify-auto
 
 help: ## 利用可能なターゲット一覧を表示する
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -49,3 +49,7 @@ test: ## swift test
 
 verify: ## 検証スキル（実機 M 項目を含む。--no-live は VERIFY_ARGS=--no-live）
 	.claude/skills/verify-keypipe-rules/verify.sh $(VERIFY_ARGS)
+
+verify-auto: build ## 人手もデーモン停止も要らない自動検証（rules と terminals の --no-live）
+	.claude/skills/verify-keypipe-rules/verify.sh --no-live
+	.claude/skills/verify-keypipe-terminals/verify.sh --no-live

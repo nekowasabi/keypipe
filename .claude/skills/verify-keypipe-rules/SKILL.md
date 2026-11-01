@@ -111,7 +111,7 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | M6 | TextEdit `1xyz!!!` under a `!!!` any rule: shifted key translated to `!`, trigger erased (field `1xyz`) | live |
 | M3 | Finder frontmost, `@@@` is seen (`nomatch` +1), no rule fires, daemon still alive | live |
 | M7 | Chrome `textarea` (file URL): `hello@@@` becomes `HELLO` through a delayed AXValue write, no `apply-failed`; the tab is closed afterwards | live |
-| M4 | iTerm2 probe recorded (risk check, not a behavior claim) | live |
+| M4 | iTerm2 probe recorded (risk check, not a behavior claim; terminal behavior is in `verify-keypipe-terminals`) | live |
 
 Feature recipes live in [`features/`](features/README.md).
 
