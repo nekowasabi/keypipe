@@ -15,7 +15,9 @@ struct Snapshot: Equatable {
 
 /// The rule's focus requirement, then its fact conditions in cost order.
 func evaluate(_ when: When, _ sheet: FactSheet) -> Conditions.Verdict {
-    guard sheet.snapshot.focus != .composing && sheet.snapshot.focus != .terminal else { return .noMatch }
+    guard sheet.snapshot.focus != .composing && sheet.snapshot.focus != .terminal else {
+        return .noMatch
+    }
     guard when.focus == .any || sheet.snapshot.focus == .text else { return .noMatch }
     return when.conditions.evaluate(sheet)
 }

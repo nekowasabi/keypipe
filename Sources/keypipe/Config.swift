@@ -52,8 +52,9 @@ func loadConfig(path: String) throws -> KeypipeConfig {
 }
 
 func readConfigData(path: String) throws -> Data {
-    do { return try Data(contentsOf: URL(fileURLWithPath: path)) }
-    catch { throw ConfigError.unreadable(error.localizedDescription) }
+    do { return try Data(contentsOf: URL(fileURLWithPath: path)) } catch {
+        throw ConfigError.unreadable(error.localizedDescription)
+    }
 }
 
 /// The parse itself. A background job parses the bytes its parent loaded, so the rule index
@@ -76,8 +77,9 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
         return string
     }
     let json: Any
-    do { json = try JSONSerialization.jsonObject(with: data) }
-    catch { throw ConfigError.invalid("JSON decoding failed: \(error.localizedDescription)") }
+    do { json = try JSONSerialization.jsonObject(with: data) } catch {
+        throw ConfigError.invalid("JSON decoding failed: \(error.localizedDescription)")
+    }
     // Why: a fallback runs inside the job (or the sync fire) that already owns the
     // caller's wait, so only a primary output may ask to go to the background.
     func parseOutput(_ value: Any, _ focus: When.Focus, primary: Bool) throws -> Output {
@@ -91,11 +93,15 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
             let sink = try object(value, keys: primary ? ["shell", "background"] : ["shell"])
             var background = false
             if let value = sink["background"] {
-                guard let flag = value as? Bool else { throw ConfigError.invalid("background must be a boolean") }
+                guard let flag = value as? Bool else {
+                    throw ConfigError.invalid("background must be a boolean")
+                }
                 background = flag
             }
-            output = .shell(ShellOutput(script: try nonempty(sink["shell"] ?? NSNull(), name: "output.shell"),
-                                        background: background))
+            output = .shell(
+                ShellOutput(
+                    script: try nonempty(sink["shell"] ?? NSNull(), name: "output.shell"),
+                    background: background))
         }
         if output.needsTextField && focus != .textField {
             throw ConfigError.invalid("output \(output.name) requires focus textField")
@@ -120,7 +126,9 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
     let root = try object(json, keys: ["rules", "deny", "shellTimeout", "backgroundTimeout"])
     var deny: [Conditions] = []
     if let value = root["deny"] {
-        guard let entries = value as? [Any] else { throw ConfigError.invalid("deny must be an array") }
+        guard let entries = value as? [Any] else {
+            throw ConfigError.invalid("deny must be an array")
+        }
         deny = try entries.map { entry in
             let entry = try conditions(object(entry, keys: Set(FactName.allCases.map(\.rawValue))))
             // Why: an empty entry would stop every fire.
@@ -146,7 +154,8 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
         throw ConfigError.invalid("rules must be an array")
     }
     let rules = try values.map { value -> Rule in
-        let entry = try object(value, keys: ["trigger", "hotkey", "when", "transform", "output", "onFail"])
+        let entry = try object(
+            value, keys: ["trigger", "hotkey", "when", "transform", "output", "onFail"])
         let trigger: Trigger
         switch (entry["trigger"], entry["hotkey"]) {
         case (nil, nil): throw ConfigError.invalid("rule needs trigger or hotkey")
@@ -154,7 +163,8 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
         case (.some(let value), nil):
             let text = try nonempty(value, name: "trigger")
             guard text.count <= triggerMaxBuffer else {
-                throw ConfigError.invalid("rule trigger exceeds \(triggerMaxBuffer) characters and can never match")
+                throw ConfigError.invalid(
+                    "rule trigger exceeds \(triggerMaxBuffer) characters and can never match")
             }
             trigger = .text(text)
         case (nil, .some(let value)):
@@ -162,7 +172,8 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
         }
         var when = When()
         if let value = entry["when"] {
-            let condition = try object(value, keys: Set(["focus"] + FactName.allCases.map(\.rawValue)))
+            let condition = try object(
+                value, keys: Set(["focus"] + FactName.allCases.map(\.rawValue)))
             when.conditions = try conditions(condition)
             if let value = condition["focus"] {
                 guard let name = value as? String else {
@@ -177,11 +188,15 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
         var transform = try entry["transform"].map {
             Guarded(primary: try nonempty($0, name: "transform"))
         }
-        var output = Guarded(primary: try entry["output"].map { try parseOutput($0, when.focus, primary: true) } ?? .builtin(.none))
+        var output = Guarded(
+            primary: try entry["output"].map { try parseOutput($0, when.focus, primary: true) }
+                ?? .builtin(.none))
         if let value = entry["onFail"] {
             let fallback = try object(value, keys: ["transform", "output"])
             if let value = fallback["transform"] {
-                guard transform != nil else { throw ConfigError.invalid("onFail.transform requires transform") }
+                guard transform != nil else {
+                    throw ConfigError.invalid("onFail.transform requires transform")
+                }
                 transform?.onFail = try nonempty(value, name: "transform")
             }
             if let value = fallback["output"] {
@@ -190,11 +205,13 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
                 }
                 output.onFail = try parseOutput(value, when.focus, primary: false)
                 if output.primary.isBackground, let fallback = output.onFail, !fallback.detachable {
-                    throw ConfigError.invalid("a background output cannot fall back to \(fallback.name)")
+                    throw ConfigError.invalid(
+                        "a background output cannot fall back to \(fallback.name)")
                 }
             }
         }
         return Rule(trigger: trigger, when: when, transform: transform, output: output)
     }
-    return KeypipeConfig(rules: rules, deny: deny, shellTimeout: shellTimeout, backgroundTimeout: backgroundTimeout)
+    return KeypipeConfig(
+        rules: rules, deny: deny, shellTimeout: shellTimeout, backgroundTimeout: backgroundTimeout)
 }

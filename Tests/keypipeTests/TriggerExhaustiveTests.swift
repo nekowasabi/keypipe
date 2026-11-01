@@ -65,7 +65,9 @@ final class TriggerExhaustiveTests: XCTestCase {
                 let actual = actualFires(input, maxBuffer: maxBuffer, resetOnHit: true)
                 let expected = expectedFiresWithReset(input)
                 if actual != expected {
-                    XCTFail("maxBuffer \(maxBuffer), keys [\(describe(input))]: fired at \(actual), want \(expected)")
+                    XCTFail(
+                        "maxBuffer \(maxBuffer), keys [\(describe(input))]: fired at \(actual), want \(expected)"
+                    )
                     return false
                 }
                 return true
@@ -79,7 +81,9 @@ final class TriggerExhaustiveTests: XCTestCase {
                 let actual = actualFires(input, maxBuffer: maxBuffer, resetOnHit: false)
                 let expected = expectedFiresWithoutReset(input)
                 if actual != expected {
-                    XCTFail("maxBuffer \(maxBuffer), keys [\(describe(input))]: hit at \(actual), want \(expected)")
+                    XCTFail(
+                        "maxBuffer \(maxBuffer), keys [\(describe(input))]: hit at \(actual), want \(expected)"
+                    )
                     return false
                 }
                 return true
@@ -94,7 +98,8 @@ final class TriggerExhaustiveTests: XCTestCase {
             let actual = actualFires(input, maxBuffer: triggerMaxBuffer, resetOnHit: true)
             let expected = expectedFiresWithReset(input)
             XCTAssertEqual(actual, expected, "prefix length \(length)")
-            XCTAssertEqual(actual.last, input.count - 1, "prefix length \(length): final @@@ must fire")
+            XCTAssertEqual(
+                actual.last, input.count - 1, "prefix length \(length): final @@@ must fire")
         }
     }
 }

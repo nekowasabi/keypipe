@@ -64,7 +64,10 @@ struct Conditions: Equatable {
             .map(\.element)
     }
 
-    enum Verdict: Equatable { case match, noMatch, unreadable(FactName, String) }
+    enum Verdict: Equatable {
+        case match, noMatch
+        case unreadable(FactName, String)
+    }
 
     /// Short-circuits in cost order: the first term that does not match decides.
     func evaluate(_ sheet: FactSheet) -> Verdict {

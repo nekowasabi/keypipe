@@ -1,13 +1,15 @@
 import Foundation
 
 func jsonString(_ text: String) -> String {
-    let data = try! JSONSerialization.data(withJSONObject: text, options: [.fragmentsAllowed, .withoutEscapingSlashes])
+    let data = try! JSONSerialization.data(
+        withJSONObject: text, options: [.fragmentsAllowed, .withoutEscapingSlashes])
     return String(decoding: data, as: UTF8.self)
 }
 
 /// Why a stage failed. The token is both the transcript word and KEYPIPE_FAILURE.
 enum Failure: Error, Hashable {
-    case exit(Int32), timeout, empty, ignored, gone
+    case exit(Int32)
+    case timeout, empty, ignored, gone
     /// The desktop cannot do it at all (typeText through --line: there is no caret).
     case unsupported
 
@@ -40,7 +42,9 @@ func waitForTrigger(_ field: Field, _ trigger: String, _ desktop: Desktop) -> St
 /// Erases the trigger and returns the field text to use as input. nil means the
 /// field is gone. Erase failures other than that are reported and carried on,
 /// so a slow transform's result is never thrown away over a stray trigger.
-func performErase(_ field: Field, trigger: String, _ desktop: Desktop, emit: (String) -> Void) -> String? {
+func performErase(_ field: Field, trigger: String, _ desktop: Desktop, emit: (String) -> Void)
+    -> String?
+{
     guard let before = waitForTrigger(field, trigger, desktop) else { return nil }
     desktop.backspace(trigger.count)
     emit("keypipe erase \(trigger.count)")
@@ -115,7 +119,9 @@ enum FireResult: Equatable {
     enum Stage: String { case transform, output, spawn }
 
     /// One per case, so a test can demand a golden --report line for every kind of outcome.
-    enum Kind: CaseIterable { case blocked, noMatch, unreadable, noInput, replaced, delivered, started, failed }
+    enum Kind: CaseIterable {
+        case blocked, noMatch, unreadable, noInput, replaced, delivered, started, failed
+    }
 
     var kind: Kind {
         switch self {
@@ -150,10 +156,12 @@ struct Engine {
     private let hotkeys: Set<Hotkey>
     private(set) var hits = 0
 
-    init(config: KeypipeConfig, desktop: Desktop,
-         shell: @escaping (String, String, [String: String], TimeInterval) -> ShellOutcome,
-         emit: @escaping (String) -> Void,
-         background: @escaping (Job) -> Bool = { _ in false }) {
+    init(
+        config: KeypipeConfig, desktop: Desktop,
+        shell: @escaping (String, String, [String: String], TimeInterval) -> ShellOutcome,
+        emit: @escaping (String) -> Void,
+        background: @escaping (Job) -> Bool = { _ in false }
+    ) {
         self.config = config
         self.background = background
         self.desktop = desktop
@@ -193,7 +201,8 @@ struct Engine {
         if snapshot.focus == .terminal {
             // Why: a terminal's AX field is the whole pane. A text trigger there belongs to the
             // zsh widget; only a hotkey rule that reads no field may still run (empty input).
-            candidates = trigger.isHotkey ? candidates.filter { config.rules[$0].when.focus == .any } : []
+            candidates =
+                trigger.isHotkey ? candidates.filter { config.rules[$0].when.focus == .any } : []
             guard !candidates.isEmpty else {
                 emit("keypipe terminal \(trigger)")
                 return .blocked("terminal")
@@ -227,7 +236,9 @@ struct Engine {
             // In a terminal the filter above already kept only focus-any rules; evaluate() itself
             // treats a terminal as matching nothing, which is right for every other caller.
             let when = config.rules[candidate].when
-            let verdict = snapshot.focus == .terminal ? when.conditions.evaluate(sheet) : evaluate(when, sheet)
+            let verdict =
+                snapshot.focus == .terminal
+                ? when.conditions.evaluate(sheet) : evaluate(when, sheet)
             if verdict == .noMatch { continue }
             if case .unreadable(let fact, let reason) = verdict {
                 // Why: a rule meant for one site must not turn into the next rule of the trigger.
@@ -252,17 +263,22 @@ struct Engine {
             var moved = now.app != snapshot.app || now.focus != snapshot.focus || now.secure
             // Another field of the same app: the old one still ends with the trigger, but the
             // Backspaces would land in the new one.
-            if !moved, let before = snapshot.field, let after = now.field, !desktop.sameField(before, after) {
+            if !moved, let before = snapshot.field, let after = now.field,
+                !desktop.sameField(before, after)
+            {
                 moved = true
             }
             // Why waitForTrigger and not one read: a trigger key the tap saw may still be on its way
             // into the field, exactly as on the fast path (R4e).
-            if !moved, case .text(let text) = trigger, snapshot.focus == .text, let field = snapshot.field {
+            if !moved, case .text(let text) = trigger, snapshot.focus == .text,
+                let field = snapshot.field
+            {
                 moved = !(waitForTrigger(field, text, desktop)?.hasSuffix(text) ?? false)
                 // The wait can take 0.1 s more: look at the focus once more after it.
                 if !moved {
                     let after = desktop.snapshot()
-                    moved = after.app != snapshot.app || after.focus != snapshot.focus || after.secure
+                    moved =
+                        after.app != snapshot.app || after.focus != snapshot.focus || after.secure
                         || !(after.field.map { desktop.sameField(field, $0) } ?? false)
                 }
             }
@@ -277,11 +293,14 @@ struct Engine {
         switch (trigger, rule.when.focus) {
         case (.text(let text), .textField):
             guard let field = snapshot.field,
-                  let erased = performErase(field, trigger: text, desktop, emit: emit) else { return .noInput(rule: index) }
+                let erased = performErase(field, trigger: text, desktop, emit: emit)
+            else { return .noInput(rule: index) }
             input = erased
         case (.hotkey, .textField):
             emit("keypipe erase 0")
-            guard let field = snapshot.field, let current = desktop.text(field) else { return .noInput(rule: index) }
+            guard let field = snapshot.field, let current = desktop.text(field) else {
+                return .noInput(rule: index)
+            }
             input = current
         case (.text(let text), .any):
             let count = snapshot.focus == .text ? text.count : 0
@@ -316,7 +335,10 @@ struct Engine {
         return run(config.rules[job.rule], job.rule, job.input, job.environment, nil)
     }
 
-    private func run(_ rule: Rule, _ index: Int, _ input: String, _ environment: [String: String], _ field: Field?) -> FireResult {
+    private func run(
+        _ rule: Rule, _ index: Int, _ input: String, _ environment: [String: String],
+        _ field: Field?
+    ) -> FireResult {
         let trigger = rule.trigger
         var result = input
         if let transform = rule.transform {
@@ -332,14 +354,18 @@ struct Engine {
                 ? .replaced(rule: index, text: result, viaFallback: viaFallback)
                 : .delivered(rule: index, viaFallback: viaFallback)
         }
-        guard let failure = apply(rule.output.primary, result, environment, field, prefix: "") else {
+        guard let failure = apply(rule.output.primary, result, environment, field, prefix: "")
+        else {
             return success(rule.output.primary, viaFallback: false)
         }
         guard let fallback = rule.output.onFail else {
             // Why: without a fallback the text must not be lost, and a sync shell's own
             // failure is already visible in the transcript; nobody watches a job's.
-            if case .builtin = rule.output.primary { notify(result) }
-            else if rule.output.primary.isBackground { notify("\(trigger) output failed: \(failure.token)") }
+            if case .builtin = rule.output.primary {
+                notify(result)
+            } else if rule.output.primary.isBackground {
+                notify("\(trigger) output failed: \(failure.token)")
+            }
             return .failed(rule: index, stage: .output, failure: failure.token)
         }
         var environment2 = environment
@@ -352,7 +378,9 @@ struct Engine {
     }
 
     /// Primary once, then onFail once with the same input and KEYPIPE_FAILURE set.
-    private func runTransform(_ transform: Guarded<String>, _ input: String, _ env: [String: String])
+    private func runTransform(
+        _ transform: Guarded<String>, _ input: String, _ env: [String: String]
+    )
         -> Result<String, Failure>
     {
         switch shellStage(transform.primary, input, env, prefix: "", stage: "transform") {
@@ -365,7 +393,9 @@ struct Engine {
         }
     }
 
-    private func shellStage(_ script: String, _ input: String, _ env: [String: String], prefix: String, stage: String)
+    private func shellStage(
+        _ script: String, _ input: String, _ env: [String: String], prefix: String, stage: String
+    )
         -> Result<String, Failure>
     {
         switch shell(script, input, env, config.shellTimeout) {
@@ -385,7 +415,9 @@ struct Engine {
     }
 
     /// nil on success. A sink that cannot fail (spec.failures empty) always returns nil.
-    private func apply(_ output: Output, _ result: String, _ env: [String: String], _ field: Field?, prefix: String)
+    private func apply(
+        _ output: Output, _ result: String, _ env: [String: String], _ field: Field?, prefix: String
+    )
         -> Failure?
     {
         switch output {
@@ -397,7 +429,9 @@ struct Engine {
             emit("keypipe \(prefix)apply \(sink.rawValue) \(jsonString(result))")
             return nil
         case .shell(let shell):
-            if case .failure(let failure) = shellStage(shell.script, result, env, prefix: prefix, stage: "output-shell") {
+            if case .failure(let failure) = shellStage(
+                shell.script, result, env, prefix: prefix, stage: "output-shell")
+            {
                 return failure
             }
             return nil

@@ -11,7 +11,9 @@ final class LineDesktop: Desktop {
     }
 
     func snapshot() -> Snapshot {
-        Snapshot(app: app, focus: line == nil ? .nothing : .text, field: line == nil ? nil : Field(token: 0))
+        Snapshot(
+            app: app, focus: line == nil ? .nothing : .text,
+            field: line == nil ? nil : Field(token: 0))
     }
 
     func backspace(_ count: Int) { line = line.map { String($0.dropLast(count)) } }

@@ -68,7 +68,8 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
     // Typed: with Glibc the literal is otherwise inferred as an array of C pointers and does not compile.
     let argv: [String] = ["/bin/sh", "-c", script, "keypipe", input]
     let arguments: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) } + [nil]
-    let variables: [UnsafeMutablePointer<CChar>?] = environment.sorted { $0.key < $1.key }.map { strdup("\($0.key)=\($0.value)") } + [nil]
+    let variables: [UnsafeMutablePointer<CChar>?] =
+        environment.sorted { $0.key < $1.key }.map { strdup("\($0.key)=\($0.value)") } + [nil]
     defer {
         arguments.forEach { free($0) }
         variables.forEach { free($0) }
@@ -121,10 +122,13 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
         if writer >= 0 {
             if offset < bytes.count {
                 let count = bytes.withUnsafeBytes {
-                    write(writer, $0.baseAddress!.advanced(by: offset), min(16384, bytes.count - offset))
+                    write(
+                        writer, $0.baseAddress!.advanced(by: offset),
+                        min(16384, bytes.count - offset))
                 }
-                if count > 0 { offset += count }
-                else if count < 0 && errno != EAGAIN && errno != EINTR {
+                if count > 0 {
+                    offset += count
+                } else if count < 0 && errno != EAGAIN && errno != EINTR {
                     close(writer)
                     writer = -1
                 }
@@ -162,7 +166,8 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
 /// A macOS notification, the one notifier the daemon, the bridge and background jobs share.
 func notifyUser(_ text: String) {
     // Why: the text rides in argv, never in the AppleScript source (R8).
-    let script = "osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title \"keypipe\"' -e 'end run' \"$1\""
+    let script =
+        "osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title \"keypipe\"' -e 'end run' \"$1\""
     _ = runShell(script, input: text, env: [:], timeout: 5)
 }
 
@@ -170,8 +175,10 @@ func notifyUser(_ text: String) {
 /// /dev/null for output, and returns without waiting. false if it did not start.
 /// `descriptors` is where Linux lists the open descriptors to close (a parameter only so a test can
 /// make the listing fail).
-func spawnDetached(_ path: String, _ args: [String], stdin payload: Data,
-                   descriptors: String = "/proc/self/fd") -> Bool {
+func spawnDetached(
+    _ path: String, _ args: [String], stdin payload: Data,
+    descriptors: String = "/proc/self/fd"
+) -> Bool {
     signal(SIGPIPE, SIG_IGN)
     var fds: [Int32] = [0, 0]
     guard pipe(&fds) == 0 else { return false }
@@ -209,7 +216,8 @@ func spawnDetached(_ path: String, _ args: [String], stdin payload: Data,
             close(fds[1])
             return false
         }
-        for fd in open.compactMap({ Int32($0) }) where fd > 2 && fd != fds[1] && fcntl(fd, F_GETFD) != -1 {
+        for fd in open.compactMap({ Int32($0) })
+        where fd > 2 && fd != fds[1] && fcntl(fd, F_GETFD) != -1 {
             posix_spawn_file_actions_addclose(&actions, fd)
         }
     #endif
@@ -225,7 +233,8 @@ func spawnDetached(_ path: String, _ args: [String], stdin payload: Data,
     payload.withUnsafeBytes { buffer in
         var offset = 0
         while offset < buffer.count {
-            let count = write(fds[1], buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
+            let count = write(
+                fds[1], buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
             if count > 0 { offset += count } else if errno != EINTR { break }
         }
     }

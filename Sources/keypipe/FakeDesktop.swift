@@ -51,10 +51,12 @@ final class FakeDesktop: Desktop {
     /// later read return nil, like a window closed during a slow transform.
     /// writePerRead applies setText on the read after the next one, like
     /// Chromium landing an AXValue write a few milliseconds later.
-    init(app: String? = nil, focus: Focus = .nothing, fieldText: String = "",
-         ignoresBackspace: Bool = false, backspacePerRead: Bool = false, keysPerRead: Bool = false,
-         ignoresWrite: Bool = false, goneAfterErase: Bool = false, writePerRead: Bool = false,
-         secure: Bool = false, facts: [FactName: FactRead] = [:], appAfterSlowRead: String? = nil) {
+    init(
+        app: String? = nil, focus: Focus = .nothing, fieldText: String = "",
+        ignoresBackspace: Bool = false, backspacePerRead: Bool = false, keysPerRead: Bool = false,
+        ignoresWrite: Bool = false, goneAfterErase: Bool = false, writePerRead: Bool = false,
+        secure: Bool = false, facts: [FactName: FactRead] = [:], appAfterSlowRead: String? = nil
+    ) {
         self.app = app
         self.secure = secure
         self.facts = facts
@@ -80,16 +82,23 @@ final class FakeDesktop: Desktop {
         }
         var facts: [FactName: FactRead] = [:]
         for (key, value) in context.facts ?? [:] {
-            guard let name = FactName(rawValue: key), name != .app else { throw ConfigError.invalid("unknown fact \(key)") }
+            guard let name = FactName(rawValue: key), name != .app else {
+                throw ConfigError.invalid("unknown fact \(key)")
+            }
             facts[name] = .value(value)
         }
         for (key, reason) in context.unreadableFacts ?? [:] {
-            guard let name = FactName(rawValue: key), name != .app else { throw ConfigError.invalid("unknown fact \(key)") }
+            guard let name = FactName(rawValue: key), name != .app else {
+                throw ConfigError.invalid("unknown fact \(key)")
+            }
             facts[name] = .unreadable(reason)
         }
         self.init(
             app: context.app,
-            focus: context.ownsPty == true ? .terminal : context.composing == true ? .composing : context.focusIsTextField ? .text : .nothing,
+            focus: context.ownsPty == true
+                ? .terminal
+                : context.composing == true
+                    ? .composing : context.focusIsTextField ? .text : .nothing,
             fieldText: context.fieldText,
             ignoresBackspace: context.ignoresBackspace ?? false,
             backspacePerRead: context.backspacePerRead ?? false,
@@ -103,13 +112,18 @@ final class FakeDesktop: Desktop {
     }
 
     func key(_ character: Character) {
-        if keysPerRead && focus == .text { pendingKeys.append(character) } else { fieldText.append(character) }
+        if keysPerRead && focus == .text {
+            pendingKeys.append(character)
+        } else {
+            fieldText.append(character)
+        }
     }
 
     func snapshot() -> Snapshot {
         let slowRead = reads.contains { $0.cost == .slow }
-        return Snapshot(app: slowRead ? (appAfterSlowRead ?? app) : app, focus: focus,
-                        field: focus == .text ? Field(token: 0) : nil, secure: secure)
+        return Snapshot(
+            app: slowRead ? (appAfterSlowRead ?? app) : app, focus: focus,
+            field: focus == .text ? Field(token: 0) : nil, secure: secure)
     }
 
     /// Same contract as MacDesktop: a caret exists in a text field (the text lands at its end) or a
@@ -128,12 +142,21 @@ final class FakeDesktop: Desktop {
     func backspace(_ count: Int) {
         erased = true
         if ignoresBackspace { return }
-        if backspacePerRead { pendingBackspaces += count } else { fieldText.removeLast(min(count, fieldText.count)) }
+        if backspacePerRead {
+            pendingBackspaces += count
+        } else {
+            fieldText.removeLast(min(count, fieldText.count))
+        }
     }
 
     func text(_ field: Field) -> String? {
         guard field.token == 0 && focus == .text && !gone else { return nil }
-        defer { if let pending = pendingWrite { fieldText = pending; pendingWrite = nil } }
+        defer {
+            if let pending = pendingWrite {
+                fieldText = pending
+                pendingWrite = nil
+            }
+        }
         if !pendingKeys.isEmpty { fieldText.append(pendingKeys.removeFirst()) }
         if pendingBackspaces > 0 {
             pendingBackspaces -= 1

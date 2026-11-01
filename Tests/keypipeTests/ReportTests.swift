@@ -21,11 +21,13 @@ final class ReportTests: XCTestCase {
     ]
 
     static var fixture: URL {
-        URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/report-v1.jsonl")
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent(
+            "Fixtures/report-v1.jsonl")
     }
 
     func testEveryOutcomeRendersTheGoldenLine() throws {
-        let lines = try String(contentsOf: Self.fixture, encoding: .utf8).split(separator: "\n").map(String.init)
+        let lines = try String(contentsOf: Self.fixture, encoding: .utf8).split(separator: "\n")
+            .map(String.init)
         XCTAssertEqual(lines.count, Self.golden.count, "one golden line per case")
         for ((result, _), line) in zip(Self.golden, lines) {
             XCTAssertEqual(result.reportJSON, line)

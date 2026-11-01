@@ -14,7 +14,10 @@ enum BuiltinSink: String, CaseIterable {
         switch self {
         case .none: return SinkSpec(failures: [])
         case .notify: return SinkSpec(failures: [])
-        case .replaceInput: return SinkSpec(failures: [.ignored, .gone], needsTextField: true, writesField: true, detachable: false)
+        case .replaceInput:
+            return SinkSpec(
+                failures: [.ignored, .gone], needsTextField: true, writesField: true,
+                detachable: false)
         case .typeText: return SinkSpec(failures: [.unsupported], detachable: false)
         }
     }
@@ -53,7 +56,8 @@ struct SinkSpec {
 }
 
 enum Output: Equatable {
-    case builtin(BuiltinSink), shell(ShellOutput)
+    case builtin(BuiltinSink)
+    case shell(ShellOutput)
 
     var isBackground: Bool {
         if case .shell(let shell) = self { return shell.background }

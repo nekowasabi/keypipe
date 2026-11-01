@@ -25,7 +25,9 @@ let usage = """
 /// silently, and looking flags up by position read a value such as `--line --config` as a flag.
 let (flags, values): (Set<String>, [String: String]) = {
     let args = CommandLine.arguments
-    let takesValue: Set = ["--config", "--context", "--line", "--app", "--smoke-feed", "--smoke-hotkey"]
+    let takesValue: Set = [
+        "--config", "--context", "--line", "--app", "--smoke-feed", "--smoke-hotkey",
+    ]
     let alone: Set = ["--job", "--probe", "--triggers", "--report", "--feed-stdin"]
     func refuse(_ why: String) -> Never {
         fputs("keypipe: \(why)\n\(usage)\n", stderr)
@@ -36,7 +38,10 @@ let (flags, values): (Set<String>, [String: String]) = {
     var index = 1
     while index < args.count {
         let arg = args[index]
-        if arg == "--help" || arg == "-h" { emit(usage); exit(0) }
+        if arg == "--help" || arg == "-h" {
+            emit(usage)
+            exit(0)
+        }
         // Why: which of two values wins is a guess either way; nothing passes a flag twice.
         if flags.contains(arg) { refuse("\(arg) given twice") }
         if takesValue.contains(arg) {
@@ -51,7 +56,8 @@ let (flags, values): (Set<String>, [String: String]) = {
         index += 1
     }
     // A modifier without its mode would fall through to the daemon as well.
-    for modifier in ["--report", "--app"] where flags.contains(modifier) && !flags.contains("--line") {
+    for modifier in ["--report", "--app"]
+    where flags.contains(modifier) && !flags.contains("--line") {
         refuse("\(modifier) needs --line")
     }
     return (flags, values)
@@ -73,7 +79,8 @@ if flags.contains("--probe") {
         probe["focusIsTextField"] = snapshot.focus == .text
         if let field = snapshot.field { probe["fieldText"] = mac.text(field) ?? NSNull() }
     #endif
-    let data = try! JSONSerialization.data(withJSONObject: probe, options: [.sortedKeys, .withoutEscapingSlashes])
+    let data = try! JSONSerialization.data(
+        withJSONObject: probe, options: [.sortedKeys, .withoutEscapingSlashes])
     emit(String(decoding: data, as: UTF8.self))
     exit(0)
 }
@@ -81,7 +88,8 @@ if flags.contains("--probe") {
 /// $XDG_CONFIG_HOME/keypipe/config.json, or ~/.config/keypipe/config.json.
 let defaultConfigFile: String = {
     let environment = ProcessInfo.processInfo.environment
-    let base = environment["XDG_CONFIG_HOME"].flatMap { $0.isEmpty ? nil : $0 }
+    let base =
+        environment["XDG_CONFIG_HOME"].flatMap { $0.isEmpty ? nil : $0 }
         ?? NSString(string: "~/.config").expandingTildeInPath
     return base + "/keypipe/config.json"
 }()
@@ -92,17 +100,24 @@ let fake: FakeDesktop
 do {
     configBytes = try readConfigData(path: configFile)
     loaded = try loadConfig(data: configBytes)
-    if let path = values["--context"] { fake = try FakeDesktop(path: path) }
-    else { fake = FakeDesktop() }
+    if let path = values["--context"] {
+        fake = try FakeDesktop(path: path)
+    } else {
+        fake = FakeDesktop()
+    }
 } catch {
     fputs("\(error)\n", stderr)
     if values["--config"] == nil {
-        fputs("keypipe: no --config given; copy config.example.json to \(defaultConfigFile)\n", stderr)
+        fputs(
+            "keypipe: no --config given; copy config.example.json to \(defaultConfigFile)\n", stderr
+        )
     }
     exit(1)
 }
 
-let spawnJob: (Job) -> Bool = { startJob($0, configPath: configFile, configBytes: configBytes, emit: emit) }
+let spawnJob: (Job) -> Bool = {
+    startJob($0, configPath: configFile, configBytes: configBytes, emit: emit)
+}
 
 if flags.contains("--triggers") {
     var seen = Set<String>()
@@ -126,8 +141,11 @@ if flags.contains("--line") {
     let desktop = LineDesktop(app: app, line: input + trigger)
     // Why: stdout carries only the line, so the transcript goes to stderr.
     let toStderr: (String) -> Void = { fputs($0 + "\n", stderr) }
-    var engine = Engine(config: loaded, desktop: desktop, shell: runShell, emit: toStderr,
-                        background: { startJob($0, configPath: configFile, configBytes: configBytes, emit: toStderr) })
+    var engine = Engine(
+        config: loaded, desktop: desktop, shell: runShell, emit: toStderr,
+        background: {
+            startJob($0, configPath: configFile, configBytes: configBytes, emit: toStderr)
+        })
     let result = engine.fire(.text(trigger))
     // Why: --report is for callers that act on the outcome (voice-switch). Plain --line keeps
     // the zsh widget's contract byte for byte: the line on stdout, exit 0 on a hit, 2 otherwise.
@@ -143,7 +161,8 @@ if flags.contains("--line") {
 let seed = values["--smoke-feed"]
 let chord = values["--smoke-hotkey"]
 if seed != nil || chord != nil {
-    var engine = Engine(config: loaded, desktop: fake, shell: runShell, emit: emit, background: spawnJob)
+    var engine = Engine(
+        config: loaded, desktop: fake, shell: runShell, emit: emit, background: spawnJob)
     for character in seed ?? "" {
         fake.key(character)
         engine.key(character)
@@ -160,7 +179,8 @@ if seed != nil || chord != nil {
 }
 
 if flags.contains("--feed-stdin") {
-    var engine = Engine(config: loaded, desktop: fake, shell: runShell, emit: emit, background: spawnJob)
+    var engine = Engine(
+        config: loaded, desktop: fake, shell: runShell, emit: emit, background: spawnJob)
     emit("keypipe started with \(loaded.rules.count) rule(s) from \(configFile)")
     while let line = readLine(strippingNewline: false) {
         for character in line {
@@ -174,20 +194,25 @@ if flags.contains("--feed-stdin") {
 
 #if os(macOS)
     guard MacDesktop.trusted else {
-        fputs("keypipe: Accessibility not granted; allow this binary in System Settings > Privacy & Security > Accessibility\n", stderr)
+        fputs(
+            "keypipe: Accessibility not granted; allow this binary in System Settings > Privacy & Security > Accessibility\n",
+            stderr)
         exit(1)
     }
-    var engine = Engine(config: loaded, desktop: MacDesktop(), shell: runShell, emit: emit, background: spawnJob)
+    var engine = Engine(
+        config: loaded, desktop: MacDesktop(), shell: runShell, emit: emit, background: spawnJob)
     // Why: Engine.key blocks on shells and erase readback; the tap callback must not.
     let queue = DispatchQueue(label: "keypipe.engine")
-    guard let tap = MacKeyTap(onInput: { input in
-        queue.async {
-            switch input {
-            case .char(let character): engine.key(character)
-            case .hotkey(let hotkey): engine.hotkey(hotkey)
+    guard
+        let tap = MacKeyTap(onInput: { input in
+            queue.async {
+                switch input {
+                case .char(let character): engine.key(character)
+                case .hotkey(let hotkey): engine.hotkey(hotkey)
+                }
             }
-        }
-    }) else {
+        })
+    else {
         fputs("keypipe: could not create the event tap\n", stderr)
         exit(1)
     }

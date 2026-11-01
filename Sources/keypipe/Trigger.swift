@@ -14,7 +14,8 @@ struct Hotkey: Hashable, CustomStringConvertible {
     var key: String
 
     var description: String {
-        (Modifier.allCases.filter(modifiers.contains).map(\.rawValue) + [key]).joined(separator: "+")
+        (Modifier.allCases.filter(modifiers.contains).map(\.rawValue) + [key]).joined(
+            separator: "+")
     }
 
     /// "ctrl+@", "alt+cmd+x", "ctrl++" (the key is "+").
@@ -62,7 +63,10 @@ enum Trigger: Equatable, CustomStringConvertible, ExpressibleByStringLiteral {
 }
 
 /// One keyboard event as the tap reports it.
-enum Input { case char(Character), hotkey(Hotkey) }
+enum Input {
+    case char(Character)
+    case hotkey(Hotkey)
+}
 
 public struct TriggerMatcher {
     private let triggers: [String]

@@ -38,7 +38,8 @@ extension FireResult {
             object["stage"] = stage.rawValue
             object["failure"] = failure
         }
-        let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])
+        let data = try! JSONSerialization.data(
+            withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])
         return String(decoding: data, as: UTF8.self)
     }
 }
