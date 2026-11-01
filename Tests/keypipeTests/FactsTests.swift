@@ -267,30 +267,38 @@ final class FactsTests: XCTestCase {
     /// error once made every URL unreadable on a real Mac while every fake-desktop test passed.
     func testFrontTabScriptCompilesAndKeepsRealErrors() throws {
         #if os(macOS)
-            guard let script = frontTabURLScript("com.google.Chrome") else { return XCTFail("no script") }
-            func run(_ source: String) -> Int32 {
-                let p = Process()
-                p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-                p.arguments = ["-e", source]
-                p.standardOutput = FileHandle.nullDevice
-                p.standardError = FileHandle.nullDevice
-                try? p.run()
-                p.waitUntilExit()
-                return p.terminationStatus
+            let tools = ["/usr/bin/osascript", "/usr/bin/osacompile"]
+            guard tools.allSatisfy({ FileManager.default.isExecutableFile(atPath: $0) }) else {
+                throw XCTSkip("osascript or osacompile is not installed")
             }
-            let compile = Process()
-            compile.executableURL = URL(fileURLWithPath: "/usr/bin/osacompile")
-            compile.arguments = ["-o", FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".scpt").path, "-e", script]
-            compile.standardError = FileHandle.nullDevice
-            try compile.run()
-            compile.waitUntilExit()
-            XCTAssertEqual(compile.terminationStatus, 0, "the URL script must compile")
+            // Safari ships with macOS; `tell application id` needs the app's dictionary to compile.
+            guard let script = frontTabURLScript("com.apple.Safari") else { return XCTFail("no script") }
+            func run(_ tool: String, _ args: [String]) throws -> (status: Int32, stdout: String) {
+                let p = Process()
+                let out = Pipe()
+                p.executableURL = URL(fileURLWithPath: tool)
+                p.arguments = args
+                p.standardOutput = out
+                p.standardError = FileHandle.nullDevice
+                try p.run()
+                let data = out.fileHandleForReading.readDataToEndOfFile()
+                p.waitUntilExit()
+                return (p.terminationStatus, String(decoding: data, as: UTF8.self))
+            }
+            let compiled = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".scpt")
+            defer { try? FileManager.default.removeItem(at: compiled) }
+            XCTAssertEqual(try run("/usr/bin/osacompile", ["-o", compiled.path, "-e", script]).status, 0, "the URL script must compile")
             // The same error handler, driven by errors raised on purpose (no browser needed).
             let handler = script.components(separatedBy: "\n").drop { !$0.hasPrefix("on error") }.joined(separator: "\n")
-            XCTAssertEqual(run("try\nerror \"x\" number -1728\n" + handler), 0, "no window or tab is an empty answer")
-            XCTAssertEqual(run("try\nerror \"x\" number -1719\n" + handler), 0, "no such tab is an empty answer")
-            XCTAssertNotEqual(run("try\nerror \"x\" number -1743\n" + handler), 0, "a denied Automation permission stays an error")
-            XCTAssertNotEqual(run("try\nerror \"x\" number -600\n" + handler), 0, "any other error stays an error")
+            for number in [-1728, -1719] {
+                let answer = try run("/usr/bin/osascript", ["-e", "try\nerror \"x\" number \(number)\n" + handler])
+                XCTAssertEqual(answer.status, 0, "no window or tab (\(number)) is not an error")
+                XCTAssertEqual(answer.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "", "no window or tab (\(number)) is an empty answer")
+            }
+            for number in [-1743, -600] {
+                XCTAssertNotEqual(try run("/usr/bin/osascript", ["-e", "try\nerror \"x\" number \(number)\n" + handler]).status, 0,
+                                  "error \(number) stays an error")
+            }
         #endif
     }
 
