@@ -19,8 +19,10 @@ final class TriggerExhaustiveTests: XCTestCase {
         }
     }
 
-    /// Mirrors feedAndRun in Sources/keypipe/main.swift: feed each character,
-    /// and on a hit run the action and reset the matcher.
+    /// Mirrors Engine.key in Sources/keypipe/Engine.swift: feed each character,
+    /// and on a hit reset the matcher, then fire. (feedAndRun in main.swift was
+    /// folded into Engine.key; --smoke-feed drives Engine.key, so the binary
+    /// sweep in check.sh still exercises the real loop.)
     private func actualFires(_ input: [Character], maxBuffer: Int, resetOnHit: Bool) -> [Int] {
         var matcher = TriggerMatcher(triggers: [trigger], maxBuffer: maxBuffer)
         var fires: [Int] = []

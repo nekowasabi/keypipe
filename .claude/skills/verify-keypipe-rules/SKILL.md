@@ -115,6 +115,28 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 
 Feature recipes live in [`features/`](features/README.md).
 
+## Planned items (extension design, not implemented)
+
+For `docs/design/extension-architecture.md`. Add each item to `verify.sh` in the
+PR that implements it; until then they are a to-do, not a claim. Property-style
+checks are in `verify-keypipe-trigger` (P1-P10).
+
+| ID | PR | What | Harness |
+| --- | --- | --- | --- |
+| R11a | PR1 | `--line --report` prints one JSON line per outcome and exit 0; without `--report` stdout and exit are byte-identical to today (B1-B8 in `verify-keypipe-terminals` stay the oracle) | fake |
+| R11b | PR1 | background spawn failure (unwritable executable path) reports `failed` with `stage spawn`, not `started` | fake |
+| R11c | PR1 | jobs.log keeps `job rule N from <path>`; the child never reads the path (replace the file with an invalid config after the fire: job still runs) | fake |
+| R12a | PR2 | `when.url` rule matches only with `"facts":{"url":...}` in the context; without it the fire ends `unreadable`, no erase, notify once | fake |
+| R12b | PR2 | two rules on one trigger, rule 0 `url`, rule 1 catch-all: TextEdit context never reads `url` (`reads` list) and fires rule 1; Chrome context with unreadable url stops without firing rule 1 | fake |
+| R12c | PR2 | `deny` with `app`+`url` blocks on match and on unreadable; `deny` with `url` alone is `invalid config: deny url requires app` | fake |
+| R12d | PR2 | `"secure": true` context: `keypipe secure <t>`, no erase, no read, no shell | fake |
+| R12e | PR2 | terminal context (`ownsPty`): `focus: any` hotkey rule fires with empty input; `focus: textField` rule still `keypipe terminal <t>` | fake |
+| R12f | PR2 | front app changes during a slow read (context switches `app` on the first `url` read): `keypipe front-changed`, no Backspace sent | fake |
+| R12g | PR2 | `when.app: ["com.apple.*"]` matches TextEdit; every existing R3 config still selects the same rule | fake |
+| M8 | PR2 | Chrome on a `file://` page with a `github.com/*` rule: first fire prompts for Automation; after granting, `hello@@@` becomes the transform result; TextEdit never prompts | live |
+| R13a | PR3 | `typeText` via `--line`: `failed ... unsupported`, `onFail.output: notify` runs | fake |
+| M9 | PR3 | `typeText` in TextEdit types the transform result after the erased trigger, tagged events not re-matched (no second fire) | live |
+
 ## Evidence
 
 Per run: `.verify-evidence/rules-<timestamp>-<pid>/` in the repo (gitignored). Override with `KP_EVIDENCE`.
