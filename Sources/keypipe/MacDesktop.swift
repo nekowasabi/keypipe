@@ -145,14 +145,16 @@
     }
 #endif
 
+/// Browsers whose front tab URL keypipe can read, by the AppleScript dictionary they share.
+let chromiumBrowsers: Set = ["com.google.Chrome", "com.google.Chrome.canary", "com.brave.Browser",
+                             "com.microsoft.edgemac", "com.vivaldi.Vivaldi", "company.thebrowser.Browser"]
+let safariBrowsers: Set = ["com.apple.Safari", "com.apple.SafariTechnologyPreview"]
+
 /// The AppleScript that returns the front tab's URL of a known browser, or nil for any other app.
 func frontTabURLScript(_ bundleID: String) -> String? {
-    let chromium: Set = ["com.google.Chrome", "com.google.Chrome.canary", "com.brave.Browser",
-                         "com.microsoft.edgemac", "com.vivaldi.Vivaldi", "company.thebrowser.Browser"]
-    let safari: Set = ["com.apple.Safari", "com.apple.SafariTechnologyPreview"]
     let query: String
-    if chromium.contains(bundleID) { query = "URL of active tab of front window" }
-    else if safari.contains(bundleID) { query = "URL of front document" }
+    if chromiumBrowsers.contains(bundleID) { query = "URL of active tab of front window" }
+    else if safariBrowsers.contains(bundleID) { query = "URL of front document" }
     else { return nil }
     // Only "no such window or tab" (-1728, -1719) means there is no URL. Every other error, a denied
     // Automation permission (-1743) above all, must stay an error: a deny entry has to stop on it.
