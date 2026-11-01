@@ -7,3 +7,4 @@ DerivedData/
 *.o
 *.d
 .verify-evidence/
+.ooda/
