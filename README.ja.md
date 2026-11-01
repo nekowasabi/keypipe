@@ -104,6 +104,24 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   tap は listen-only なので前面アプリも必ず同じキーを受け取り、アプリがそのキーを
   束縛しているかを keypipe は判別できません。アプリが `ctrl+@` を持っているなら
   `when.app` で発火先を絞ってください。絞らなければ両方が動きます。
+- `when.url` は、前面のブラウザのタブの URL に対するグロブの一覧です（Chrome、Arc、
+  Brave、Edge、Vivaldi、Safari。`osascript` で読むので、macOS がブラウザの操作の
+  許可を一度だけ求めます）。URL は、ルールの安い条件（`app`、`focus`）が満たされた
+  ときだけ、1 回の発火につき最大 1 回読みます。ブラウザが前面なのに URL を読めない
+  とき（許可が無い、1 秒の期限切れ）は、同じトリガーの次のルールへ進まず、通知して
+  止まります。ブラウザ以外のアプリと `--line` の経路（zsh、音声）では、`url` は単に
+  一致しません。URL を読むあいだに前面アプリが変わったら、何も消さず何も走らせません
+  （`keypipe front-changed`）。
+- 事実の条件（`app`、`url`）はどれもグロブの一覧です（`fnmatch`。`*` は `/` も
+  またぎます）。`"app": ["com.apple.*"]` と書け、そのままの id は完全一致のままです。
+  空の一覧は何にも一致しないので、`invalid config: empty <名前> list` で拒否します。
+- `deny`（トップレベル）は、`focus` を除いた `when` と同じ形のオブジェクトの一覧です
+  （例: `{"app": ["com.1password.1password"]}`）。どれかが満たされると、keypipe は
+  ルールも欄の読み取りも行う前に止まります（`keypipe deny`）。`url` を書く項目には
+  `app` も要ります。別のアプリが前面のときに、キー入力のトリガーがブラウザへ問い
+  合わせないためです。`deny` の `url` が読めないときも止まります。
+- パスワード欄（`AXSecureTextField`）では何もしません（`keypipe secure`）。消さず、
+  読まず、シェルも走らせません。
 - `when.app` は bundle id の一覧（省略で全アプリ）。`when.focus` は `textField` か
   `any`（既定）。`textField` のルールはテキスト要素にフォーカスがあるときだけ
   発火し、トリガーを消して欄を読み、それが入力になります。`any` のルールはどこでも
@@ -115,6 +133,8 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   出力は失敗です。`onFail.transform` があればそれを走らせ、無ければ何も送らず
   理由を通知します。
 - `output` は `"replaceInput"`（同じ欄に結果を書き戻す。`focus: textField` が必要）、
+  `"typeText"`（キャレットの位置に結果をキーイベントで打つ。keypipe 自身の tap は
+  このイベントを無視する。`--line` にはキャレットが無いので `unsupported` で失敗）、
   `"notify"`、`"none"`（既定）、または `{ "shell": "..." }`（変換と同じ経路で結果を
   受ける）。クリップボードは `{ "shell": "pbcopy" }`、webhook は `curl` で書きます。
   `{ "shell": "...", "background": true }` はすぐ戻ります。切り離したジョブ（独自の
@@ -147,8 +167,9 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
 
 ターミナルは画面全体を一つの AX テキスト欄として見せるので、前面アプリが pty の
 マスター（`/dev/ptmx`）を持つときデーモンは何もしません。消さず、読まず、シェルも
-走らせません（`keypipe terminal <trigger>`）。zsh のプロンプトでは ZLE ウィジェットが
-同じ JSON のルールを入力中の行に適用します。
+走らせません（`keypipe terminal <trigger>`）。例外は `focus: any` の `hotkey`
+ルールだけです。欄を読まないので、空の入力のまま動きます（ペインの要約や通知など）。
+zsh のプロンプトでは ZLE ウィジェットが同じ JSON のルールを入力中の行に適用します。
 
 ```sh
 # .zshrc
