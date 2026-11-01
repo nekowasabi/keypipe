@@ -194,6 +194,13 @@ func spawnDetached(_ path: String, _ args: [String], stdin payload: Data) -> Boo
     posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0)
     posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0)
     posix_spawn_file_actions_addclose(&actions, fds[1])
+    #if canImport(Glibc)
+        // Why: glibc has no POSIX_SPAWN_CLOEXEC_DEFAULT, so close what the job would inherit instead.
+        // After the dup2 above, so fds[0] is already stdin; fds[1] has its own close.
+        for fd in 3..<Int32(min(getdtablesize(), 65_536)) where fd != fds[1] && fcntl(fd, F_GETFD) != -1 {
+            posix_spawn_file_actions_addclose(&actions, fd)
+        }
+    #endif
     let arguments: [UnsafeMutablePointer<CChar>?] = ([path] + args).map { strdup($0) } + [nil]
     defer { arguments.forEach { free($0) } }
     var pid: pid_t = 0

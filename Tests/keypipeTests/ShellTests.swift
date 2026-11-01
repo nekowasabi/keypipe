@@ -45,6 +45,37 @@ final class ShellTests: XCTestCase {
         }
     }
 
+    /// A background job leads its own session (a closed terminal's HUP misses it) and inherits no
+    /// descriptor of the daemon or bridge beyond stdin, stdout and stderr.
+    func testDetachedJobHasItsOwnSessionAndNoInheritedDescriptors() throws {
+        var held: [Int32] = [0, 0]
+        XCTAssertEqual(pipe(&held), 0)
+        defer { held.forEach { close($0) } }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        // An external test checks each descriptor with no redirection active: a shell builtin would also
+        // see the descriptors the shell saves while redirecting, and ls its own directory handle.
+        let script = "echo $$ > \"$0/pid\"; : > \"$0/fds.tmp\"; for fd; do if /usr/bin/env test -e \"/dev/fd/$fd\"; then echo \"$fd\" >> \"$0/fds.tmp\"; fi; done; mv \"$0/fds.tmp\" \"$0/fds\"; sleep 2"
+        XCTAssertTrue(spawnDetached("/bin/sh", ["-c", script, dir] + held.map(String.init), stdin: Data()))
+        var pid: pid_t = 0
+        let deadline = ProcessInfo.processInfo.systemUptime + 3
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            if let text = try? String(contentsOfFile: dir + "/pid"), let value = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)),
+               FileManager.default.fileExists(atPath: dir + "/fds") {
+                pid = value
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+        XCTAssertNotEqual(pid, 0, "the job did not start")
+        XCTAssertEqual(getsid(pid), pid, "the job leads its own session")
+        XCTAssertNotEqual(getsid(pid), getsid(0))
+        let open = try String(contentsOfFile: dir + "/fds").split(separator: "\n").compactMap { Int32($0) }
+        XCTAssertEqual(open, [], "the job inherited descriptors \(open) of \(held)")
+        kill(pid, SIGKILL)
+    }
+
     func testPipesAreDrainedWhileInputIsWritten() {
         let input = String(repeating: "x", count: 70000)
         let script = "dd if=/dev/zero bs=100000 count=2 2>/dev/null; cat"
