@@ -213,7 +213,8 @@ widget around the same `--triggers` and `--line` flags (bash `bind -x` with
 behave the same. Point it at the same build the daemon runs (for example a
 release build installed on `PATH`), otherwise a stale build may reject config
 keys the newer one accepts. If `KEYPIPE_BIN` is not executable or the config
-is unreadable, sourcing the widget does nothing.
+is unreadable or invalid, sourcing the widget does nothing and says nothing;
+`keypipe --config C --triggers` prints the reason.
 
 ## Voice (voice-switch)
 

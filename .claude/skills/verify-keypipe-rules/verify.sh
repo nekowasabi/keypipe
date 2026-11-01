@@ -110,8 +110,10 @@ check "R2u unknown argument: usage, exit 2, no daemon" "exitis R2u 2 && has R2u 
 argv R2v --help; argv R2w -h
 check "R2v --help and -h print the usage, exit 0" "exitis R2v 0 && has R2v 'usage: keypipe' && exitis R2w 0 && has R2w 'usage: keypipe'" ""
 argv R2x --config "$EV/R2g.config.json" --report; argv R2y --config "$EV/R2g.config.json" --smoke-feed
+argv R2z --config "$EV/R2g.config.json" --app com.example.app
 check "R2x a modifier without --line, a flag without its value: exit 2, no daemon" \
-  "exitis R2x 2 && has R2x 'keypipe: --report needs --line' && exitis R2y 2 && has R2y 'keypipe: --smoke-feed needs a value'" ""
+  "exitis R2x 2 && has R2x 'keypipe: --report needs --line' && exitis R2y 2 && has R2y 'keypipe: --smoke-feed needs a value' \
+   && exitis R2z 2 && has R2z 'keypipe: --app needs --line'" ""
 bad R2i '{"rules":[{"trigger":"@@@","hotkey":"ctrl+@"}]}' "rule has both trigger and hotkey"
 bad R2j '{"rules":[{"hotkey":"@"}]}' "hotkey needs a modifier"
 bad R2k '{"rules":[{"hotkey":"meta+@"}]}' "unknown modifier meta"

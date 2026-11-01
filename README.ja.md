@@ -114,7 +114,7 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   （`keypipe front-changed`）。
 - 事実の条件（`app`、`url`）はどれもグロブの一覧です（`fnmatch`。`*` は `/` も
   またぎます）。`"app": ["com.apple.*"]` と書け、そのままの id は完全一致のままです。
-  空の一覧は何にも一致しないので、`invalid config: empty <名前> list` で拒否します。
+  空の一覧は何にも一致しないので、`invalid config: empty url list` のように拒否します。
 - `deny`（トップレベル）は、`focus` を除いた `when` と同じ形のオブジェクトの一覧です
   （例: `{"app": ["com.1password.1password"]}`）。どれかが満たされると、keypipe は
   ルールも欄の読み取りも行う前に止まります（`keypipe deny`）。`url` を書く項目には
@@ -199,8 +199,9 @@ less、REPL）でも動きません。他のシェルで使うには、同じ `-
 `KEYPIPE_BIN` はウィジェットが呼ぶバイナリを指すだけで、デバッグ版とリリース版で
 動作は変わりません。デーモンと同じビルド（たとえば `PATH` に入れたリリース版）を
 指してください。古いビルドを指したままだと、新しいビルドで足した設定キーを拒否する
-ことがあります。`KEYPIPE_BIN` が実行できないか設定を読めないとき、ウィジェットは
-何もしません。
+ことがあります。`KEYPIPE_BIN` が実行できないか、設定を読めないか設定が不正なとき、
+ウィジェットは何もせず、何も表示しません。理由は `keypipe --config C --triggers` で
+確かめられます。
 
 ## 音声（voice-switch）
 
