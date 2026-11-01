@@ -282,6 +282,7 @@ check "R12b unreadable url stops the fire (no erase, no next rule); another app 
   "has R12b1 'keypipe unreadable @@@ url' && lacks R12b1 'keypipe matched' && field R12b1 '\"hiz@@@\"' \
    && exitis R12b1 2 && has R12b2 'keypipe matched @@@ rule 1'" "R12b*.out"
 bad R12c1 '{"deny":[{"url":["*bank*"]}],"rules":[]}' 'deny url requires app'
+bad R12c5 '{"deny":[{"app":["com.google.Chrome"],"url":[]}],"rules":[]}' 'empty url list'
 DENY='{"deny":[{"app":["com.google.Chrome"],"url":["*bank.example*"]}],"rules":[{"trigger":"@@@"}]}'
 feed R12c2 "$DENY" '{"app":"com.google.Chrome","focusIsTextField":false,"fieldText":"","facts":{"url":"https://bank.example/x"}}' '@@@'
 feed R12c3 "$DENY" '{"app":"com.google.Chrome","focusIsTextField":false,"fieldText":"","unreadableFacts":{"url":"timeout"}}' '@@@'

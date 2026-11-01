@@ -121,6 +121,8 @@ out of scope). Path is passed with `--config` and defaults to
   (`keypipe front-changed`).
 - Every fact condition (`app`, `url`) is a list of globs (`fnmatch`, `*`
   crosses `/`), so `"app": ["com.apple.*"]` works and an exact id stays exact.
+  An empty list matches nothing, so it is refused (`invalid config: empty
+  <name> list`).
 - `deny` (top level) is a list of `when`-shaped objects without `focus`, such
   as `{"app": ["com.1password.1password"]}`. When one holds, keypipe stops
   before any rule and before reading the field (`keypipe deny`). An entry with

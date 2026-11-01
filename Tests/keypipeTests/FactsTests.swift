@@ -237,6 +237,10 @@ final class FactsTests: XCTestCase {
             (#"{"deny":[{"focus":"any"}],"rules":[]}"#, "unknown key focus"),
             (#"{"deny":{"app":["x"]},"rules":[]}"#, "deny must be an array"),
             (#"{"rules":[{"trigger":"@@@","when":{"url":"x"}}]}"#, "url must be an array of strings"),
+            // An empty list matches nothing: this deny would let Chrome through on any URL.
+            (#"{"deny":[{"app":["com.google.Chrome"],"url":[]}],"rules":[]}"#, "empty url list"),
+            (#"{"deny":[{"app":[]}],"rules":[]}"#, "empty app list"),
+            (#"{"rules":[{"trigger":"@@@","when":{"app":[]}}]}"#, "empty app list"),
         ] {
             XCTAssertThrowsError(try load(json)) { XCTAssertEqual(String(describing: $0), "keypipe: invalid config: \(reason)") }
         }

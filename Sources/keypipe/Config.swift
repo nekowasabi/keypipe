@@ -110,6 +110,9 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
             guard let globs = value as? [String] else {
                 throw ConfigError.invalid("\(fact.rawValue) must be an array of strings")
             }
+            // Why: an empty list matches nothing, so a deny entry would silently stop nothing
+            // and a rule would never fire; both are mistakes, not intent.
+            guard !globs.isEmpty else { throw ConfigError.invalid("empty \(fact.rawValue) list") }
             terms.append(Term(fact: fact, globs: globs))
         }
         return Conditions(terms)
