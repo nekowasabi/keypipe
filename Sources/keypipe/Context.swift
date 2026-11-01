@@ -1,4 +1,5 @@
-enum Focus: Equatable { case nothing, text, composing }
+/// terminal: the front app holds a pty master; its AX field is the whole pane, so no rule fires.
+enum Focus: Equatable { case nothing, text, composing, terminal }
 
 struct Field: Equatable { var token: Int }
 
@@ -9,7 +10,7 @@ struct Snapshot: Equatable {
 }
 
 func matches(_ when: When, _ snapshot: Snapshot) -> Bool {
-    guard snapshot.focus != .composing else { return false }
+    guard snapshot.focus != .composing && snapshot.focus != .terminal else { return false }
     if let apps = when.app {
         guard let app = snapshot.app, apps.contains(app) else { return false }
     }

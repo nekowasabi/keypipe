@@ -1,7 +1,27 @@
 import Foundation
 
 enum BuiltinSink: String { case none, replaceInput, notify }
-enum Output: Equatable { case builtin(BuiltinSink), shell(String) }
+enum Output: Equatable {
+    case builtin(BuiltinSink), shell(ShellOutput)
+
+    var isBackground: Bool {
+        if case .shell(let shell) = self { return shell.background }
+        return false
+    }
+}
+
+/// background: the caller returns at once and a detached job runs transform and output.
+struct ShellOutput: Equatable, ExpressibleByStringLiteral {
+    var script: String
+    var background = false
+
+    init(script: String, background: Bool = false) {
+        self.script = script
+        self.background = background
+    }
+
+    init(stringLiteral script: String) { self.init(script: script) }
+}
 
 struct When: Equatable {
     enum Focus: String { case textField, any }
@@ -25,6 +45,8 @@ struct KeypipeConfig: Equatable {
     var rules: [Rule]
     /// Deadline for every shell keypipe runs: transform, output.shell, and their fallbacks.
     var shellTimeout: TimeInterval = 30
+    /// Deadline for a whole background job, transform and fallbacks included.
+    var backgroundTimeout: TimeInterval = 300
 }
 
 enum ConfigError: Error, CustomStringConvertible {
@@ -63,7 +85,9 @@ func loadConfig(path: String) throws -> KeypipeConfig {
     let json: Any
     do { json = try JSONSerialization.jsonObject(with: data) }
     catch { throw ConfigError.invalid("JSON decoding failed: \(error.localizedDescription)") }
-    func parseOutput(_ value: Any, _ focus: When.Focus) throws -> Output {
+    // Why: a fallback runs inside the job (or the sync fire) that already owns the
+    // caller's wait, so only a primary output may ask to go to the background.
+    func parseOutput(_ value: Any, _ focus: When.Focus, primary: Bool) throws -> Output {
         let output: Output
         if let name = value as? String {
             guard let sink = BuiltinSink(rawValue: name) else {
@@ -71,22 +95,30 @@ func loadConfig(path: String) throws -> KeypipeConfig {
             }
             output = .builtin(sink)
         } else {
-            let sink = try object(value, keys: ["shell"])
-            output = .shell(try nonempty(sink["shell"] ?? NSNull(), name: "output.shell"))
+            let sink = try object(value, keys: primary ? ["shell", "background"] : ["shell"])
+            var background = false
+            if let value = sink["background"] {
+                guard let flag = value as? Bool else { throw ConfigError.invalid("background must be a boolean") }
+                background = flag
+            }
+            output = .shell(ShellOutput(script: try nonempty(sink["shell"] ?? NSNull(), name: "output.shell"),
+                                        background: background))
         }
         if output == .builtin(.replaceInput) && focus != .textField {
             throw ConfigError.invalid("output replaceInput requires focus textField")
         }
         return output
     }
-    let root = try object(json, keys: ["rules", "shellTimeout"])
-    var shellTimeout: TimeInterval = 30
-    if let value = root["shellTimeout"] {
-        guard let seconds = value as? Double, seconds > 0 else {
-            throw ConfigError.invalid("shellTimeout must be positive")
+    let root = try object(json, keys: ["rules", "shellTimeout", "backgroundTimeout"])
+    func seconds(_ name: String, default value: TimeInterval) throws -> TimeInterval {
+        guard let raw = root[name] else { return value }
+        guard let seconds = raw as? Double, seconds > 0 else {
+            throw ConfigError.invalid("\(name) must be positive")
         }
-        shellTimeout = seconds
+        return seconds
     }
+    let shellTimeout = try seconds("shellTimeout", default: 30)
+    let backgroundTimeout = try seconds("backgroundTimeout", default: 300)
     guard let values = root["rules"] as? [Any] else {
         throw ConfigError.invalid("rules must be an array")
     }
@@ -127,7 +159,7 @@ func loadConfig(path: String) throws -> KeypipeConfig {
         var transform = try entry["transform"].map {
             Guarded(primary: try nonempty($0, name: "transform"))
         }
-        var output = Guarded(primary: try entry["output"].map { try parseOutput($0, when.focus) } ?? .builtin(.none))
+        var output = Guarded(primary: try entry["output"].map { try parseOutput($0, when.focus, primary: true) } ?? .builtin(.none))
         if let value = entry["onFail"] {
             let fallback = try object(value, keys: ["transform", "output"])
             if let value = fallback["transform"] {
@@ -138,10 +170,13 @@ func loadConfig(path: String) throws -> KeypipeConfig {
                 guard output.primary != .builtin(.none), output.primary != .builtin(.notify) else {
                     throw ConfigError.invalid("onFail.output requires an output that can fail")
                 }
-                output.onFail = try parseOutput(value, when.focus)
+                output.onFail = try parseOutput(value, when.focus, primary: false)
+                if output.primary.isBackground && output.onFail == .builtin(.replaceInput) {
+                    throw ConfigError.invalid("a background output cannot fall back to replaceInput")
+                }
             }
         }
         return Rule(trigger: trigger, when: when, transform: transform, output: output)
     }
-    return KeypipeConfig(rules: rules, shellTimeout: shellTimeout)
+    return KeypipeConfig(rules: rules, shellTimeout: shellTimeout, backgroundTimeout: backgroundTimeout)
 }

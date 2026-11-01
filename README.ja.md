@@ -117,6 +117,10 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
 - `output` は `"replaceInput"`（同じ欄に結果を書き戻す。`focus: textField` が必要）、
   `"notify"`、`"none"`（既定）、または `{ "shell": "..." }`（変換と同じ経路で結果を
   受ける）。クリップボードは `{ "shell": "pbcopy" }`、webhook は `curl` で書きます。
+  `{ "shell": "...", "background": true }` はすぐ戻ります。切り離したジョブ（独自の
+  セッションなので端末を閉じても止まらない）が変換・シェル・`onFail` を走らせ、記録を
+  `${XDG_STATE_HOME:-~/.local/state}/keypipe/jobs.log` に追記し、失敗したら通知します。
+  `background` は主の `output.shell` にだけ書けます。
 - `onFail` は段ごとの代替で、その段と同じ書き方です。
   `"onFail": { "transform": "curl ...", "output": { "shell": "pbcopy" } }`。
   `onFail.transform` は `transform` が非ゼロ終了、期限切れ、空出力のとき同じ入力で
@@ -130,11 +134,46 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   書き、別の行き先へ逃がすときやシェルから見えない失敗を拾うときに `onFail` を使います。
 - `shellTimeout`（最上位、秒、既定 30）は keypipe が走らせる全シェルの期限です。
   過ぎたらプロセスグループごと止めます。
+- `backgroundTimeout`（最上位、秒、既定 300）は裏のジョブ全体の期限です。達したら
+  失敗です（`output-shell timeout <n>`）。
 - 未知のキー、空の `trigger` / `transform` / `output.shell`、未知の `output` や
   `focus`、`focus: textField` の無い `replaceInput`、`transform` の無い
   `onFail.transform`、失敗しない送り先（`none`、`notify`）への `onFail.output`、
-  正でない `shellTimeout` は読み込み時に `invalid config: <理由>` で拒否し、
+  代替への `background`、`replaceInput` へ逃がす裏の送り先、正でない `shellTimeout`
+  や `backgroundTimeout` は読み込み時に `invalid config: <理由>` で拒否し、
   終了コード 1 です。
+
+## ターミナル（zsh）
+
+ターミナルは画面全体を一つの AX テキスト欄として見せるので、前面アプリが pty の
+マスター（`/dev/ptmx`）を持つときデーモンは何もしません。消さず、読まず、シェルも
+走らせません（`keypipe terminal <trigger>`）。zsh のプロンプトでは ZLE ウィジェットが
+同じ JSON のルールを入力中の行に適用します。
+
+```sh
+# .zshrc
+export KEYPIPE_BIN=~/repos/keypipe/.build/debug/keypipe KEYPIPE_CONFIG=~/.config/keypipe/config.json
+source ~/repos/keypipe/shell/keypipe.zsh   # 任意: KEYPIPE_APP=<bundle id>
+```
+
+ウィジェットは単発のフラグを二つ呼びます。`keypipe --config C --triggers` は文字の
+トリガーを 1 行に 1 つずつ重複なく出します。`keypipe --config C --line <trigger>
+[--app <bundle id>]` は stdin でトリガーを除いた行を受け、そのアプリ（既定は前面
+アプリ）のフォーカスされたテキスト欄としてルールを走らせ、新しい行を stdout に
+出します。`replaceInput` なら結果、それ以外は行をそのままです。終了コードは一致 0、
+ルール無し 2（ウィジェットはトリガーを残す）、設定不正 1 です。記録は stderr に出ます。
+
+対応するシェルは zsh だけです。ウィジェットは ZLE のコードなので、bash や fish
+などではターミナルでルールが動きません。ターミナル内の全画面プログラム（nvim、
+less、REPL）でも動きません。他のシェルで使うには、同じ `--triggers` と `--line`
+を呼ぶ小さなウィジェットがシェルごとに要ります（bash は `bind -x` と
+`READLINE_LINE`、fish は `commandline`）。いまは同梱していません。
+
+`KEYPIPE_BIN` はウィジェットが呼ぶバイナリを指すだけで、デバッグ版とリリース版で
+動作は変わりません。デーモンと同じビルド（たとえば `PATH` に入れたリリース版）を
+指してください。古いビルドを指したままだと、新しいビルドで足した設定キーを拒否する
+ことがあります。`KEYPIPE_BIN` が実行できないか設定を読めないとき、ウィジェットは
+何もしません。
 
 ## macOS のキー取得と Accessibility
 

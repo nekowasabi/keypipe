@@ -81,19 +81,30 @@ func performWrite(_ field: Field, _ text: String, _ desktop: Desktop) -> WriteOu
     }
 }
 
+/// A background fire handed to a detached job: the rule by config index, the read input,
+/// and the environment the shells see.
+struct Job: Codable, Equatable {
+    var rule: Int
+    var input: String
+    var environment: [String: String]
+}
+
 struct Engine {
     private let config: KeypipeConfig
     private let desktop: Desktop
     private let shell: (String, String, [String: String], TimeInterval) -> ShellOutcome
     private let emit: (String) -> Void
+    private let background: (Job) -> Void
     private var matcher: TriggerMatcher
     private let hotkeys: Set<Hotkey>
     private(set) var hits = 0
 
     init(config: KeypipeConfig, desktop: Desktop,
          shell: @escaping (String, String, [String: String], TimeInterval) -> ShellOutcome,
-         emit: @escaping (String) -> Void) {
+         emit: @escaping (String) -> Void,
+         background: @escaping (Job) -> Void = { _ in }) {
         self.config = config
+        self.background = background
         self.desktop = desktop
         self.shell = shell
         self.emit = emit
@@ -123,8 +134,12 @@ struct Engine {
         fire(.hotkey(hotkey))
     }
 
-    private mutating func fire(_ trigger: Trigger) {
+    mutating func fire(_ trigger: Trigger) {
         let snapshot = desktop.snapshot()
+        guard snapshot.focus != .terminal else {
+            emit("keypipe terminal \(trigger)")
+            return
+        }
         guard snapshot.focus != .composing else {
             emit("keypipe composing \(trigger)")
             return
@@ -159,6 +174,25 @@ struct Engine {
             input = ""
         }
         let environment = ["KEYPIPE_APP": snapshot.app ?? ""]
+        if rule.output.primary.isBackground {
+            emit("keypipe background rule \(index)")
+            background(Job(rule: index, input: input, environment: environment))
+            return
+        }
+        run(rule, input, environment, snapshot.field)
+    }
+
+    /// The detached half of a background fire: same stages, no field to write.
+    func run(_ job: Job) {
+        guard config.rules.indices.contains(job.rule) else {
+            notify("background job: no rule \(job.rule)")
+            return
+        }
+        run(config.rules[job.rule], job.input, job.environment, nil)
+    }
+
+    private func run(_ rule: Rule, _ input: String, _ environment: [String: String], _ field: Field?) {
+        let trigger = rule.trigger
         var result = input
         if let transform = rule.transform {
             switch runTransform(transform, input, environment) {
@@ -168,16 +202,17 @@ struct Engine {
                 return
             }
         }
-        guard let failure = apply(rule.output.primary, result, environment, snapshot.field, prefix: "") else { return }
+        guard let failure = apply(rule.output.primary, result, environment, field, prefix: "") else { return }
         guard let fallback = rule.output.onFail else {
-            // Why: without a fallback the text must not be lost, and a shell's own
-            // failure is already visible in the transcript.
+            // Why: without a fallback the text must not be lost, and a sync shell's own
+            // failure is already visible in the transcript; nobody watches a job's.
             if rule.output.primary == .builtin(.replaceInput) { notify(result) }
+            else if rule.output.primary.isBackground { notify("\(trigger) output failed: \(failure.token)") }
             return
         }
         var environment2 = environment
         environment2["KEYPIPE_FAILURE"] = failure.token
-        if let second = apply(fallback, result, environment2, snapshot.field, prefix: "fallback ") {
+        if let second = apply(fallback, result, environment2, field, prefix: "fallback ") {
             notify("\(trigger) output failed: \(second.token)")
         }
     }
@@ -240,8 +275,8 @@ struct Engine {
         case .builtin(.none):
             emit("keypipe \(prefix)apply none \(jsonString(result))")
             return nil
-        case .shell(let script):
-            if case .failure(let failure) = shellStage(script, result, env, prefix: prefix, stage: "output-shell") {
+        case .shell(let shell):
+            if case .failure(let failure) = shellStage(shell.script, result, env, prefix: prefix, stage: "output-shell") {
                 return failure
             }
             return nil

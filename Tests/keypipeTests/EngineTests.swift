@@ -248,4 +248,65 @@ final class EngineTests: XCTestCase {
             XCTAssertEqual(String(describing: $0), "keypipe: invalid config: composing requires focusIsTextField")
         }
     }
+
+    func testTerminalFocusDoesNothingAtAll() {
+        let desktop = FakeDesktop(app: "com.example.someterm", focus: .terminal, fieldText: "secret-token-123")
+        let rule = Rule(trigger: "@@@", when: When(focus: .textField), output: Guarded(primary: .shell("send")))
+        let (hits, lines) = run(rules: [rule, Rule(trigger: "@@@", output: Guarded(primary: .builtin(.notify)))], desktop: desktop) { _, _, _, _ in
+            XCTFail("no shell runs in a terminal")
+            return .exited(0, stdout: "")
+        }
+        XCTAssertEqual(hits, 0)
+        XCTAssertEqual(lines, ["keypipe terminal @@@"])
+        XCTAssertEqual(desktop.fieldText, "secret-token-123@@@", "no Backspace")
+        XCTAssertEqual(desktop.notifications, [])
+    }
+
+    func testBackgroundShellHandsTheReadInputToAJobAndReturns() {
+        let desktop = FakeDesktop(app: "editor", focus: .text, fieldText: "note")
+        let rule = Rule(trigger: "&&&", when: When(focus: .textField),
+                        transform: Guarded(primary: "tr"), output: Guarded(primary: .shell(ShellOutput(script: "curl", background: true))))
+        var jobs: [Job] = []
+        var lines: [String] = []
+        var engine = Engine(config: KeypipeConfig(rules: [rule]), desktop: desktop, shell: { _, _, _, _ in
+            XCTFail("the job, not the caller, runs the stages")
+            return .exited(0, stdout: "")
+        }, emit: { lines.append($0) }, background: { jobs.append($0) })
+        for character in "&&&" {
+            desktop.key(character)
+            engine.key(character)
+        }
+        XCTAssertEqual(jobs, [Job(rule: 0, input: "note", environment: ["KEYPIPE_APP": "editor"])])
+        XCTAssertEqual(lines.last, "keypipe background rule 0")
+        XCTAssertEqual(desktop.fieldText, "note")
+    }
+
+    func testJobRunsStagesAndNotifiesOnlyWhenTheShellFails() {
+        let rule = Rule(trigger: "&&&", output: Guarded(primary: .shell(ShellOutput(script: "curl", background: true))))
+        for (outcome, notified) in [(ShellOutcome.exited(0, stdout: ""), [String]()), (.timedOut(seconds: 2), ["&&& output failed: timeout"])] {
+            let desktop = FakeDesktop()
+            var lines: [String] = []
+            let engine = Engine(config: KeypipeConfig(rules: [rule]), desktop: desktop, shell: { script, input, env, _ in
+                XCTAssertEqual(script, "curl")
+                XCTAssertEqual(input, "note")
+                XCTAssertEqual(env, ["KEYPIPE_APP": "editor"])
+                return outcome
+            }) { lines.append($0) }
+            engine.run(Job(rule: 0, input: "note", environment: ["KEYPIPE_APP": "editor"]))
+            XCTAssertEqual(desktop.notifications, notified)
+            if !notified.isEmpty { XCTAssertTrue(lines.contains("keypipe output-shell timeout 2")) }
+        }
+    }
+
+    func testBoundedShellReportsTheJobLimitWhenItCutsAStageShort() {
+        var given: [TimeInterval] = []
+        let shell = boundedShell(limit: 2) { _, _, _, timeout in
+            given.append(timeout)
+            return .timedOut(seconds: Int(timeout))
+        }
+        XCTAssertEqual(shell("a", "", [:], 1), .timedOut(seconds: 1), "a shorter shellTimeout still applies")
+        XCTAssertEqual(shell("b", "", [:], 30), .timedOut(seconds: 2))
+        XCTAssertEqual(given[0], 1)
+        XCTAssertLessThanOrEqual(given[1], 2)
+    }
 }

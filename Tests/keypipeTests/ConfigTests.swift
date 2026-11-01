@@ -52,12 +52,26 @@ final class ConfigTests: XCTestCase {
             (#"{"rules":[{"hotkey":"ctrl+ab"}]}"#, "hotkey key must be one character"),
             (#"{"rules":[{"trigger":"@@@","when":{"apps":[]}}]}"#, "unknown key apps"),
             (#"{"rules":[{"trigger":"@@@","output":{"shell":"true","extra":true}}]}"#, "unknown key extra"),
+            (#"{"backgroundTimeout":0,"rules":[]}"#, "backgroundTimeout must be positive"),
+            (#"{"backgroundTimeout":-1,"rules":[]}"#, "backgroundTimeout must be positive"),
+            (#"{"rules":[{"trigger":"@@@","output":{"shell":"x","background":"yes"}}]}"#, "background must be a boolean"),
+            (#"{"rules":[{"trigger":"@@@","output":{"shell":"x"},"onFail":{"output":{"shell":"y","background":true}}}]}"#, "unknown key background"),
+            (#"{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"output":{"shell":"x","background":true},"onFail":{"output":"replaceInput"}}]}"#, "a background output cannot fall back to replaceInput"),
         ]
         for (json, reason) in cases {
             XCTAssertThrowsError(try load(json)) {
                 XCTAssertEqual(String(describing: $0), "keypipe: invalid config: \(reason)")
             }
         }
+    }
+
+    func testBackgroundShellAndItsTimeout() throws {
+        XCTAssertEqual(try load(#"{"rules":[]}"#).backgroundTimeout, 300)
+        let config = try load(#"{"backgroundTimeout":2,"rules":[{"trigger":"&&&","output":{"shell":"curl","background":true}},{"trigger":";;;","output":{"shell":"curl"}}]}"#)
+        XCTAssertEqual(config.backgroundTimeout, 2)
+        XCTAssertEqual(config.rules[0].output.primary, .shell(ShellOutput(script: "curl", background: true)))
+        XCTAssertEqual(config.rules[1].output.primary, .shell("curl"))
+        XCTAssertFalse(config.rules[1].output.primary.isBackground)
     }
 
     func testTextFieldAllowsReplacement() throws {

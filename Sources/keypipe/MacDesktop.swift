@@ -15,6 +15,7 @@
         func snapshot() -> Snapshot {
             let app = NSWorkspace.shared.frontmostApplication
             guard let pid = app?.processIdentifier else { return Snapshot(focus: .nothing) }
+            if ownsPtyMaster(pid) { return Snapshot(app: app?.bundleIdentifier, focus: .terminal) }
             var focused: CFTypeRef?
             let status = AXUIElementCopyAttributeValue(
                 AXUIElementCreateApplication(pid), kAXFocusedUIElementAttribute as CFString, &focused)
@@ -64,11 +65,7 @@
             return AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, text as CFTypeRef) == .success
         }
 
-        func notify(_ text: String) {
-            // Why: the text rides in argv, never in the AppleScript source (R8).
-            let script = "osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title \"keypipe\"' -e 'end run' \"$1\""
-            _ = runShell(script, input: text, env: [:], timeout: 5)
-        }
+        func notify(_ text: String) { notifyUser(text) }
 
         private func element(_ field: Field) -> AXUIElement? {
             lock.lock()
@@ -81,5 +78,26 @@
             guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
             return value
         }
+    }
+#endif
+
+#if os(macOS)
+    /// Whether `pid` has /dev/ptmx open, which is what makes an app a terminal emulator.
+    /// Why: a libproc error reads as "not a terminal", the behaviour before this check.
+    func ownsPtyMaster(_ pid: pid_t) -> Bool {
+        let size = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
+        guard size > 0 else { return false }
+        let stride = MemoryLayout<proc_fdinfo>.stride
+        var fds = [proc_fdinfo](repeating: proc_fdinfo(), count: Int(size) / stride)
+        let used = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, &fds, size)
+        guard used > 0 else { return false }
+        let infoSize = Int32(MemoryLayout<vnode_fdinfowithpath>.size)
+        for fd in fds.prefix(Int(used) / stride) where fd.proc_fdtype == UInt32(PROX_FDTYPE_VNODE) {
+            var info = vnode_fdinfowithpath()
+            guard proc_pidfdinfo(pid, fd.proc_fd, PROC_PIDFDVNODEPATHINFO, &info, infoSize) == infoSize else { continue }
+            let path = withUnsafeBytes(of: info.pvip.vip_path) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+            if path == "/dev/ptmx" { return true }
+        }
+        return false
     }
 #endif

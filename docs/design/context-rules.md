@@ -182,7 +182,7 @@ struct Engine {
 - フォーカスは bool ではなく列挙。`nothing` は nil ではなく役割から導く。`composing` は `AXTextInputMarkedRange` から取る。
 - 変換中のトリガーは発火しない。確定を待つ案は、tap が見た `@@@` と欄の `＠` が合わないので両候補とも捨てた。
 - `focus: any` のルールは欄を読まない。テキスト欄でないときは Backspace も送らない。レビュー既定「`focus: any` でも消す」をテキスト欄のときだけに狭める。
-- ターミナルで `textField` ルールが画面全体を読む問題は、実装前の今は `when.app` で書き分ける。
+- ターミナルで `textField` ルールが画面全体を読む問題は、実装前の今は `when.app` で書き分ける。（改訂 4 で置き換え。下記参照）
 
 基底は候補 1。差分が小さく、癖をコードに名指しで溜めない。候補 2 から移植した点。
 
@@ -197,6 +197,8 @@ struct Engine {
 - webhook の組み込み。`curl` の面を設定キーに写す二通り目の書き方になる。JSON 本文に `jq` が要る上限は Usage に書いた。
 - `insert` と `clipboard` の組み込み。実例が無く、`pbcopy` で書ける。
 
+改訂 4（2026-11-01）。ターミナルは `when.app` や `focus: any` で書き分けない。前面アプリのプロセスが `/dev/ptmx` を開いていれば `Focus.terminal` とし、デーモンはどのルールも発火させない（消さない、読まない、書かない、通知しない、シェルを走らせない）。bundle id の表は持たない。zsh のプロンプトでは `shell/keypipe.zsh` が行を `keypipe --line <trigger>` に渡し、同じ `Engine.fire` が選択・変換・送り先・`onFail` を走らせて新しい行を返す。`output.shell` の `background: true` は呼び出し元をすぐ返し、切り離したジョブ（`backgroundTimeout`、既定 300 秒）が残りを走らせて `jobs.log` に記録する。受け入れ項目は `.claude/skills/verify-keypipe-terminals/SKILL.md`。
+
 ## Tradeoffs accepted
 
 - 変換と送信がシェル一本である代わりに、利用者はクォートを自分で書く。`$1` を用意してクォート事故を減らす。
@@ -204,7 +206,7 @@ struct Engine {
 - `transform` と `output.shell` は同期実行。`claude -p` の数秒間、次の発火は待たされる。キー取得自体は止めない（発火は tap のスレッドではなく直列キューで走らせる）。
 - 日本語入力モードではトリガーが効かない。代わりに変換中のかなを誤って消さない。
 - `focus: any` のルールは欄の文字を受け取れない。代わりに `$1` の中身が設定だけで決まり、ターミナルで画面全体を書き戻す経路と、欄以外での Backspace が無くなる。
-- ターミナル除けは設定の `when.app` か先行ルールで書く。代わりに未検証の判別子に乗る型を作らない。
+- ターミナル除けは設定の `when.app` か先行ルールで書く。代わりに未検証の判別子に乗る型を作らない。（改訂 4 で置き換え）
 
 ## 実機で確かめた前提（2026-10-31、macOS 26.6）
 
@@ -213,7 +215,7 @@ struct Engine {
 - listen-only の CGEventTap は `System Events` の合成打鍵を受ける。Input Monitoring は不要で、Accessibility だけで tap と AX が動いた。
 - 自分が post した Backspace は自分の tap にも届く。`eventSourceUserData` に印を付けて無視する。
 - TextEdit の本文は AXTextArea で `AXValue` は読み書きできる。CotEditor も同じ。
-- ターミナル（iTerm2）のプロンプトは **AX 上テキスト欄として見える**。AXTextArea で `AXValue` は画面全体（約 3,800 文字）。`focus: textField` の既定ではターミナルで `@@@` を打つと画面全体が入力になる。AXRole では TextEdit と区別できない。判別ができるまで、ターミナル向けのルールは `focus: any` にして欄の文字を使わない（上の `;;;` の例）。
+- ターミナル（iTerm2）のプロンプトは **AX 上テキスト欄として見える**。AXTextArea で `AXValue` は画面全体（約 3,800 文字）。`focus: textField` の既定ではターミナルで `@@@` を打つと画面全体が入力になる。AXRole では TextEdit と区別できない。判別は改訂 4 で入った（pty のマスター）。
 - 合成 Backspace はアプリ依存。CotEditor では消える。TextEdit はプローブ（2026-10-31）では無視したが、デーモン本体が post した Backspace は届いた（2026-11-01、M1/M2 の 4 発火すべて `erase 3` のみで `erase-rewrite` 無し）。差の原因は未特定。手順 5 の読み戻しと `AXValue` の書き戻しは無視するアプリ向けに残す。
 - 「何もフォーカスしていない」は nil ではない。Finder のデスクトップでも `AXFocusedUIElement` は `AXGroup`（`AXFocused=1`）。役割から `nothing` を導く。
 - IME 変換中は判別できる。TextEdit の欄は `AXTextInputMarkedRange` を持ち、ATOK で変換中は長さが正、Escape 後は 0。`AXValue` には変換中の文字が既に入る。

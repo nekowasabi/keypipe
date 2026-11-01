@@ -3,6 +3,9 @@ import Foundation
 #if canImport(Glibc)
     import Glibc
 #endif
+#if os(macOS)
+    import AppKit
+#endif
 
 private func argument(_ flag: String, in args: [String]) -> String? {
     guard let index = args.firstIndex(of: flag), index + 1 < args.count else { return nil }
@@ -15,6 +18,7 @@ private func emit(_ line: String) {
 }
 
 let args = CommandLine.arguments
+if args.contains("--job") { runJobProcess() }
 if args.contains("--probe") {
     var probe: [String: Any] = ["trusted": false, "focus": "none", "focusIsTextField": false]
     #if os(macOS)
@@ -22,7 +26,12 @@ if args.contains("--probe") {
         let mac = MacDesktop()
         let snapshot = mac.snapshot()
         probe["app"] = snapshot.app ?? NSNull()
-        probe["focus"] = snapshot.focus == .text ? "textField" : snapshot.focus == .composing ? "composing" : "none"
+        switch snapshot.focus {
+        case .text: probe["focus"] = "textField"
+        case .composing: probe["focus"] = "composing"
+        case .terminal: probe["focus"] = "terminal"
+        case .nothing: probe["focus"] = "none"
+        }
         probe["focusIsTextField"] = snapshot.focus == .text
         if let field = snapshot.field { probe["fieldText"] = mac.text(field) ?? NSNull() }
     #endif
@@ -53,10 +62,42 @@ do {
     exit(1)
 }
 
+let spawnJob: (Job) -> Void = { startJob($0, configPath: configFile, emit: emit) }
+
+if args.contains("--triggers") {
+    var seen = Set<String>()
+    for rule in loaded.rules {
+        if case .text(let text) = rule.trigger, seen.insert(text).inserted { emit(text) }
+    }
+    exit(0)
+}
+
+// The zsh widget's bridge: stdin is the line without the trigger, stdout the new line.
+if args.contains("--line") {
+    guard let trigger = argument("--line", in: args), !trigger.isEmpty else {
+        fputs("keypipe: --line needs a trigger\n", stderr)
+        exit(1)
+    }
+    var app = argument("--app", in: args)
+    #if os(macOS)
+        if app == nil { app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
+    #endif
+    let input = String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self)
+    let desktop = LineDesktop(app: app, line: input + trigger)
+    // Why: stdout carries only the line, so the transcript goes to stderr.
+    let toStderr: (String) -> Void = { fputs($0 + "\n", stderr) }
+    var engine = Engine(config: loaded, desktop: desktop, shell: runShell, emit: toStderr,
+                        background: { startJob($0, configPath: configFile, emit: toStderr) })
+    engine.fire(.text(trigger))
+    guard engine.hits > 0 else { exit(2) }
+    FileHandle.standardOutput.write(Data((desktop.line ?? input).utf8))
+    exit(0)
+}
+
 let seed = argument("--smoke-feed", in: args)
 let chord = argument("--smoke-hotkey", in: args)
 if seed != nil || chord != nil {
-    var engine = Engine(config: loaded, desktop: fake, shell: runShell, emit: emit)
+    var engine = Engine(config: loaded, desktop: fake, shell: runShell, emit: emit, background: spawnJob)
     for character in seed ?? "" {
         fake.key(character)
         engine.key(character)
@@ -73,7 +114,7 @@ if seed != nil || chord != nil {
 }
 
 if args.contains("--feed-stdin") {
-    var engine = Engine(config: loaded, desktop: fake, shell: runShell, emit: emit)
+    var engine = Engine(config: loaded, desktop: fake, shell: runShell, emit: emit, background: spawnJob)
     emit("keypipe started with \(loaded.rules.count) rule(s) from \(configFile)")
     while let line = readLine(strippingNewline: false) {
         for character in line {
@@ -90,7 +131,7 @@ if args.contains("--feed-stdin") {
         fputs("keypipe: Accessibility not granted; allow this binary in System Settings > Privacy & Security > Accessibility\n", stderr)
         exit(1)
     }
-    var engine = Engine(config: loaded, desktop: MacDesktop(), shell: runShell, emit: emit)
+    var engine = Engine(config: loaded, desktop: MacDesktop(), shell: runShell, emit: emit, background: spawnJob)
     // Why: Engine.key blocks on shells and erase readback; the tap callback must not.
     let queue = DispatchQueue(label: "keypipe.engine")
     guard let tap = MacKeyTap(onInput: { input in

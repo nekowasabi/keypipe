@@ -12,11 +12,22 @@ final class ContextTests: XCTestCase {
         XCTAssertEqual(select([app, text, any], Snapshot(focus: .nothing)), any)
         XCTAssertNil(select([app, text], Snapshot(focus: .nothing)))
         XCTAssertNil(select([any], Snapshot(focus: .composing)))
+        XCTAssertNil(select([app, text, any], Snapshot(app: "terminal", focus: .terminal)), "a terminal pane is never a field")
     }
 
     func testFirstSatisfiedRuleWins() {
         let first = Rule(trigger: "@@@", output: Guarded(primary: .builtin(.notify)))
         let second = Rule(trigger: "@@@")
         XCTAssertEqual(select([first, second], Snapshot(focus: .text)), first)
+    }
+}
+
+final class FakeDesktopContextTests: XCTestCase {
+    func testOwnsPtyIsTerminalFocusWithoutAField() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try #"{"app":"com.example.someterm","ownsPty":true,"focusIsTextField":true,"fieldText":"pane"}"#
+            .write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+        XCTAssertEqual(try FakeDesktop(path: url.path).snapshot(), Snapshot(app: "com.example.someterm", focus: .terminal))
     }
 }

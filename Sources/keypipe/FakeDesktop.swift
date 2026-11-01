@@ -12,6 +12,7 @@ final class FakeDesktop: Desktop {
         var ignoresWrite: Bool?
         var fieldGoneAfter: String?
         var writePerRead: Bool?
+        var ownsPty: Bool?
     }
 
     private let app: String?
@@ -63,7 +64,7 @@ final class FakeDesktop: Desktop {
         }
         self.init(
             app: context.app,
-            focus: context.composing == true ? .composing : context.focusIsTextField ? .text : .nothing,
+            focus: context.ownsPty == true ? .terminal : context.composing == true ? .composing : context.focusIsTextField ? .text : .nothing,
             fieldText: context.fieldText,
             ignoresBackspace: context.ignoresBackspace ?? false,
             backspacePerRead: context.backspacePerRead ?? false,

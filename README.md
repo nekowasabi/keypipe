@@ -126,6 +126,11 @@ out of scope). Path is passed with `--config` and defaults to
   `{ "shell": "..." }`, which receives the result the same way a transform
   receives its input. Clipboard is `{ "shell": "pbcopy" }`, a webhook is
   `curl`.
+  `{ "shell": "...", "background": true }` returns at once: a detached job
+  (its own session, so closing the terminal does not stop it) runs the
+  transform, the shell and `onFail`, appends its transcript to
+  `${XDG_STATE_HOME:-~/.local/state}/keypipe/jobs.log`, and notifies when it
+  fails. `background` exists only on a primary `output.shell`.
 - `onFail` names a fallback per stage, written exactly like the stage:
   `"onFail": { "transform": "curl ...", "output": { "shell": "pbcopy" } }`.
   `onFail.transform` runs once with the same input when `transform` exits
@@ -142,11 +147,48 @@ out of scope). Path is passed with `--config` and defaults to
   is for a different destination or for failures the shell cannot see.
 - `shellTimeout` (top level, seconds, default 30) is the deadline for every
   shell keypipe runs. Past it, the whole process group is killed.
+- `backgroundTimeout` (top level, seconds, default 300) bounds a whole
+  background job. Reaching it is a failure (`output-shell timeout <n>`).
 - Unknown keys, an empty `trigger`, `transform`, or `output.shell`, an
   unknown `output` or `focus`, `replaceInput` without `focus: textField`,
   `onFail.transform` without `transform`, `onFail.output` on an output that
-  cannot fail (`none`, `notify`), and a non-positive `shellTimeout` are
+  cannot fail (`none`, `notify`), `background` on a fallback, a background
+  output falling back to `replaceInput`, and a non-positive `shellTimeout` or
+  `backgroundTimeout` are
   rejected at load with `invalid config: <reason>` and exit 1.
+
+## Terminals (zsh)
+
+A terminal shows its whole pane as one AX text field, so the daemon does
+nothing when the front app holds a pty master (`/dev/ptmx`): no erase, no
+read, no shell (`keypipe terminal <trigger>`). At a zsh prompt the ZLE widget
+runs the same JSON rules on the line being typed:
+
+```sh
+# .zshrc
+export KEYPIPE_BIN=~/repos/keypipe/.build/debug/keypipe KEYPIPE_CONFIG=~/.config/keypipe/config.json
+source ~/repos/keypipe/shell/keypipe.zsh   # optional: KEYPIPE_APP=<bundle id>
+```
+
+The widget calls two one-shot flags. `keypipe --config C --triggers` prints
+each text trigger once per line. `keypipe --config C --line <trigger> [--app
+<bundle id>]` reads the line (trigger removed) on stdin, runs the rule as a
+focused text field of that app (default: the front app), and prints the new
+line to stdout: the `replaceInput` result, otherwise the line unchanged. Exit
+0 matched, 2 no rule (the widget keeps the trigger), 1 invalid config. The
+transcript goes to stderr.
+
+Only zsh is supported. The widget is ZLE code, so bash, fish and other
+shells get no rules in terminals; full-screen programs inside the terminal
+(nvim, less, a REPL) get none either. Another shell would need its own small
+widget around the same `--triggers` and `--line` flags (bash `bind -x` with
+`READLINE_LINE`, fish `commandline`); none ships today.
+
+`KEYPIPE_BIN` is just the binary the widget runs; debug and release builds
+behave the same. Point it at the same build the daemon runs (for example a
+release build installed on `PATH`), otherwise a stale build may reject config
+keys the newer one accepts. If `KEYPIPE_BIN` is not executable or the config
+is unreadable, sourcing the widget does nothing.
 
 ## macOS key tap and Accessibility
 

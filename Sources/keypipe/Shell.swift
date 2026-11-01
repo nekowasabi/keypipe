@@ -156,3 +156,63 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
     let code = status & 0x7f == 0 ? (status >> 8) & 0xff : 128 + (status & 0x7f)
     return .exited(code, stdout: String(decoding: output, as: UTF8.self))
 }
+
+/// A macOS notification, the one notifier the daemon, the bridge and background jobs share.
+func notifyUser(_ text: String) {
+    // Why: the text rides in argv, never in the AppleScript source (R8).
+    let script = "osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title \"keypipe\"' -e 'end run' \"$1\""
+    _ = runShell(script, input: text, env: [:], timeout: 5)
+}
+
+/// Starts `path args` in its own session with `stdin` as its standard input and
+/// /dev/null for output, and returns without waiting. false if it did not start.
+func spawnDetached(_ path: String, _ args: [String], stdin payload: Data) -> Bool {
+    signal(SIGPIPE, SIG_IGN)
+    var fds: [Int32] = [0, 0]
+    guard pipe(&fds) == 0 else { return false }
+    #if canImport(Glibc)
+        var actions = SpawnActions()
+        var attributes = posix_spawnattr_t()
+        let flags = POSIX_SPAWN_SETSID
+    #else
+        var actions: SpawnActions = nil
+        var attributes: posix_spawnattr_t?
+        // Why: inheriting nothing else matters most for the bridge; a stdout pipe held
+        // by the job would keep the widget's $(...) open until the webhook finished.
+        let flags = POSIX_SPAWN_SETSID | POSIX_SPAWN_CLOEXEC_DEFAULT
+    #endif
+    posix_spawn_file_actions_init(&actions)
+    defer { posix_spawn_file_actions_destroy(&actions) }
+    posix_spawnattr_init(&attributes)
+    defer { posix_spawnattr_destroy(&attributes) }
+    // Why: its own session, so the HUP of a closed terminal or a killed tmux pane misses it.
+    posix_spawnattr_setflags(&attributes, Int16(flags))
+    posix_spawn_file_actions_adddup2(&actions, fds[0], STDIN_FILENO)
+    posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0)
+    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0)
+    posix_spawn_file_actions_addclose(&actions, fds[1])
+    let arguments = ([path] + args).map { strdup($0) } + [nil]
+    defer { arguments.forEach { free($0) } }
+    var pid: pid_t = 0
+    let launched = posix_spawn(&pid, path, &actions, &attributes, arguments, environ)
+    close(fds[0])
+    guard launched == 0 else {
+        close(fds[1])
+        return false
+    }
+    payload.withUnsafeBytes { buffer in
+        var offset = 0
+        while offset < buffer.count {
+            let count = write(fds[1], buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
+            if count > 0 { offset += count } else if errno != EINTR { break }
+        }
+    }
+    close(fds[1])
+    // Why: the daemon lives on; an unreaped job would stay a zombie. SIGCHLD stays
+    // default because runShell needs waitpid's status.
+    Thread.detachNewThread {
+        var status: Int32 = 0
+        while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
+    }
+    return true
+}
