@@ -118,7 +118,7 @@ argv R2v --help; argv R2w -h
 check "R2v --help and -h print the usage, exit 0" "exitis R2v 0 && has R2v 'usage: keypipe' && exitis R2w 0 && has R2w 'usage: keypipe'" ""
 argv R2x --config "$EV/R2g.config.json" --report; argv R2y --config "$EV/R2g.config.json" --smoke-feed
 argv R2z --config "$EV/R2g.config.json" --app com.example.app
-argv R2s --config "$EV/R2g.config.json" --line ""
+argv R2s --config /dev/null --line ""
 argv R2r --config "$EV/R2g.config.json" --config "$EV/R2g.config.json" --triggers
 check "R2r a flag given twice: exit 2" "exitis R2r 2 && has R2r 'keypipe: --config given twice'" ""
 # A value that looks like a flag is still the value: trigger "--report" without report mode.

@@ -252,4 +252,4 @@ voice-switch（`feat/keypipe-delivery`）:
 - `4f18b72` keypipe の報告が読めないときに通知する。`7b45b0f` `keypipe.binary`/`config` が絶対パスか `~` でなければ読み込み時に拒否する。
 - `2a62a7c`・`7b0329a` `make url-test-linux`。verify-voice-switch-mac に keypipe 配送の検証項目（KD1〜KD6）を足し、KD1 と KD4 をテストで押さえた。
 
-残したこと: Linux で fd の一覧を取ってから spawn するまでに別のスレッドが開いた fd は漏れる（Linux ではデーモンが動かないので、glibc 2.34 の `closefrom` 系は使わない）。fd 70000 の検査が効くのは上限を上げた R1d だけ。`Term` は大文字と小文字を区別して照合する（`com.google.chrome` と書くと `com.google.Chrome` に一致しない）。照合の意味を変えるので、利用者の判断に残す。空の `--line ""` も値の無い `--line` も、設定を読む前に exit 2 で止まる（`285184d` とその次のコミット）。
+残したこと: Linux で fd の一覧を取ってから spawn するまでに別のスレッドが開いた fd は漏れる（Linux ではデーモンが動かないので、glibc 2.34 の `closefrom` 系は使わない）。fd 70000 の検査が効くのは上限を上げた R1d だけ。`Term` は大文字と小文字を区別して照合する（`com.google.chrome` と書くと `com.google.Chrome` に一致しない）。照合の意味を変えるので、利用者の判断に残す。空の `--line ""` も値の無い `--line` も、設定を読む前に exit 2 で止まる（空の値は `0017de2`、値の無いフラグは `bd121ba` から）。
