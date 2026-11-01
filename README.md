@@ -190,6 +190,36 @@ release build installed on `PATH`), otherwise a stale build may reject config
 keys the newer one accepts. If `KEYPIPE_BIN` is not executable or the config
 is unreadable, sourcing the widget does nothing.
 
+## Voice (voice-switch)
+
+The same `--line` flag lets [voice-switch](https://github.com/nekowasabi/voice-switch)
+feed a dictation into the rules, so one rule serves both the keyboard and the
+microphone. A voice-switch `command` action runs a shell command with the
+dictated text on stdin (no trailing newline) and the bundle id of the app the
+dictation was aimed at in `VOICE_SWITCH_APP`:
+
+```json
+{
+  "name": "keypipe",
+  "wakeWords": ["キーパイプ"],
+  "command": "/usr/local/bin/keypipe --config ~/.config/keypipe/config.json --line @@@ ${VOICE_SWITCH_APP:+--app \"$VOICE_SWITCH_APP\"}",
+  "superwhisperMode": "voice_switch"
+}
+```
+
+keypipe sees the text as the line of a focused text field in that app, as it
+does for the zsh widget. What differs from the keyboard:
+
+- Only `trigger` rules fire; `hotkey` rules do not.
+- A rule needs `"when": {"focus": "textField"}` to receive the text. With the
+  default `focus: any`, the rule runs with empty input.
+- `replaceInput` has no visible effect: the rewritten line goes to stdout,
+  which voice-switch discards. Use `output.shell`, `notify`, or `background`.
+- `--app` is left out when `VOICE_SWITCH_APP` is empty, because `--app ""` is
+  the app name `""`, not the front app.
+
+voice-switch's README (Shell command delivery) covers the action's own keys.
+
 ## macOS key tap and Accessibility
 
 `Sources/keypipe/MacKeyTap.swift` installs a listen-only CGEventTap, drops

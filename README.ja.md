@@ -175,6 +175,35 @@ less、REPL）でも動きません。他のシェルで使うには、同じ `-
 ことがあります。`KEYPIPE_BIN` が実行できないか設定を読めないとき、ウィジェットは
 何もしません。
 
+## 音声（voice-switch）
+
+同じ `--line` を使って、[voice-switch](https://github.com/nekowasabi/voice-switch) から
+音声入力の内容をルールに流せます。ひとつのルールがキーボードとマイクの両方に効きます。
+voice-switch の `command` アクションは、書き起こした文章を標準入力（末尾の改行なし）で、
+入力の宛先だったアプリの bundle id を `VOICE_SWITCH_APP` で渡してシェルコマンドを動かします。
+
+```json
+{
+  "name": "keypipe",
+  "wakeWords": ["キーパイプ"],
+  "command": "/usr/local/bin/keypipe --config ~/.config/keypipe/config.json --line @@@ ${VOICE_SWITCH_APP:+--app \"$VOICE_SWITCH_APP\"}",
+  "superwhisperMode": "voice_switch"
+}
+```
+
+keypipe は zsh ウィジェットのときと同じく、その文章をそのアプリのフォーカスされた
+テキスト欄の行として扱います。キーボードと違う点は次のとおりです。
+
+- 動くのは `trigger` ルールだけで、`hotkey` ルールは動きません。
+- 文章を受け取るルールには `"when": {"focus": "textField"}` が要ります。既定の
+  `focus: any` のままだと、ルールは空の入力で動きます。
+- `replaceInput` は何も起こしません。書き換えた行は stdout に出ますが、voice-switch が
+  捨てます。代わりに `output.shell`、`notify`、`background` を使ってください。
+- `VOICE_SWITCH_APP` が空のときは `--app` ごと省きます。`--app ""` は `""` という
+  アプリ名であって、前面アプリにはならないためです。
+
+アクション側のキーは voice-switch の README（シェルコマンドへの受け渡し）にあります。
+
 ## macOS のキー取得と Accessibility
 
 `Sources/keypipe/MacKeyTap.swift` は listen-only の CGEventTap を張り、keypipe
