@@ -40,7 +40,7 @@ Bounds and assumptions:
 - Through the binary (`--smoke-feed`, so the real `Engine.key` loop): every
   sequence over `@`, `a` up to length 7 (254 inputs). The config is one rule
   `{"trigger":"@@@"}` with the default `when` (`focus: any`), so rule selection
-  (`Context.swift` `select`/`matches`) always holds and is not what this check
+  (`Engine.fire` over `Context.swift` `evaluate`) always holds and is not what this check
   verifies.
 - One rule (`@@@`). Multiple overlapping triggers are not covered. `{@@, @@@}`
   makes `@@@` unreachable, which README documents as the streaming caveat.

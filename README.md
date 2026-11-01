@@ -321,7 +321,8 @@ TextEdit and System Events.
 - `Sources/keypipe/Config.swift`: the only JSON boundary, `loadConfig(path:)`
   with reason-specific rejections.
 - `Sources/keypipe/Context.swift`: `Focus`, `Field`, `Snapshot`, and the
-  pure rule check (`evaluate`: focus, then the fact conditions in cost order).
+  rule check (`evaluate`: focus, then the fact conditions in cost order; a slow
+  fact is read through the desktop only when the cheaper ones hold).
 - `Sources/keypipe/Trigger.swift`: `Trigger` (text or hotkey), `Hotkey`
   parsing, and the pure trigger buffer matcher (longest match first,
   64-character buffer).
