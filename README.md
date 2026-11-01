@@ -27,10 +27,20 @@ swift build
 
 ```sh
 mkdir -p ~/.config/keypipe && cp config.example.json ~/.config/keypipe/config.json
-.build/debug/keypipe &
-# or point at any file
+make            # stop the running daemon, swift build, start it again
+make status     # pid and the last log lines
+make stop
+# or by hand, pointing at any file
 .build/debug/keypipe --config /path/to/keypipe.json &
 ```
+
+`make` (the `dev` target) is the quick manual-check loop: `make stop`,
+`make build`, `make start`. `start` runs the daemon with `nohup`, writes
+stdout and stderr to `~/.local/state/keypipe/keypipe.log` (override with
+`LOG=`), and fails if `keypipe started` does not appear within 5 s.
+`CONFIG=/path.json` passes `--config`. `make log` tails the log, `make test`
+and `make verify` run the unit tests and the verification skill
+(`VERIFY_ARGS=--no-live` skips the live items).
 
 On start the daemon prints `keypipe started` with the rule count and the
 config path. It stays alive until SIGINT (Ctrl-C) or SIGTERM (`kill -TERM`).

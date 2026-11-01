@@ -26,10 +26,19 @@ swift build
 
 ```sh
 mkdir -p ~/.config/keypipe && cp config.example.json ~/.config/keypipe/config.json
-.build/debug/keypipe &
-# または任意のファイルを指す
+make            # 起動中のデーモンを止め、swift build し、起動し直す
+make status     # pid と直近のログ
+make stop
+# または手で任意のファイルを指す
 .build/debug/keypipe --config /path/to/keypipe.json &
 ```
+
+`make`（`dev` ターゲット）が動作確認の最短手順で、`make stop`、`make build`、
+`make start` を順に行います。`start` は `nohup` でデーモンを起動し、stdout と
+stderr を `~/.local/state/keypipe/keypipe.log`（`LOG=` で変更可）に書き、5 秒以内に
+`keypipe started` が出なければ失敗します。`CONFIG=/path.json` で `--config` を
+渡せます。`make log` でログを追い、`make test` と `make verify` が単体テストと
+検証スキルです（`VERIFY_ARGS=--no-live` で実機項目を飛ばします）。
 
 起動時にデーモンはルール数と設定パスとともに `keypipe started` を出力します。
 SIGINT（Ctrl-C）または SIGTERM（`kill -TERM`）まで動作し続けます。
