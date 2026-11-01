@@ -1,0 +1,72 @@
+---
+title: "keypipe の1回の発火: 同じトリガーに URL ルールと汎用ルール"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: 進行中
+    lg1: 配送した
+    lg2: 止まった
+  }
+  class lg0 blue
+  class lg1 teal
+  class lg2 orange
+  s0: トリガーが届いた [ブラウザ]
+  s1: トリガーが届いた [IME 変換中]
+  s2: トリガーが届いた [編集欄]
+  s3: トリガーが届いた [パスワード欄]
+  s4: トリガーが届いた [端末]
+  s5: 止めた#65288;ゲート#65289;
+  s6: 止めた#65288;ゲート#65289; [パスワード欄]
+  s7: ゲートを通った [ブラウザ]
+  s8: ゲートを通った [編集欄]
+  s9: 止めた#65288;URL が読めない#65289;
+  s10: URL ルールを選んだ
+  s11: 汎用ルールを選んだ
+  s12: 欄を読んでトリガーを消した#65288;URL ルール#65289;
+  s13: 欄を読んでトリガーを消した#65288;汎用ルール#65289;
+  s14: 失敗を報告
+  s15: 欄を書き換えた
+  s16: 裏で起動したと報告
+  s17: 打ち込んだと報告
+  s18: 失敗を報告#65288;zsh/音声: 打ち込む先が無い#65289;
+  [*] --> s0
+  [*] --> s1
+  [*] --> s2
+  [*] --> s3
+  [*] --> s4
+  s0 --> s7: ゲートを通す
+  s1 --> s5: ゲートで止める
+  s2 --> s8: ゲートを通す
+  s3 --> s6: ゲートで止める
+  s4 --> s5: ゲートで止める
+  s7 --> s9: URL を読む [読めない]
+  s7 --> s10: URL を読む [github]
+  s7 --> s11: URL を読む [github 以外] or URL は読まない [zsh/音声]
+  s8 --> s11: 汎用ルールが一致
+  s10 --> s12: 欄を読み#12289;トリガーを消す
+  s11 --> s13: 欄を読み#12289;トリガーを消す
+  s12 --> s15: 変換して欄に書く
+  s13 --> s14: 出力 background [起動に失敗]
+  s13 --> s16: 出力 background [起動できた]
+  s13 --> s15: 出力 replaceInput
+  s13 --> s17: 出力 typeText [打鍵]
+  s13 --> s18: 出力 typeText [zsh/音声]
+  class s0 blue
+  class s1 blue
+  class s2 blue
+  class s3 blue
+  class s4 blue
+  class s5 orange
+  class s6 orange
+  class s7 blue
+  class s8 blue
+  class s9 orange
+  class s10 blue
+  class s11 blue
+  class s12 blue
+  class s13 blue
+  class s14 orange
+  class s15 teal
+  class s16 teal
+  class s17 teal
+  class s18 orange
