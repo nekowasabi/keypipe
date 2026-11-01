@@ -185,8 +185,9 @@ source ~/repos/keypipe/shell/keypipe.zsh   # 任意: KEYPIPE_APP=<bundle id>
 [--app <bundle id>]` は stdin でトリガーを除いた行を受け、そのアプリ（既定は前面
 アプリ）のフォーカスされたテキスト欄としてルールを走らせ、新しい行を stdout に
 出します。`replaceInput` なら結果、それ以外は行をそのままです。終了コードは一致 0、
-ルール無し・ゲート（deny）で止まった・引数の不正は 2（ウィジェットはトリガーを残す）、
-設定不正 1 です。記録は stderr に出ます。
+何も走らなかったとき（ルールが無い、ゲートで止まった: terminal・composing・secure・
+deny・front-changed、事実を読めなかった）と引数の不正（空のトリガーを含む）は 2
+（ウィジェットはトリガーを残す）、設定不正 1 です。記録は stderr に出ます。
 
 `--report` を付けると、新しい行の代わりに、発火の結果を JSON 1 行で出します（終了
 コードは書けたら 0、設定不正なら 1、引数の不正なら 2）。`outcome` は `replaced`・`delivered`・

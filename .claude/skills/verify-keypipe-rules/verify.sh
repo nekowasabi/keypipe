@@ -118,6 +118,7 @@ argv R2v --help; argv R2w -h
 check "R2v --help and -h print the usage, exit 0" "exitis R2v 0 && has R2v 'usage: keypipe' && exitis R2w 0 && has R2w 'usage: keypipe'" ""
 argv R2x --config "$EV/R2g.config.json" --report; argv R2y --config "$EV/R2g.config.json" --smoke-feed
 argv R2z --config "$EV/R2g.config.json" --app com.example.app
+argv R2s --config "$EV/R2g.config.json" --line ""
 argv R2r --config "$EV/R2g.config.json" --config "$EV/R2g.config.json" --triggers
 check "R2r a flag given twice: exit 2" "exitis R2r 2 && has R2r 'keypipe: --config given twice'" ""
 # A value that looks like a flag is still the value: trigger "--report" without report mode.
@@ -126,7 +127,7 @@ check "R2q a flag-like value stays a value (--line --report is the trigger --rep
   "exitis R2q 2 && has R2q 'keypipe nomatch --report' && lacks R2q '\"outcome\"'" ""
 check "R2x a modifier without --line, a flag without its value: exit 2, no daemon" \
   "exitis R2x 2 && has R2x 'keypipe: --report needs --line' && exitis R2y 2 && has R2y 'keypipe: --smoke-feed needs a value' \
-   && exitis R2z 2 && has R2z 'keypipe: --app needs --line'" ""
+   && exitis R2z 2 && has R2z 'keypipe: --app needs --line' && exitis R2s 2 && has R2s 'keypipe: --line needs a trigger'" ""
 bad R2i '{"rules":[{"trigger":"@@@","hotkey":"ctrl+@"}]}' "rule has both trigger and hotkey"
 bad R2j '{"rules":[{"hotkey":"@"}]}' "hotkey needs a modifier"
 bad R2k '{"rules":[{"hotkey":"meta+@"}]}' "unknown modifier meta"

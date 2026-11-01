@@ -243,7 +243,7 @@ keypipe:
 - `dbb4e06`・`2e33ff3`・`bd121ba`・`a0a9081` 引数を1回だけ解析する。`--help` は使い方を出して 0。知らない引数、値の無いフラグ、`--line` 無しの `--report`/`--app`、同じフラグの2回は、使い方を出して 2 で止まる（以前は黙ってデーモンが起動した）。値がフラグ名と同じでも値として読む（`--line --report` の `--report` はトリガー）。R2q・R2r・R2u・R2v・R2x。
 - `b3651f0` `app`/`url` の空の一覧を設定不正として拒否する。`{"app":["com.google.Chrome"],"url":[]}` の deny は何も止めずに素通りしていた。
 - `a00a5e8`・`211bb3e`・`81fb62d` ほか Linux でビルドできなかった Shell.swift を直した（`5ae1475` から）。Linux のジョブが親の fd を受け継いでいた（glibc に `POSIX_SPAWN_CLOEXEC_DEFAULT` が無い）ので、`/proc/self/fd` に並ぶ開いた fd を閉じる（65536 までの走査では fd 70000 が漏れた）。一覧を取れないとき（`/proc` が無い chroot など）はジョブを起動しない。setsid と fd の継承（低い番号と fd 70000）を ShellTests で固定し、R1d で Docker の `swift:6.0` に build と `swift test` をかける（`--init`、`--ulimit nofile=131072`、コンテナ内の `timeout -k 30 900`。docker の CLI は SIGALRM を無視するので外側の上限は効かない）。
-- 通しレビューの P1: `typeText` は変換のあいだに前面が動くと、deny の対象アプリや端末へ打ち込めた。発火時の Snapshot を出力まで渡し、打つ直前にアプリ・フォーカス・欄（`sameField`）が同じでパスワード欄でないことを確かめ、違えば `gone` で失敗する（`onFail.output` も同じ）。URL は読み直さないので、同じ欄のまま別のページへ移った場合は防げない（タブの切り替えは欄が変わるので防げる）。
+- 通しレビューの P1: `typeText` は変換のあいだに前面が動くと、deny の対象アプリや端末へ打ち込めた。発火時の Snapshot を出力まで渡し、打つ直前にアプリ・フォーカス・欄（`sameField`）が同じでパスワード欄でないことを確かめ、違えば `gone` で失敗する（`onFail.output` も同じ）。URL は読み直さないので、同じ欄のまま別のページへ移った場合は防げない（タブの切り替えは欄が変わるので防げる）。確かめるのは打ち始める前の1回で、長い文字列をチャンクに分けて打つあいだ（チャンクごとに 5 ms）は、MacDesktop が secure とフォーカスの種類しか見ない。
 - `17f781d`・`f8bead6`・`8a95fa7` README: 音声の節に voice-switch の keypipe 配送の例。日本語版に抜けていた `when.url`・`deny`・パスワード欄・`typeText`・端末の hotkey 例外。設定が不正なとき widget が黙ることと、理由の確かめ方。
 
 voice-switch（`feat/keypipe-delivery`）:

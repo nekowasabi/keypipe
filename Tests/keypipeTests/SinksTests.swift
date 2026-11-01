@@ -148,6 +148,17 @@ final class SinksTests: XCTestCase {
         )
         XCTAssertEqual(engine.fire("@@@"), .delivered(rule: 0, viaFallback: false))
         XCTAssertEqual(desktop.typed.count, 1, "unmoved, the result is typed once")
+
+        // A focus-any hotkey in a terminal (no field on either side) still types there.
+        let terminal = Moving(Snapshot(app: "com.mitchellh.ghostty", focus: .terminal))
+        let chord = try! Hotkey.parse("ctrl+@")
+        var inTerminal = Engine(
+            config: KeypipeConfig(rules: [
+                Rule(trigger: .hotkey(chord), output: Guarded(primary: .builtin(.typeText)))
+            ]),
+            desktop: terminal, shell: { _, _, _, _ in .exited(0, stdout: "") }, emit: { _ in })
+        XCTAssertEqual(inTerminal.fire(.hotkey(chord)), .delivered(rule: 0, viaFallback: false))
+        XCTAssertEqual(terminal.typed, [""])
     }
 
     /// The fake keeps MacDesktop's contract: no caret with nothing focused or in a password field.

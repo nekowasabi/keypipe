@@ -131,7 +131,7 @@ if flags.contains("--triggers") {
 if flags.contains("--line") {
     guard let trigger = values["--line"], !trigger.isEmpty else {
         fputs("keypipe: --line needs a trigger\n", stderr)
-        exit(1)
+        exit(2)
     }
     var app = values["--app"]
     #if os(macOS)

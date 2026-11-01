@@ -204,8 +204,9 @@ each text trigger once per line. `keypipe --config C --line <trigger> [--app
 <bundle id>]` reads the line (trigger removed) on stdin, runs the rule as a
 focused text field of that app (default: the front app), and prints the new
 line to stdout: the `replaceInput` result, otherwise the line unchanged. Exit
-0 matched, 2 no rule, a gate (deny) stopped it, or a bad argument (the widget
-keeps the trigger), 1 invalid config. The
+0 matched; 2 nothing ran (no rule held, a gate stopped it: terminal, composing,
+secure, deny, front-changed, or a fact could not be read) or a bad argument,
+an empty trigger included (the widget keeps the trigger); 1 invalid config. The
 transcript goes to stderr.
 
 Only zsh is supported. The widget is ZLE code, so bash, fish and other
@@ -278,7 +279,7 @@ original text on failure.
 | `started` | a background job did start | `rule` |
 | `failed` | a stage failed | `rule`, `stage` (`transform`, `output`, `spawn`), `failure` (the `KEYPIPE_FAILURE` token) |
 | `nomatch` | no rule for this trigger holds | |
-| `blocked` | a gate stopped the fire before any rule | `reason` (`terminal`, `composing`, `secure`, `deny`, `front-changed`) |
+| `blocked` | a gate stopped the fire before anything was erased or run | `reason` (`terminal`, `composing`, `secure`, `deny`, `front-changed`) |
 | `unreadable` | a condition fact could not be read, so the fire stopped | `fact`, `reason` |
 | `noinput` | a rule matched but the field vanished | `rule` |
 
