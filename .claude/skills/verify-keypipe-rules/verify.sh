@@ -111,6 +111,10 @@ argv R2v --help; argv R2w -h
 check "R2v --help and -h print the usage, exit 0" "exitis R2v 0 && has R2v 'usage: keypipe' && exitis R2w 0 && has R2w 'usage: keypipe'" ""
 argv R2x --config "$EV/R2g.config.json" --report; argv R2y --config "$EV/R2g.config.json" --smoke-feed
 argv R2z --config "$EV/R2g.config.json" --app com.example.app
+# A value that looks like a flag is still the value: trigger "--report" without report mode.
+printf 'x' | cap 10 "$BIN" --config "$EV/R2g.config.json" --line --report > "$EV/R2q.out" 2>&1; echo $? > "$EV/R2q.exit"
+check "R2q a flag-like value stays a value (--line --report is the trigger --report)" \
+  "exitis R2q 2 && has R2q 'keypipe nomatch --report' && lacks R2q '\"outcome\"'" ""
 check "R2x a modifier without --line, a flag without its value: exit 2, no daemon" \
   "exitis R2x 2 && has R2x 'keypipe: --report needs --line' && exitis R2y 2 && has R2y 'keypipe: --smoke-feed needs a value' \
    && exitis R2z 2 && has R2z 'keypipe: --app needs --line'" ""

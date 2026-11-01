@@ -79,6 +79,7 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | R2h-l | hotkey config errors: `rule needs trigger or hotkey`, `rule has both trigger and hotkey`, `hotkey needs a modifier`, `unknown modifier <x>`, `shift is written in the key (ctrl+A)` | fake |
 | R2u | an unknown argument (`--hepl`) prints `keypipe: unknown argument` and the usage and exits 2 instead of starting the daemon | binary |
 | R2v | `--help` and `-h` print the usage and exit 0 | binary |
+| R2q | a value that looks like a flag stays the value: `--line --report` is the trigger `--report` in plain mode (one parse; flags are no longer looked up by position) | binary |
 | R2x | `--report` (or `--app`) without `--line`, and a flag missing its value (`--smoke-feed`), exit 2 instead of starting the daemon | binary |
 | R3a-d | rule selection by focus, by app, none satisfied (no erase), config order on ties | fake |
 | R3e | `focus: any` in a text field: trigger erased, input empty, field untouched | fake |

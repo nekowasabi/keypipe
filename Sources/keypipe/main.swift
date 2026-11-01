@@ -7,17 +7,11 @@ import Foundation
     import AppKit
 #endif
 
-private func argument(_ flag: String, in args: [String]) -> String? {
-    guard let index = args.firstIndex(of: flag), index + 1 < args.count else { return nil }
-    return args[index + 1]
-}
-
 private func emit(_ line: String) {
     print(line)
     fflush(stdout)
 }
 
-let args = CommandLine.arguments
 let usage = """
     usage: keypipe [--config FILE]                          run the daemon (macOS)
            keypipe [--config FILE] --line TRIGGER [--app BUNDLE_ID] [--report] < line
@@ -26,8 +20,11 @@ let usage = """
            keypipe [--config FILE] [--context FILE] --feed-stdin
            keypipe --probe
     """
-// Why: an unknown argument (a typo, --help) used to fall through and start the daemon silently.
-do {
+/// The parsed command line: flags present, and the value of each flag that takes one.
+/// Why one parse: an unknown argument (a typo, --help) used to fall through and start the daemon
+/// silently, and looking flags up by position read a value such as `--line --config` as a flag.
+let (flags, values): (Set<String>, [String: String]) = {
+    let args = CommandLine.arguments
     let takesValue: Set = ["--config", "--context", "--line", "--app", "--smoke-feed", "--smoke-hotkey"]
     let alone: Set = ["--job", "--probe", "--triggers", "--report", "--feed-stdin"]
     func refuse(_ why: String) -> Never {
@@ -35,6 +32,7 @@ do {
         exit(2)
     }
     var flags = Set<String>()
+    var values: [String: String] = [:]
     var index = 1
     while index < args.count {
         let arg = args[index]
@@ -42,6 +40,7 @@ do {
         if takesValue.contains(arg) {
             guard index + 1 < args.count else { refuse("\(arg) needs a value") }
             flags.insert(arg)
+            values[arg] = args[index + 1]
             index += 2
             continue
         }
@@ -53,9 +52,10 @@ do {
     for modifier in ["--report", "--app"] where flags.contains(modifier) && !flags.contains("--line") {
         refuse("\(modifier) needs --line")
     }
-}
-if args.contains("--job") { runJobProcess() }
-if args.contains("--probe") {
+    return (flags, values)
+}()
+if flags.contains("--job") { runJobProcess() }
+if flags.contains("--probe") {
     var probe: [String: Any] = ["trusted": false, "focus": "none", "focusIsTextField": false]
     #if os(macOS)
         probe["trusted"] = MacDesktop.trusted
@@ -83,18 +83,18 @@ let defaultConfigFile: String = {
         ?? NSString(string: "~/.config").expandingTildeInPath
     return base + "/keypipe/config.json"
 }()
-let configFile = argument("--config", in: args) ?? defaultConfigFile
+let configFile = values["--config"] ?? defaultConfigFile
 let loaded: KeypipeConfig
 let configBytes: Data
 let fake: FakeDesktop
 do {
     configBytes = try readConfigData(path: configFile)
     loaded = try loadConfig(data: configBytes)
-    if let path = argument("--context", in: args) { fake = try FakeDesktop(path: path) }
+    if let path = values["--context"] { fake = try FakeDesktop(path: path) }
     else { fake = FakeDesktop() }
 } catch {
     fputs("\(error)\n", stderr)
-    if argument("--config", in: args) == nil {
+    if values["--config"] == nil {
         fputs("keypipe: no --config given; copy config.example.json to \(defaultConfigFile)\n", stderr)
     }
     exit(1)
@@ -102,7 +102,7 @@ do {
 
 let spawnJob: (Job) -> Bool = { startJob($0, configPath: configFile, configBytes: configBytes, emit: emit) }
 
-if args.contains("--triggers") {
+if flags.contains("--triggers") {
     var seen = Set<String>()
     for rule in loaded.rules {
         if case .text(let text) = rule.trigger, seen.insert(text).inserted { emit(text) }
@@ -111,12 +111,12 @@ if args.contains("--triggers") {
 }
 
 // The zsh widget's bridge: stdin is the line without the trigger, stdout the new line.
-if args.contains("--line") {
-    guard let trigger = argument("--line", in: args), !trigger.isEmpty else {
+if flags.contains("--line") {
+    guard let trigger = values["--line"], !trigger.isEmpty else {
         fputs("keypipe: --line needs a trigger\n", stderr)
         exit(1)
     }
-    var app = argument("--app", in: args)
+    var app = values["--app"]
     #if os(macOS)
         if app == nil { app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
     #endif
@@ -129,7 +129,7 @@ if args.contains("--line") {
     let result = engine.fire(.text(trigger))
     // Why: --report is for callers that act on the outcome (voice-switch). Plain --line keeps
     // the zsh widget's contract byte for byte: the line on stdout, exit 0 on a hit, 2 otherwise.
-    if args.contains("--report") {
+    if flags.contains("--report") {
         FileHandle.standardOutput.write(Data((result.reportJSON + "\n").utf8))
         exit(0)
     }
@@ -138,8 +138,8 @@ if args.contains("--line") {
     exit(0)
 }
 
-let seed = argument("--smoke-feed", in: args)
-let chord = argument("--smoke-hotkey", in: args)
+let seed = values["--smoke-feed"]
+let chord = values["--smoke-hotkey"]
 if seed != nil || chord != nil {
     var engine = Engine(config: loaded, desktop: fake, shell: runShell, emit: emit, background: spawnJob)
     for character in seed ?? "" {
@@ -157,7 +157,7 @@ if seed != nil || chord != nil {
     exit(engine.hits > 0 ? 0 : 2)
 }
 
-if args.contains("--feed-stdin") {
+if flags.contains("--feed-stdin") {
     var engine = Engine(config: loaded, desktop: fake, shell: runShell, emit: emit, background: spawnJob)
     emit("keypipe started with \(loaded.rules.count) rule(s) from \(configFile)")
     while let line = readLine(strippingNewline: false) {
