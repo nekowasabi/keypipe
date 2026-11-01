@@ -196,8 +196,12 @@ func spawnDetached(_ path: String, _ args: [String], stdin payload: Data) -> Boo
     posix_spawn_file_actions_addclose(&actions, fds[1])
     #if canImport(Glibc)
         // Why: glibc has no POSIX_SPAWN_CLOEXEC_DEFAULT, so close what the job would inherit instead.
+        // The open descriptors are listed, not scanned up to a bound, so a high number is not missed.
         // After the dup2 above, so fds[0] is already stdin; fds[1] has its own close.
-        for fd in 3..<Int32(min(getdtablesize(), 65_536)) where fd != fds[1] && fcntl(fd, F_GETFD) != -1 {
+        // ponytail: a descriptor another thread opens between this listing and the spawn still leaks;
+        // nothing on Linux runs such a thread (no daemon), so closefrom is not worth an extra glibc floor.
+        let open = (try? FileManager.default.contentsOfDirectory(atPath: "/proc/self/fd")) ?? []
+        for fd in open.compactMap({ Int32($0) }) where fd > 2 && fd != fds[1] && fcntl(fd, F_GETFD) != -1 {
             posix_spawn_file_actions_addclose(&actions, fd)
         }
     #endif

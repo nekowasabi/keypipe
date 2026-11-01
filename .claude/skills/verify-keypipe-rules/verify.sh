@@ -70,10 +70,12 @@ fi
 # Why: README promises the Linux feed build, and only a Linux compiler shows a Glibc-only break
 # (Shell.swift once failed there while every Mac run passed). DOCKER names the binary if not on PATH.
 # --init: otherwise swift test is PID 1, never reaps the orphans ShellTests kills, and kill(pid, 0) sees zombies.
+# timeout inside the container: the docker client ignores cap's SIGALRM. A hung image pull is not bounded.
+# --ulimit: lets ShellTests hold fd 70000, which a bounded descriptor scan once leaked to background jobs.
 DOCKER_BIN=${DOCKER:-$(command -v docker)}
 if [ -n "$DOCKER_BIN" ] && "$DOCKER_BIN" info > /dev/null 2>&1; then
   check "R1d Linux build and swift test (swift:6.0)" \
-    "cap 900 '$DOCKER_BIN' run --rm --init -v '$REPO':/src:ro swift:6.0 bash -c 'mkdir /w && cd /src && tar --exclude=.build --exclude=.verify-evidence -cf - . | tar -xf - -C /w && cd /w && swift test' > '$EV/linux.log' 2>&1" "linux.log"
+    "'$DOCKER_BIN' run --rm --init --ulimit nofile=1048576:1048576 -v '$REPO':/src:ro swift:6.0 bash -c 'mkdir /w && cd /src && tar --exclude=.build --exclude=.verify-evidence -cf - . | tar -xf - -C /w && cd /w && timeout 900 swift test' > '$EV/linux.log' 2>&1" "linux.log"
 else
   sk "R1d Linux build and swift test" "docker not available (set DOCKER=)"
 fi

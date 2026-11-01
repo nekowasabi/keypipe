@@ -73,7 +73,7 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | --- | --- | --- |
 | R0a/R0b | macOS host, swift toolchain | doctor |
 | R1a-c | build, `swift test`, `swift-format lint --strict` | build |
-| R1d | the Linux build and `swift test` in a `swift:6.0` container (README promises the Linux feed build; a Glibc-only break never shows on a Mac). Skips without Docker; `DOCKER=<binary>` when it is not on PATH. Capped at 900 s; it fails, not skips, when Docker runs but the `swift:6.0` image cannot be pulled (offline). `ShellTests.testDetachedJobHasItsOwnSessionAndNoInheritedDescriptors` pins setsid and the closed descriptors on both systems | build |
+| R1d | the Linux build and `swift test` in a `swift:6.0` container (README promises the Linux feed build; a Glibc-only break never shows on a Mac). Skips without Docker; `DOCKER=<binary>` when it is not on PATH. `swift test` is capped at 900 s by `timeout` inside the container (the docker client ignores SIGALRM, so the pull itself is not bounded); it fails, not skips, when Docker runs but the `swift:6.0` image cannot be pulled (offline). `ShellTests.testDetachedJobHasItsOwnSessionAndNoInheritedDescriptors` pins setsid and that a held pipe, low and at fd 70000 (the container's raised limit; 200 on a Mac), is not inherited | build |
 | R2a-f | invalid configs exit 1 with `invalid config` (empty trigger, old `action` key, unknown output, empty `output.shell`, empty `transform`, unknown `focus`) | fake |
 | R2g | minimal rule accepted with defaults | fake |
 | R2h-l | hotkey config errors: `rule needs trigger or hotkey`, `rule has both trigger and hotkey`, `hotkey needs a modifier`, `unknown modifier <x>`, `shift is written in the key (ctrl+A)` | fake |

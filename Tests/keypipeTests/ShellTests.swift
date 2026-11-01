@@ -45,11 +45,18 @@ final class ShellTests: XCTestCase {
         }
     }
 
-    /// A background job leads its own session (a closed terminal's HUP misses it) and inherits no
-    /// descriptor of the daemon or bridge beyond stdin, stdout and stderr.
+    /// A background job leads its own session (a closed terminal's HUP misses it) and does not inherit
+    /// the descriptors its parent holds open, low or high numbered. Descriptor 0 is probed too, so a
+    /// probe that sees nothing cannot pass.
     func testDetachedJobHasItsOwnSessionAndNoInheritedDescriptors() throws {
         var held: [Int32] = [0, 0]
         XCTAssertEqual(pipe(&held), 0)
+        // Well above the usual numbers: a scan up to 65536 once missed fd 70000 on Linux. R1d raises the
+        // limit so that number is usable there; otherwise 200 stays under macOS's 256 soft limit.
+        let floor: Int32 = getdtablesize() > 70_001 ? 70_000 : 200
+        let high = fcntl(held[0], F_DUPFD, floor)
+        XCTAssertGreaterThanOrEqual(high, floor)
+        held.append(high)
         defer { held.forEach { close($0) } }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
@@ -57,7 +64,7 @@ final class ShellTests: XCTestCase {
         // An external test checks each descriptor with no redirection active: a shell builtin would also
         // see the descriptors the shell saves while redirecting, and ls its own directory handle.
         let script = "echo $$ > \"$0/pid\"; : > \"$0/fds.tmp\"; for fd; do if /usr/bin/env test -e \"/dev/fd/$fd\"; then echo \"$fd\" >> \"$0/fds.tmp\"; fi; done; mv \"$0/fds.tmp\" \"$0/fds\"; sleep 2"
-        XCTAssertTrue(spawnDetached("/bin/sh", ["-c", script, dir] + held.map(String.init), stdin: Data()))
+        XCTAssertTrue(spawnDetached("/bin/sh", ["-c", script, dir, "0"] + held.map(String.init), stdin: Data()))
         var pid: pid_t = 0
         let deadline = ProcessInfo.processInfo.systemUptime + 3
         while ProcessInfo.processInfo.systemUptime < deadline {
@@ -68,12 +75,13 @@ final class ShellTests: XCTestCase {
             }
             Thread.sleep(forTimeInterval: 0.02)
         }
-        XCTAssertNotEqual(pid, 0, "the job did not start")
+        // Why: kill(0, ...) would hit the whole test runner's process group.
+        guard pid > 0 else { return XCTFail("the job did not start") }
+        defer { kill(pid, SIGKILL) }
         XCTAssertEqual(getsid(pid), pid, "the job leads its own session")
         XCTAssertNotEqual(getsid(pid), getsid(0))
         let open = try String(contentsOfFile: dir + "/fds").split(separator: "\n").compactMap { Int32($0) }
-        XCTAssertEqual(open, [], "the job inherited descriptors \(open) of \(held)")
-        kill(pid, SIGKILL)
+        XCTAssertEqual(open, [0], "stdin is open and nothing of \(held) is inherited")
     }
 
     func testPipesAreDrainedWhileInputIsWritten() {
