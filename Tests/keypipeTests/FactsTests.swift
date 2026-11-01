@@ -1,5 +1,9 @@
 import XCTest
 
+#if os(macOS)
+    import AppKit
+#endif
+
 @testable import keypipe
 
 /// A desktop that counts fact reads and fails the test if the field is ever read.
@@ -288,6 +292,13 @@ final class FactsTests: XCTestCase {
             let compiled = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".scpt")
             defer { try? FileManager.default.removeItem(at: compiled) }
             XCTAssertEqual(try run("/usr/bin/osacompile", ["-o", compiled.path, "-e", script]).status, 0, "the URL script must compile")
+            // The Chromium query compiles only against an installed Chromium browser's dictionary, so
+            // each one present on this Mac is compiled too; an absent one is not a failure.
+            for id in ["com.google.Chrome", "com.brave.Browser", "com.microsoft.edgemac", "com.vivaldi.Vivaldi", "company.thebrowser.Browser"]
+            where NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) != nil {
+                guard let chromium = frontTabURLScript(id) else { XCTFail("no script for \(id)"); continue }
+                XCTAssertEqual(try run("/usr/bin/osacompile", ["-o", compiled.path, "-e", chromium]).status, 0, "the \(id) URL script must compile")
+            }
             // The same error handler, driven by errors raised on purpose (no browser needed).
             let handler = script.components(separatedBy: "\n").drop { !$0.hasPrefix("on error") }.joined(separator: "\n")
             for number in [-1728, -1719] {
