@@ -265,9 +265,9 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
 
 ## Open questions and risks
 
-- `shellTimeout` 既定 30 秒で `claude -p` の長文が収まるか。ルールごとの期限が要るか。
+- `shellTimeout` 既定 30 秒で `claude -p` の長文が収まるか。設定で変えられるので運用で測る。ルールごとの期限は要望が出てから。
 - Electron の欄で `setText` 後の読み戻しが一致しないとき、遅れて反映されることがあるか。あると `pbcopy` と二重になるが欄は壊れない。
-- 閉じた窓の `AXUIElement` への書き込みが `kAXErrorInvalidUIElement` を返すか、黙って成功するか。未検証。
+- 閉じた窓の `AXUIElement` への書き込み。**実測（2026-11-01、TextEdit）**: 黙って成功を返し、読み戻しは古い値のまま。変換中（`sleep 3`）に文書を閉じると `apply-failed replaceInput ignored` と `apply notify "HELLO"` が出た。`gone` ではなく `ignored` に分類されるが、結果は通知され別の欄には書かない。`gone` が実機で出る条件（アプリ終了など）は未測定。
 - `POSIX_SPAWN_SETPGROUP` で切り離したグループが端末の SIGINT を受けない副作用は daemon で問題にならないか（推測）。
 - `replaceInput` 失敗の既定通知に結果の全文を載せてよいか（通知センターに残る）。
 

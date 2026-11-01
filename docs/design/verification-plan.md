@@ -105,6 +105,7 @@
 | tap がアプリより先にキーを見る遅れ | **足りない**。直列キューへの非同期だけだと M1 で欄が `HELL@@` になった（最後の `@` が入る前に読んで Backspace した）。消す前にトリガーの接尾辞が揃うまで最大 100 ms 待つ `waitForTrigger` で直し、以後 M1 は 2 回連続 `HELLO` |
 | TextEdit の自動大文字化 | 文頭の `abc;;;` は `Abc;;;` になる（デーモン無しで再現）。M2 は `1abc;;;` に変更 |
 | `System Events` のシフト付き打鍵 | `keystroke "!"`（この JIS 配列では shift+1）は tap で `keyboardGetUnicodeString` が `"1"` を返す（`tap.swift` で観測）。当初は `!!!` が matcher に届かず発火しなかった。**追記（同日、hotkey 対応）**: 文字を keycode と shift から `UCKeyTranslate` で求めるように変え、`probes/chord.swift` で shift+1 が `!`、ctrl+shift+a が `A` になることを観測。実機 M6（`1xyz!!!` → 欄 `1xyz`）が通り、シフト付きの文字列トリガーもこの harness で検証できる。物理キーの入力は未検証（推測: 同じ keycode と flags を持つので同じ結果） |
+| 変換中に文書を閉じたときの `replaceInput`（段 7） | TextEdit の閉じた文書の要素は `AXUIElementSetAttributeValue` が成功を返し、読み戻しは古い値。`apply-failed replaceInput ignored` → `apply notify "HELLO"`。`gone`（失効）は出なかった。打鍵直後の `close document` は予測入力のポップオーバーで止まるので、先に Escape（`key code 53`）を送る |
 | ビルドし直すと Accessibility の許可が外れるか | 外れなかった。段 6 で `.build/debug/keypipe` を複数回ビルドし直しても `--probe` は `trusted:true` のまま |
 | 自分が post した Backspace を自分の tap が拾うか | 拾う。`eventSourceUserData` で自分の事象だと識別できた |
 | 日本語 IME | ATOK が有効だと `keystroke "hello@@@"` は `へっぉ＠` になる。変換中の文字には Backspace が効いた（`＠` 3 文字が espanso の 2 回で 1 文字に）。検証前に ABC へ切り替える（`TISSelectInputSource` で可） |

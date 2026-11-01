@@ -69,7 +69,7 @@
 2. その時点のスナップショット（前面アプリ、`Focus`、欄のハンドル）を取る。`Focus` が `composing` なら `keypipe composing <trigger>` を出して終わる。
 3. `when` を評価し、ルールを一つ選ぶ。満たすルールが無ければ何もしない。最長一致したトリガーのルールがどれも満たさなくても、短いトリガーのルールへは落ちない。
 4. トリガーを消す。`Focus` が `text` なら Backspace を送る（`any` のルールでも）。`nothing` なら送らない。
-5. `focus: textField` のルールだけ欄を読む。消す前に一度読み、Backspace の後は値が「消す前の値からトリガーを除いたもの」に一致するまで期限（200 ms 程度、未検証）まで待ってから読み直す。「最初の変化」で抜けると、Backspace 3 本のうち 1 本だけ届いた時点の `hello@@` が入力になる（レビューで模擬境界により再現）。期限まで値が変わらなければ Backspace は無視された（TextEdit。実機検証済み）ので、トリガーを除いた値を `AXValue` に書き戻し、`keypipe erase-rewrite` を出す。消す前の値がトリガーで終わっていなければ待たずに読み直す。
+5. `focus: textField` のルールだけ欄を読む。消す前に一度読み、Backspace の後は値が「消す前の値からトリガーを除いたもの」に一致するまで期限（200 ms。実機 M1〜M6 で足りた）まで待ってから読み直す。「最初の変化」で抜けると、Backspace 3 本のうち 1 本だけ届いた時点の `hello@@` が入力になる（レビューで模擬境界により再現）。期限まで値が変わらなければ Backspace は無視された（プローブでは TextEdit が無視したが、デーモンの post は届いた。「実機で確かめた前提」参照）ので、トリガーを除いた値を `AXValue` に書き戻し、`keypipe erase-rewrite` を出す。消す前の値がトリガーで終わっていなければ待たずに読み直す。
 6. `transform` を実行する。非ゼロ終了、期限切れ、空出力は失敗。`onFail.transform` があれば同じ入力で一度だけ走らせ、その結果で続ける。無ければ送り先へ渡さず通知する。
 7. `output` を適用する。`replaceInput` はスナップショット時に捕まえた欄のハンドルへ書き、読み戻しが一致したときだけ `apply` 行を出す。変換に数秒かかってフォーカスが移っていても、別の欄を書かない。失敗（非ゼロ、期限切れ、書き込み無視、欄の失効）は `onFail.output` があれば同じ結果で一度だけ走らせる。失敗の扱いの全体は [`failure-fallback.md`](failure-fallback.md)。
 
@@ -238,7 +238,7 @@ struct Engine {
 - `focus: textField` は AX のテキスト欄とテキストエリア（複数行）の両方を含む。
 - `--context <json>` で `FakeDesktop` に状況を与える。打ったキーは `fieldText` の末尾に足され、erase は末尾から消す。`composing` と `ignoresBackspace` で変換中と Backspace 無視を再現する。
 - `--probe` は Accessibility の許可と現在のスナップショットを JSON 1 行で出す。`focus` は `textField` / `composing` / `none`。利用者が `when.app` の bundle id を調べる用途も兼ねる。
-- 発火の各段で `keypipe matched / nomatch / composing / erase / erase-rewrite / transform exit / apply / output-shell exit / field` の行を出す。形式は `SKILL.md` の表。
+- 発火の各段で `keypipe matched / nomatch / composing / erase / erase-rewrite / erase-failed / transform exit|timeout|empty / fallback ... / apply / apply-failed / output-shell exit|timeout / field` の行を出す。形式と全一覧は `SKILL.md` の表。
 
 ## 変更範囲
 
