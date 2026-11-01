@@ -2,8 +2,9 @@
 # Docs-only verifier for the Japanese README translation (docs/readme-ja).
 # Checks Vd1..Vd5. Exits 0 iff zero FAILs. Read-only except the evidence dir.
 set -u
-REPO="${REPO:-/workspace/keypipe}"
-SCRATCH="${SCRATCH:-/workspace/keypipe-mvp/scratch}"
+# Why: default to the checkout holding this script so it runs from any clone without env vars.
+REPO="${REPO:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+SCRATCH="${SCRATCH:-$REPO/.verify-evidence}"
 EVIDENCE="${EVIDENCE:-$SCRATCH/verify-docs-ja-$(date +%F-%H%M%S)}"
 mkdir -p "$EVIDENCE"
 PASS=0; FAIL=0

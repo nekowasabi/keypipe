@@ -13,10 +13,10 @@ per-run dir with `results.tsv`, never the translation itself.
 
 No server, no build. Each drive runs short-lived greps in the checkout.
 Two instances side by side are safe: every run writes to its own
-`/workspace/keypipe-mvp/scratch/verify-docs-ja-<timestamp>/` dir.
+`.verify-evidence/verify-docs-ja-<timestamp>/` dir.
 
 ```sh
-cd /workspace/keypipe
+cd <repo>
 git symbolic-ref --short HEAD   # expect: docs/readme-ja
 ```
 
@@ -25,7 +25,7 @@ git symbolic-ref --short HEAD   # expect: docs/readme-ja
 Read-only. Answers "is this checkout worth driving?"
 
 ```sh
-REPO=/workspace/keypipe .claude/skills/verify-keypipe-docs-ja/verify-docs-ja.sh
+.claude/skills/verify-keypipe-docs-ja/verify-docs-ja.sh
 ```
 
 Doctor is the script itself: `Vd0` fails when the repo dir is unreachable.
@@ -34,8 +34,8 @@ Branch is informational in `env.txt`; the Vd checks gate the result.
 ## Drive
 
 ```sh
-REPO=/workspace/keypipe .claude/skills/verify-keypipe-docs-ja/verify-docs-ja.sh                      # full Vd1..Vd5 run
-EVIDENCE=/workspace/keypipe-mvp/scratch/verify-docs-ja-manual REPO=/workspace/keypipe .claude/skills/verify-keypipe-docs-ja/verify-docs-ja.sh   # pinned evidence dir
+.claude/skills/verify-keypipe-docs-ja/verify-docs-ja.sh                      # full Vd1..Vd5 run
+EVIDENCE=.verify-evidence/verify-docs-ja-manual .claude/skills/verify-keypipe-docs-ja/verify-docs-ja.sh   # pinned evidence dir
 ```
 
 V table (each row: exact check run by `verify-docs-ja.sh`, expected result):
@@ -53,7 +53,7 @@ until the translation exists; a stub or missing file is a FAIL, never a SKIP.
 
 ## Evidence
 
-Per-run dir `/workspace/keypipe-mvp/scratch/verify-docs-ja-<timestamp>/` with
+Per-run dir `.verify-evidence/verify-docs-ja-<timestamp>/` with
 `output.log` (caller redirects stdout here), `results.tsv` (one row per Vd
 item: item, spec, PASS/FAIL, detail), `env.txt` (repo, branch, sha), and
 `summary.txt` (`pass=N fail=M`). Proof is the translation plus the

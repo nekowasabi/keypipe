@@ -12,7 +12,7 @@ Open `README.ja.md` in Japanese; open `README.md` in English. Each links to the 
 ## Driving it with verify-docs-ja.sh
 
 ```sh
-REPO=/workspace/keypipe .claude/skills/verify-keypipe-docs-ja/verify-docs-ja.sh
+.claude/skills/verify-keypipe-docs-ja/verify-docs-ja.sh
 ```
 
 PASS means the file exists, both links resolve by name, Japanese markers are present, and `@@@` / `--smoke-feed` / `--config` survived translation.
