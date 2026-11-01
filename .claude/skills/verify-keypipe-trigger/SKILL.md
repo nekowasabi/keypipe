@@ -12,10 +12,11 @@ and typing `@@@` (the trigger in the JSON config) shows a notification.
 
 | ID | Item | How to check | Status at sync commit |
 | --- | --- | --- | --- |
-| G1 | The command returns and the daemon keeps running | `perl -e 'alarm 3; exec @ARGV' .build/debug/keypipe --config config.example.json; echo $?` returns before the alarm | FAIL. Exit 142: the command stays in the foreground (`main.swift:76-83`). With a trailing `&` it does stay alive (verify-keypipe V2f). |
+| G1 | The command returns and the daemon keeps running | Start with a trailing `&`; `verify-keypipe-rules` M0b | PASS with `&` (the daemon runs its CFRunLoop in the foreground by design; verify.sh and the manual check both start it with `&`). |
 | G2 | The running daemon receives keystrokes | `verify-keypipe-rules/verify.sh` live items M1 and M3 | PASS on a Mac with Accessibility granted (2026-11-01). `MacKeyTap.swift` installs a listen-only CGEventTap and feeds `Engine.key`. |
 | G3 | `@@@` fires the rule exactly once per completed `@@@` | `check.sh` (below) | PASS within the bounds below. |
-| G4 | A match shows a notification | `--smoke-feed '@@@'` with a notification config | PARTIAL. `"type": "notify"` is rejected by `loadConfig` (`Config.swift:75-84`, `unknown action type: notify`). A `shell` action running `osascript -e 'display notification ...'` matches and exits 0. That the banner appears was not observed by the check. |
+| G4 | A match shows a notification | `"output": "notify"` rule, `@@@` typed where no text field is focused | PARTIAL. `notify` is a builtin and its `osascript display notification` exits 0 (measured). The banner itself has not been observed by a person: the 2026-11-01 manual check fired only the `replaceInput` rule. |
+| G5 | Physical keystrokes fire the rule (not only `System Events`) | User types `hello@@@` in TextEdit with the daemon running | PASS (2026-11-01). The user typed on the keyboard; `/tmp/keypipe.log` shows 4 fires with `apply replaceInput`. |
 
 Do not mark G1, G2 or G4 PASS until the code changes and the check above is rerun.
 

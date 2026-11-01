@@ -107,6 +107,7 @@
 | `System Events` のシフト付き打鍵 | `keystroke "!"`（この JIS 配列では shift+1）は tap で `keyboardGetUnicodeString` が `"1"` を返す（`tap.swift` で観測）。当初は `!!!` が matcher に届かず発火しなかった。**追記（同日、hotkey 対応）**: 文字を keycode と shift から `UCKeyTranslate` で求めるように変え、`probes/chord.swift` で shift+1 が `!`、ctrl+shift+a が `A` になることを観測。実機 M6（`1xyz!!!` → 欄 `1xyz`）が通り、シフト付きの文字列トリガーもこの harness で検証できる。物理キーの入力は未検証（推測: 同じ keycode と flags を持つので同じ結果） |
 | 変換中に文書を閉じたときの `replaceInput`（段 7） | TextEdit の閉じた文書の要素は `AXUIElementSetAttributeValue` が成功を返し、読み戻しは古い値。`apply-failed replaceInput ignored` → `apply notify "HELLO"`。`gone`（失効）は出なかった。打鍵直後の `close document` は予測入力のポップオーバーで止まるので、先に Escape（`key code 53`）を送る |
 | Electron / Chromium は `AXValue` の書き込みを無視するか（段 8 の前提） | 無視しない。Chrome の `textarea` と `contenteditable` は `AXUIElementSetAttributeValue` が成功し、読み戻しは約 12 ms 後に一致（直後は旧値）。Grok Bot（Electron、`com.anysphere.sand`）の入力欄は約 25 ms 後に一致し、元の値に戻した。`probes/axwrite.swift` で計測。段 8 は取り下げ、`performWrite` に 200 ms の読み戻し待ちを入れた |
+| 物理キーの打鍵で発火するか（検証はすべて System Events の合成打鍵だった） | 発火する。2026-11-01 に利用者が TextEdit で `hello@@@` を手で打ち、`replaceInput` が 4 回成功（`/tmp/keypipe.log`）。通知バナーの目視は未実施（`notify` ルールは発火していない） |
 | ビルドし直すと Accessibility の許可が外れるか | 外れなかった。段 6 で `.build/debug/keypipe` を複数回ビルドし直しても `--probe` は `trusted:true` のまま |
 | 自分が post した Backspace を自分の tap が拾うか | 拾う。`eventSourceUserData` で自分の事象だと識別できた |
 | 日本語 IME | ATOK が有効だと `keystroke "hello@@@"` は `へっぉ＠` になる。変換中の文字には Backspace が効いた（`＠` 3 文字が espanso の 2 回で 1 文字に）。検証前に ABC へ切り替える（`TISSelectInputSource` で可） |
