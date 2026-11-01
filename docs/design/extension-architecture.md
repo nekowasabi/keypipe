@@ -190,4 +190,22 @@ Context.swift 残す（V4a が照合する Snapshot と matches はここ）
 - **ネイティブ出力が fallback なしで失敗したら結果を通知**: 今までは replaceInput だけだった。typeText も同じく結果を失わない。
 - **`KEYPIPE_<FACT>` は出していない**（設計どおり後回し）。
 
-確かめたこと: `swift test` 61 件成功、verify-keypipe-rules `--no-live` 62 件、verify-keypipe-terminals `--no-live` 35 件、verify-keypipe `--no-live` 25 件、verify-keypipe-trigger の 254 入力、voice-switch の url-actions 106 件（静的変異 33 件を含む）。実機の M8（Chrome の Automation 許可）と M9（typeText を実際に打つ）、voice-switch での音声からの貼り付けは未確認。
+確かめたこと（PR1〜PR3 の時点）: `swift test` 61 件成功、verify-keypipe-rules `--no-live` 62 件、verify-keypipe-terminals `--no-live` 35 件、verify-keypipe `--no-live` 25 件、verify-keypipe-trigger の 254 入力、voice-switch の url-actions 106 件（静的変異 33 件を含む）。実機の M8（Chrome の Automation 許可）と M9（typeText を実際に打つ）、voice-switch での音声からの貼り付けは未確認。
+
+### ateam review（2026-11-01、Claude・Codex・Grok）で直したこと
+
+- voice-switch の `runCapturing` の期限が全体を囲んでいなかった（P1）。起動から stdout の EOF まで1つの期限にし、SIGTERM のあと SIGKILL。TERM を無視する子・stdout を握る孫・stdin を読まない子の3経路をテストに足した。
+- 遅い事実を読んだ後の再確認が app だけだった（P2）。focus・パスワード欄・欄がまだトリガーで終わるかも取り直し、変わっていれば `blocked front-changed` で止める（--report でも nomatch と区別できる）。
+- keypipe の failed が voice-switch の HUD で done になっていた（P2）。`actionFailed` で失敗表示にし、failed は通知する。
+- deny の事実が読めないとき黙って止まっていた（P2）。理由を通知し `unreadable` を返す。
+- typeText: 修飾キーを押したままだと Ctrl/Cmd 付きで打たれる（P2）。合成イベントのフラグを空にした。Mac とフェイクで「打てる場所」をそろえた（テキスト欄と端末だけ）。
+- URL 取得: ウィンドウが無いとき「Automation を許可して」と誤った通知が出た（P3）。Automation 拒否（-1743）だけを unreadable にした。
+- golden 行の網羅が自己採点だった（P2）。`FireResult.Kind` で全種類をそろえることを強制し、voice-switch 側は keypipe の golden ファイルと突き合わせる。
+
+残した点（判断して残した、または未確認）:
+
+- `JobRequest.configBytes` が nil のときファイルを読む分岐は残した。動いているデーモンが古いバイナリのまま、再ビルドした新しい子を起動する更新の合間のため。
+- P4 は今ある事実（app・url）の全組み合わせだけ。cheap の事実はまだ無い。P8 の id 一覧は手書きの標本。
+- 端末前面ではパスワード入力（sudo など）を検知できない。`focus: any` の hotkey で typeText を使うと打ててしまう。
+- typeText の Unicode イベントが日本語 IME オンのときにどう変換されるかは未確認（M9 で IME オンも試す）。書記素クラスタを2つのイベントに分ける可能性もある（サロゲートペアは分けない）。
+- 初回の Automation 許可ダイアログ中に osascript を 1 秒で止めたとき許可が取れるかは、実機で未確認（M8）。
