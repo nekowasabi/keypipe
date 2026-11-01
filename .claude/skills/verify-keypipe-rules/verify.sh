@@ -73,7 +73,7 @@ fi
 DOCKER_BIN=${DOCKER:-$(command -v docker)}
 if [ -n "$DOCKER_BIN" ] && "$DOCKER_BIN" info > /dev/null 2>&1; then
   check "R1d Linux build and swift test (swift:6.0)" \
-    "'$DOCKER_BIN' run --rm --init -v '$REPO':/src:ro swift:6.0 bash -c 'mkdir /w && cd /src && tar --exclude=.build --exclude=.verify-evidence -cf - . | tar -xf - -C /w && cd /w && swift test' > '$EV/linux.log' 2>&1" "linux.log"
+    "cap 900 '$DOCKER_BIN' run --rm --init -v '$REPO':/src:ro swift:6.0 bash -c 'mkdir /w && cd /src && tar --exclude=.build --exclude=.verify-evidence -cf - . | tar -xf - -C /w && cd /w && swift test' > '$EV/linux.log' 2>&1" "linux.log"
 else
   sk "R1d Linux build and swift test" "docker not available (set DOCKER=)"
 fi
@@ -111,6 +111,8 @@ argv R2v --help; argv R2w -h
 check "R2v --help and -h print the usage, exit 0" "exitis R2v 0 && has R2v 'usage: keypipe' && exitis R2w 0 && has R2w 'usage: keypipe'" ""
 argv R2x --config "$EV/R2g.config.json" --report; argv R2y --config "$EV/R2g.config.json" --smoke-feed
 argv R2z --config "$EV/R2g.config.json" --app com.example.app
+argv R2r --config "$EV/R2g.config.json" --config "$EV/R2g.config.json" --triggers
+check "R2r a flag given twice: exit 2" "exitis R2r 2 && has R2r 'keypipe: --config given twice'" ""
 # A value that looks like a flag is still the value: trigger "--report" without report mode.
 printf 'x' | cap 10 "$BIN" --config "$EV/R2g.config.json" --line --report > "$EV/R2q.out" 2>&1; echo $? > "$EV/R2q.exit"
 check "R2q a flag-like value stays a value (--line --report is the trigger --report)" \

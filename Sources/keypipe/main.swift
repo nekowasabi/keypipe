@@ -37,6 +37,8 @@ let (flags, values): (Set<String>, [String: String]) = {
     while index < args.count {
         let arg = args[index]
         if arg == "--help" || arg == "-h" { emit(usage); exit(0) }
+        // Why: which of two values wins is a guess either way; nothing passes a flag twice.
+        if flags.contains(arg) { refuse("\(arg) given twice") }
         if takesValue.contains(arg) {
             guard index + 1 < args.count else { refuse("\(arg) needs a value") }
             flags.insert(arg)

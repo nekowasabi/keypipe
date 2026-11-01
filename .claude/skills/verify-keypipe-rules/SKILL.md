@@ -73,13 +73,14 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | --- | --- | --- |
 | R0a/R0b | macOS host, swift toolchain | doctor |
 | R1a-c | build, `swift test`, `swift-format lint --strict` | build |
-| R1d | the Linux build and `swift test` in a `swift:6.0` container (README promises the Linux feed build; a Glibc-only break never shows on a Mac). Skips without Docker; `DOCKER=<binary>` when it is not on PATH | build |
+| R1d | the Linux build and `swift test` in a `swift:6.0` container (README promises the Linux feed build; a Glibc-only break never shows on a Mac). Skips without Docker; `DOCKER=<binary>` when it is not on PATH. Capped at 900 s; it fails, not skips, when Docker runs but the `swift:6.0` image cannot be pulled (offline). `ShellTests.testDetachedJobHasItsOwnSessionAndNoInheritedDescriptors` pins setsid and the closed descriptors on both systems | build |
 | R2a-f | invalid configs exit 1 with `invalid config` (empty trigger, old `action` key, unknown output, empty `output.shell`, empty `transform`, unknown `focus`) | fake |
 | R2g | minimal rule accepted with defaults | fake |
 | R2h-l | hotkey config errors: `rule needs trigger or hotkey`, `rule has both trigger and hotkey`, `hotkey needs a modifier`, `unknown modifier <x>`, `shift is written in the key (ctrl+A)` | fake |
 | R2u | an unknown argument (`--hepl`) prints `keypipe: unknown argument` and the usage and exits 2 instead of starting the daemon | binary |
 | R2v | `--help` and `-h` print the usage and exit 0 | binary |
 | R2q | a value that looks like a flag stays the value: `--line --report` is the trigger `--report` in plain mode (one parse; flags are no longer looked up by position) | binary |
+| R2r | a flag given twice (`--config A --config B`) exits 2 instead of picking one value | binary |
 | R2x | `--report` (or `--app`) without `--line`, and a flag missing its value (`--smoke-feed`), exit 2 instead of starting the daemon | binary |
 | R3a-d | rule selection by focus, by app, none satisfied (no erase), config order on ties | fake |
 | R3e | `focus: any` in a text field: trigger erased, input empty, field untouched | fake |
