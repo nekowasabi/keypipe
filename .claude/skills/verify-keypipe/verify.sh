@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -u
-REPO="${REPO:-/workspace/keypipe}"
+# Why: default to the checkout holding this script so it runs from any clone without env vars.
+REPO="${REPO:-$(cd "$(dirname "$0")/../../.." && pwd)}"
 MVP_ROOT="${MVP_ROOT:-/workspace/keypipe-mvp}"
-BRANCH="${BRANCH:-feat/mvp-daemon}"
-SCRATCH="${SCRATCH:-/workspace/keypipe-mvp/scratch}"
+# Why: the MVP branch is merged; only gate on a branch when the caller names one.
+BRANCH="${BRANCH:-}"
+SCRATCH="${SCRATCH:-$REPO/.verify-evidence}"
 EVIDENCE="${EVIDENCE:-$SCRATCH/verify-$(date +%F-%H%M%S)-$$}"
 mkdir -p "$EVIDENCE"
 export PATH="/home/box/swift/usr/bin:$PATH"
@@ -49,7 +51,7 @@ DOCTOR_ONLY=0
 [ "${1:-}" = "--doctor" ] && DOCTOR_ONLY=1
 
 cur="$(git -C "$REPO" symbolic-ref --short HEAD 2>/dev/null || echo UNKNOWN)"
-if [ "$cur" = "$BRANCH" ]; then vpass "V0 doctor on $BRANCH, $SWIFT_WHY" "env" "$SWIFT_WHY"; else vfail "V0 doctor" "env" "branch is $cur, want $BRANCH"; fi
+if [ -z "$BRANCH" ] || [ "$cur" = "$BRANCH" ]; then vpass "V0 doctor on $BRANCH, $SWIFT_WHY" "env" "$SWIFT_WHY"; else vfail "V0 doctor" "env" "branch is $cur, want $BRANCH"; fi
 [ "$DOCTOR_ONLY" = 1 ] && { printf 'summary pass=%d fail=%d skip=%d\n' "$PASS" "$FAIL" "$SKIP"; [ "$FAIL" -eq 0 ]; exit; }
 cd "$REPO" || { vfail "V0 repo dir" "env" "cannot cd $REPO"; }
 

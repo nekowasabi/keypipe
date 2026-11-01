@@ -18,15 +18,14 @@ Repo location (phase 2+): `<repo>/.claude/skills/verify-keypipe/`.
 Copy with `cp -r /workspace/keypipe-mvp/skills/verify-keypipe
 <repo>/.claude/skills/verify-keypipe`.
 
-```sh
-cd /workspace/keypipe
-git rev-parse --abbrev-ref HEAD   # expect: feat/mvp-daemon
-```
+The script defaults `REPO` to the checkout that holds it and writes evidence
+under `<repo>/.verify-evidence/` (gitignored). Set `BRANCH=<name>` to make V0
+also require that branch; unset, V0 does not gate on the branch.
 
 No server to keep alive. Each drive builds once (when the toolchain works)
 and runs short-lived checks in isolated evidence dirs. Two instances side by
 side are safe: every run writes to its own
-`/workspace/keypipe-mvp/scratch/verify-<timestamp>/` dir.
+`.verify-evidence/verify-<timestamp>-<pid>/` dir.
 
 ## Doctor
 
@@ -38,20 +37,20 @@ Read-only. Answers "is this checkout worth driving?"
 
 `V0` never FAILs on a missing toolchain; it records `swift: missing/broken`
 so later items can SKIP honestly. `--doctor` exits non-zero when any check
-FAILs (wrong branch), so automation can gate on it.
+FAILs (wrong branch when `BRANCH` is set), so automation can gate on it.
 
 ## Drive
 
 ```sh
-REPO=/workspace/keypipe .claude/skills/verify-keypipe/verify.sh            # full V0..V7 run
-REPO=/workspace/keypipe .claude/skills/verify-keypipe/verify.sh --doctor   # V0 only
+.claude/skills/verify-keypipe/verify.sh            # full V0..V7 run
+.claude/skills/verify-keypipe/verify.sh --doctor   # V0 only
 ```
 
 V table (each row: exact command run by `verify.sh`, expected result):
 
 | V | SPEC | Command | Expect |
 |---|---|---|---|
-| V0 | env | `git symbolic-ref --short HEAD`, `swift --version` | branch `feat/mvp-daemon`; swift status logged |
+| V0 | env | `git symbolic-ref --short HEAD`, `swift --version` | branch equals `BRANCH` when set; swift status logged |
 | V1 | S1 | `test -f Package.swift && grep 'name: "keypipe"' Package.swift`; README keyword greps; `.gitignore` pattern greps | exit 0, all present |
 | V2 | S2 | `test -f Sources/keypipe/main.swift`; `! grep -rq 'NSStatusItem\|NSStatusBar\|import AppKit\|import Cocoa' Sources/`; `grep -rq 'SIGINT\|SIGTERM' Sources/`; `grep -rq 'keypipe started' Sources/`; `swift build`; run `.build/debug/keypipe`, expect start line and survival until SIGTERM | static parts exit 0; build/run SKIP as `MAC_UNVERIFIED` when swift is missing/broken |
 | V3 | S3 | `python3 -c json.load(open('config.example.json'))` + `@@@` present; invalid-config run expects non-zero exit or stderr error, else static error-path grep | exit 0 |
@@ -64,10 +63,10 @@ V table (each row: exact command run by `verify.sh`, expected result):
 
 ## Evidence
 
-Per-run dir `/workspace/keypipe-mvp/scratch/verify-<timestamp>/` with
+Per-run dir `.verify-evidence/verify-<timestamp>-<pid>/` with
 `output.log`, `results.tsv` (one row per V item: item, spec, PASS/FAIL/SKIP,
-detail), `env.txt`, and any daemon transcripts. The phase-1 proof copy is
-pinned at `/workspace/keypipe-mvp/scratch/verify-proof/phase1-proof.log`.
+detail), `env.txt`, and any daemon transcripts. The phase-1 proof copy lived in the MVP box under
+`/workspace/keypipe-mvp/scratch/verify-proof/` and is not in this repo.
 
 ## Cleanup
 
