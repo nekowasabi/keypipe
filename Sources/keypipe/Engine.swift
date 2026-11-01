@@ -259,6 +259,12 @@ struct Engine {
             // into the field, exactly as on the fast path (R4e).
             if !moved, case .text(let text) = trigger, snapshot.focus == .text, let field = snapshot.field {
                 moved = !(waitForTrigger(field, text, desktop)?.hasSuffix(text) ?? false)
+                // The wait can take 0.1 s more: look at the focus once more after it.
+                if !moved {
+                    let after = desktop.snapshot()
+                    moved = after.app != snapshot.app || after.focus != snapshot.focus || after.secure
+                        || !(after.field.map { desktop.sameField(field, $0) } ?? false)
+                }
             }
             if moved {
                 emit("keypipe front-changed \(trigger)")

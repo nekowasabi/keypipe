@@ -200,6 +200,14 @@ final class FactsTests: XCTestCase {
             XCTAssertEqual(engine.fire("@@@"), .blocked("front-changed"), "\(later)")
             XCTAssertEqual(desktop.backspaces, 0, "\(later)")
         }
+        // The focus moves to another field of the same app while the re-check waits for the trigger.
+        let moving = Shifting([field, field, Snapshot(app: "com.google.Chrome", focus: .text, field: Field(token: 1))], text: "x@@@")
+        var engine = Engine(config: KeypipeConfig(rules: [rule]), desktop: moving, shell: { _, _, _, _ in
+            XCTFail("nothing runs")
+            return .exited(0, stdout: "")
+        }, emit: { _ in })
+        XCTAssertEqual(engine.fire("@@@"), .blocked("front-changed"))
+        XCTAssertEqual(moving.backspaces, 0)
     }
 
     /// The re-check after a slow read waits for a trigger key still on its way, like the fast path (R4e):
@@ -253,6 +261,37 @@ final class FactsTests: XCTestCase {
         }
         XCTAssertTrue(Term(fact: .app, globs: ["com.apple.*"]).matches("com.apple.TextEdit"))
         XCTAssertTrue(Term(fact: .url, globs: ["https://github.com/*/pull/*"]).matches("https://github.com/a/b/pull/3"))
+    }
+
+    /// The script must compile, and only a missing window or tab may read as "no URL": a syntax
+    /// error once made every URL unreadable on a real Mac while every fake-desktop test passed.
+    func testFrontTabScriptCompilesAndKeepsRealErrors() throws {
+        #if os(macOS)
+            guard let script = frontTabURLScript("com.google.Chrome") else { return XCTFail("no script") }
+            func run(_ source: String) -> Int32 {
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+                p.arguments = ["-e", source]
+                p.standardOutput = FileHandle.nullDevice
+                p.standardError = FileHandle.nullDevice
+                try? p.run()
+                p.waitUntilExit()
+                return p.terminationStatus
+            }
+            let compile = Process()
+            compile.executableURL = URL(fileURLWithPath: "/usr/bin/osacompile")
+            compile.arguments = ["-o", FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".scpt").path, "-e", script]
+            compile.standardError = FileHandle.nullDevice
+            try compile.run()
+            compile.waitUntilExit()
+            XCTAssertEqual(compile.terminationStatus, 0, "the URL script must compile")
+            // The same error handler, driven by errors raised on purpose (no browser needed).
+            let handler = script.components(separatedBy: "\n").drop { !$0.hasPrefix("on error") }.joined(separator: "\n")
+            XCTAssertEqual(run("try\nerror \"x\" number -1728\n" + handler), 0, "no window or tab is an empty answer")
+            XCTAssertEqual(run("try\nerror \"x\" number -1719\n" + handler), 0, "no such tab is an empty answer")
+            XCTAssertNotEqual(run("try\nerror \"x\" number -1743\n" + handler), 0, "a denied Automation permission stays an error")
+            XCTAssertNotEqual(run("try\nerror \"x\" number -600\n" + handler), 0, "any other error stays an error")
+        #endif
     }
 
     func testFrontTabScriptOnlyForKnownBrowsers() {

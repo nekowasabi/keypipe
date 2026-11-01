@@ -216,3 +216,10 @@ Context.swift 残す（V4a が照合する Snapshot と matches はここ）
 - 同じアプリで別のテキスト欄へ移ったことを検知できなかった（前からの穴、3名一致）。`Desktop.sameField` を足し、Mac は AX 要素を `CFEqual` で比べる。
 - URL 取得で Automation 拒否以外のエラーを「URL が無い」にしていたため、`deny` が素通りしえた（修正で入った回帰）。「ウィンドウ・タブが無い」（-1728, -1719）だけを absent にし、ほかは unreadable で止める。
 - typeText は前面がテキスト欄か端末でないと unsupported になる。AXComboBox や IME 変換中など、以前は打てた所で打てなくなる可能性がある（意図した契約。M9 で確かめる）。
+
+### 3回目のレビューで直したこと
+
+- URL 取得の AppleScript が構文エラー（`on error message m number n`）で、実機では URL 条件が一度も働かなかった（P1、3名一致）。`on error m number n` に直し、スクリプトを `osacompile` でコンパイルし、-1728・-1719 は空、-1743・-600 はエラーになることを確かめるテストを足した（旧スクリプトでは落ちることを確認）。フェイクの事実を使う検査ではこの経路を通らないので見逃していた。
+- 遅れて届く打鍵を待つ間（最大 0.1 秒）に欄が移る窓を、待った後にもう一度 app・focus・パスワード欄・同じ欄かを確かめて閉じた。
+
+未確認のまま残るもの: 実機の Chrome・Safari で `CFEqual` が同じ欄を同じと判定するか、M8（URL ルールと Automation 許可）、M9（typeText、IME オン）、voice-switch からの実際の貼り付けと HUD。

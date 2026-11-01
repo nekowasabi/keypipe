@@ -159,7 +159,7 @@ func frontTabURLScript(_ bundleID: String) -> String? {
     return """
     try
     tell application id "\(bundleID)" to return \(query)
-    on error message m number n
+    on error m number n
     if n is -1728 or n is -1719 then return ""
     error m number n
     end try
