@@ -162,9 +162,42 @@ final class FactsTests: XCTestCase {
             XCTFail("nothing runs")
             return .exited(0, stdout: "")
         }, emit: { lines.append($0) })
-        XCTAssertEqual(engine.fire("@@@"), .noMatch)
+        XCTAssertEqual(engine.fire("@@@"), .blocked("front-changed"))
         XCTAssertEqual(desktop.fieldText, "x@@@")
         XCTAssertTrue(lines.contains("keypipe front-changed @@@"))
+    }
+
+    /// After a slow read the gates are taken again, not only the app: a password field in the same
+    /// browser, or a field the user kept typing into, stops the fire before any Backspace.
+    func testSlowReadRetakesTheGatesBeforeErasing() {
+        final class Shifting: Desktop {
+            var snaps: [Snapshot]
+            var text: String
+            var backspaces = 0
+            init(_ snaps: [Snapshot], text: String) { self.snaps = snaps; self.text = text }
+            func snapshot() -> Snapshot { snaps.count > 1 ? snaps.removeFirst() : snaps[0] }
+            func backspace(_ count: Int) { backspaces += count }
+            func text(_ field: Field) -> String? { text }
+            func setText(_ field: Field, _ text: String) -> Bool { true }
+            func notify(_ text: String) {}
+            func fact(_ name: FactName) -> FactRead { .value("https://github.com/") }
+        }
+        let rule = Rule(trigger: "@@@", when: When(focus: .textField, facts: [Term(fact: .url, globs: ["*"])]),
+                        output: Guarded(primary: .shell("x")))
+        let field = Snapshot(app: "com.google.Chrome", focus: .text, field: Field(token: 0))
+        let cases: [(Snapshot, String)] = [
+            (Snapshot(app: "com.google.Chrome", focus: .nothing, secure: true), "x@@@"),  // moved to a password field
+            (field, "x@@@ more"),                                                      // kept typing
+        ]
+        for (later, text) in cases {
+            let desktop = Shifting([field, later], text: text)
+            var engine = Engine(config: KeypipeConfig(rules: [rule]), desktop: desktop, shell: { _, _, _, _ in
+                XCTFail("nothing runs")
+                return .exited(0, stdout: "")
+            }, emit: { _ in })
+            XCTAssertEqual(engine.fire("@@@"), .blocked("front-changed"), "\(later)")
+            XCTAssertEqual(desktop.backspaces, 0, "\(later)")
+        }
     }
 
     /// P7: deny parsing and its fail-safe evaluation.
@@ -180,10 +213,13 @@ final class FactsTests: XCTestCase {
             XCTAssertThrowsError(try load(json)) { XCTAssertEqual(String(describing: $0), "keypipe: invalid config: \(reason)") }
         }
         let config = try load(#"{"deny":[{"app":["com.google.Chrome"],"url":["*bank.example*"]}],"rules":[{"trigger":"@@@"}]}"#)
-        for (url, blocked) in [(FactRead.value("https://bank.example/x"), true), (.value("https://github.com"), false), (.unreadable("timeout"), true)] {
+        for (url, expected) in [(FactRead.value("https://bank.example/x"), FireResult.blocked("deny")),
+                                (.value("https://github.com"), .delivered(rule: 0, viaFallback: false)),
+                                (.unreadable("timeout"), .unreadable(fact: "url", reason: "timeout"))] {
             let desktop = FakeDesktop(app: "com.google.Chrome", focus: .nothing, facts: [.url: url])
             var engine = Engine(config: config, desktop: desktop, shell: { _, _, _, _ in .exited(0, stdout: "") }, emit: { _ in })
-            XCTAssertEqual(engine.fire("@@@") == .blocked("deny"), blocked, "\(url)")
+            XCTAssertEqual(engine.fire("@@@"), expected, "\(url)")
+            if case .unreadable = url { XCTAssertEqual(desktop.notifications, ["@@@: deny cannot read url: timeout"], "a stopped fire says why") }
         }
         let editor = FakeDesktop(app: "com.apple.TextEdit", focus: .nothing, facts: [.url: .value("https://bank.example/")])
         var engine = Engine(config: config, desktop: editor, shell: { _, _, _, _ in .exited(0, stdout: "") }, emit: { _ in })

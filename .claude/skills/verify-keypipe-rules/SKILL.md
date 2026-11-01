@@ -127,14 +127,14 @@ checks are in `verify-keypipe-trigger` (P1-P10).
 | ID | PR | What | Harness |
 | --- | --- | --- | --- |
 | R11a | PR1 | `--line --report` prints one JSON line per outcome and exit 0; without `--report` stdout and exit are byte-identical to today (B1-B8 in `verify-keypipe-terminals` stay the oracle) | fake |
-| R11b | PR1 | background spawn failure (unwritable executable path) reports `failed` with `stage spawn`, not `started` | fake |
-| R11c | PR1 | jobs.log keeps `job rule N from <path>`; the child never reads the path (replace the file with an invalid config after the fire: job still runs) | fake |
-| R12a | PR2 | `when.url` rule matches only with `"facts":{"url":...}` in the context; without it the fire ends `unreadable`, no erase, notify once | fake |
+| R11b | PR1 | a background output reports `started` with a job that did spawn. The failing spawn is checked in-process only (`EngineTests.testFailedSpawnIsReportedAsFailedNotStarted`, a stub that returns false); breaking `posix_spawn` from outside is not reliable | fake |
+| R11c | PR1 | the job parses the parent's config bytes, not the file (`JobRequest.configBytes`); jobs.log keeps `job rule N from <path>`. In-process only (`EngineTests.testJobParsesTheParentsBytesNotTheFile`): a job reads its config at start and cannot be raced from outside. `configBytes` is optional only so a daemon started from an older binary can still hand jobs to a rebuilt one | fake |
+| R12a | PR2 | `when.url` rule matches only with `"facts":{"url":...}` naming its site; another URL, or no `url` fact at all (`absent`, as on the `--line` path and in non-browser apps), falls through to the next rule. `unreadableFacts` is what stops a fire (R12b) | fake |
 | R12b | PR2 | two rules on one trigger, rule 0 `url`, rule 1 catch-all: TextEdit context never reads `url` (`reads` list) and fires rule 1; Chrome context with unreadable url stops without firing rule 1 | fake |
-| R12c | PR2 | `deny` with `app`+`url` blocks on match and on unreadable; `deny` with `url` alone is `invalid config: deny url requires app` | fake |
+| R12c | PR2 | `deny` with `app`+`url` blocks on match (`keypipe deny`); an unreadable url stops the fire with a reason (`keypipe deny-unreadable`, `unreadable` in `--report`, one notification); `deny` with `url` alone is `invalid config: deny url requires app` | fake |
 | R12d | PR2 | `"secure": true` context: `keypipe secure <t>`, no erase, no read, no shell | fake |
 | R12e | PR2 | terminal context (`ownsPty`): `focus: any` hotkey rule fires with empty input; `focus: textField` rule still `keypipe terminal <t>` | fake |
-| R12f | PR2 | front app changes during a slow read (context switches `app` on the first `url` read): `keypipe front-changed`, no Backspace sent | fake |
+| R12f | PR2 | after a slow read the gates are taken again: another app, another focus kind or a password field, or a field that no longer ends with the trigger stops the fire with no Backspace (`keypipe front-changed`, `blocked` with reason `front-changed`). Same-app cases are in-process (`FactsTests.testSlowReadRetakesTheGatesBeforeErasing`) | fake |
 | R12g | PR2 | `when.app: ["com.apple.*"]` matches TextEdit; every existing R3 config still selects the same rule | fake |
 | M8 | PR2 | Chrome on a `file://` page with a `github.com/*` rule: first fire prompts for Automation; after granting, `hello@@@` becomes the transform result; TextEdit never prompts | live |
 | R13a | PR3 | `typeText` via `--line`: `failed ... unsupported`, `onFail.output: notify` runs | fake |

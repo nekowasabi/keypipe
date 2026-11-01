@@ -75,6 +75,10 @@
         /// Posts the text as tagged Unicode key events, so keypipe's own tap drops them and the
         /// typed text never re-enters the trigger matcher.
         func typeText(_ text: String) -> Bool {
+            // Same contract as FakeDesktop: a caret exists in a text field or a terminal, never in a
+            // password field or where nothing editable has focus.
+            let now = snapshot()
+            guard !now.secure, now.focus == .text || now.focus == .terminal else { return false }
             let source = CGEventSource(stateID: .combinedSessionState)
             // Why: one event carries at most 20 UTF-16 units.
             let units = Array(text.utf16)
@@ -87,6 +91,9 @@
                 for down in [true, false] {
                     guard let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down) else { return false }
                     chunk.withUnsafeBufferPointer { event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress) }
+                    // Why: a hotkey fires while its chord is still held; without this the text would
+                    // be typed as ctrl/cmd shortcuts.
+                    event.flags = []
                     event.setIntegerValueField(.eventSourceUserData, value: keypipeEventTag)
                     event.post(tap: .cgSessionEventTap)
                 }
@@ -108,9 +115,12 @@
                 // Automation permission for keypipe; that fire ends unreadable and notifies.
                 switch runShell("osascript -e \"$1\"", input: script, env: [:], timeout: 1) {
                 case .exited(0, let stdout):
+                    // An empty answer is a browser with no window or tab: there is no URL.
                     let url = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
                     return url.isEmpty ? .absent : .value(url)
-                case .exited(let status, _): return .unreadable("osascript exit \(status) (allow keypipe under Automation)")
+                case .exited(let status, _):
+                    // The script returns "" for every error except a denied Automation permission.
+                    return .unreadable("Automation not allowed for keypipe (osascript exit \(status))")
                 case .timedOut: return .unreadable("timeout")
                 }
             }
@@ -135,9 +145,19 @@ func frontTabURLScript(_ bundleID: String) -> String? {
     let chromium: Set = ["com.google.Chrome", "com.google.Chrome.canary", "com.brave.Browser",
                          "com.microsoft.edgemac", "com.vivaldi.Vivaldi", "company.thebrowser.Browser"]
     let safari: Set = ["com.apple.Safari", "com.apple.SafariTechnologyPreview"]
-    if chromium.contains(bundleID) { return "tell application id \"\(bundleID)\" to get URL of active tab of front window" }
-    if safari.contains(bundleID) { return "tell application id \"\(bundleID)\" to get URL of front document" }
-    return nil
+    let query: String
+    if chromium.contains(bundleID) { query = "URL of active tab of front window" }
+    else if safari.contains(bundleID) { query = "URL of front document" }
+    else { return nil }
+    // -1743 is a denied Automation permission: the only error that must not read as "no URL".
+    return """
+    try
+    tell application id "\(bundleID)" to return \(query)
+    on error number n
+    if n is -1743 then error "not allowed" number n
+    return ""
+    end try
+    """
 }
 
 #if os(macOS)

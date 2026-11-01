@@ -112,10 +112,11 @@ final class FakeDesktop: Desktop {
                         field: focus == .text ? Field(token: 0) : nil, secure: secure)
     }
 
-    /// Like a real app: text lands at the end of a focused text field, and nowhere else.
+    /// Same contract as MacDesktop: a caret exists in a text field (the text lands at its end) or a
+    /// terminal (typed into the pane, not modelled), never in a password field or with nothing focused.
     func typeText(_ text: String) -> Bool {
-        guard focus == .text && !gone else { return false }
-        fieldText.append(text)
+        guard !secure, !gone, focus == .text || focus == .terminal else { return false }
+        if focus == .text { fieldText.append(text) }
         return true
     }
 

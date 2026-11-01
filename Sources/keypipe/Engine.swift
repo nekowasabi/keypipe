@@ -114,6 +114,22 @@ enum FireResult: Equatable {
 
     enum Stage: String { case transform, output, spawn }
 
+    /// One per case, so a test can demand a golden --report line for every kind of outcome.
+    enum Kind: CaseIterable { case blocked, noMatch, unreadable, noInput, replaced, delivered, started, failed }
+
+    var kind: Kind {
+        switch self {
+        case .blocked: return .blocked
+        case .noMatch: return .noMatch
+        case .unreadable: return .unreadable
+        case .noInput: return .noInput
+        case .replaced: return .replaced
+        case .delivered: return .delivered
+        case .started: return .started
+        case .failed: return .failed
+        }
+    }
+
     /// "A rule matched", as --line's exit 0 and --smoke-feed's hits have always meant.
     var isHit: Bool {
         switch self {
@@ -192,9 +208,19 @@ struct Engine {
             return .blocked("secure")
         }
         let sheet = FactSheet(snapshot, desktop: desktop)
-        for entry in config.deny where entry.evaluate(sheet) != .noMatch {
-            emit("keypipe deny \(trigger)")
-            return .blocked("deny")
+        for entry in config.deny {
+            switch entry.evaluate(sheet) {
+            case .noMatch: continue
+            case .match:
+                emit("keypipe deny \(trigger)")
+                return .blocked("deny")
+            case .unreadable(let fact, let reason):
+                // Fail safe: an exclusion that cannot be checked stops the fire, and says why, so a
+                // missing Automation permission is not a silent dead trigger.
+                emit("keypipe deny-unreadable \(trigger) \(fact.rawValue)")
+                notify("\(trigger): deny cannot read \(fact.rawValue): \(reason)")
+                return .unreadable(fact: fact.rawValue, reason: reason)
+            }
         }
         var chosen: Int?
         for candidate in candidates {
@@ -216,13 +242,22 @@ struct Engine {
             emit("keypipe nomatch \(trigger)")
             return .noMatch
         }
-        // Why: a slow read can take up to a second. If the user switched apps meanwhile, the
-        // Backspaces would land in the new front app, so nothing is erased or run.
-        if sheet.readSlow && desktop.snapshot().app != snapshot.app {
-            emit("keypipe front-changed \(trigger)")
-            return .noMatch
-        }
         let rule = config.rules[index]
+        // Why: a slow read can take up to a second. Backspaces go to whatever has focus now, so
+        // the gates are taken again: another app, another kind of focus (a password field in the
+        // same browser), or a field that no longer ends with the trigger (the user typed on)
+        // means nothing is erased or run.
+        if sheet.readSlow {
+            let now = desktop.snapshot()
+            var moved = now.app != snapshot.app || now.focus != snapshot.focus || now.secure
+            if !moved, case .text(let text) = trigger, snapshot.focus == .text, let field = snapshot.field {
+                moved = !(desktop.text(field)?.hasSuffix(text) ?? false)
+            }
+            if moved {
+                emit("keypipe front-changed \(trigger)")
+                return .blocked("front-changed")
+            }
+        }
         hits += 1
         emit("keypipe matched \(trigger) rule \(index)")
         let input: String

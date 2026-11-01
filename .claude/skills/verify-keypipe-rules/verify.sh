@@ -277,8 +277,9 @@ DENY='{"deny":[{"app":["com.google.Chrome"],"url":["*bank.example*"]}],"rules":[
 feed R12c2 "$DENY" '{"app":"com.google.Chrome","focusIsTextField":false,"fieldText":"","facts":{"url":"https://bank.example/x"}}' '@@@'
 feed R12c3 "$DENY" '{"app":"com.google.Chrome","focusIsTextField":false,"fieldText":"","unreadableFacts":{"url":"timeout"}}' '@@@'
 feed R12c4 "$DENY" '{"app":"com.google.Chrome","focusIsTextField":false,"fieldText":"","facts":{"url":"https://github.com"}}' '@@@'
-check "R12c deny with app+url blocks on match and when unreadable, passes elsewhere" \
-  "has R12c2 'keypipe deny @@@' && has R12c3 'keypipe deny @@@' && has R12c4 'keypipe matched @@@ rule 0'" "R12c*.out"
+check "R12c deny with app+url blocks on match, stops with a reason when unreadable, passes elsewhere" \
+  "has R12c2 'keypipe deny @@@' && has R12c3 'keypipe deny-unreadable @@@ url' && lacks R12c3 'keypipe matched' \
+   && has R12c4 'keypipe matched @@@ rule 0'" "R12c*.out"
 feed R12d '{"rules":[{"trigger":"@@@","output":{"shell":"echo ran > '"$EV"'/R12d.sent"}}]}' '{"app":"x","focusIsTextField":false,"fieldText":"","secure":true}' '@@@'
 check "R12d password field: keypipe secure, nothing runs" \
   "has R12d 'keypipe secure @@@' && lacks R12d 'keypipe matched' && [ ! -e '$EV/R12d.sent' ]" "R12d.out"

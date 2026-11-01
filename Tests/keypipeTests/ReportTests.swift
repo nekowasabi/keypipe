@@ -38,21 +38,9 @@ final class ReportTests: XCTestCase {
         }
     }
 
-    func testEveryCaseIsInTheGoldenList() {
-        // Why: a new FireResult case must get a golden line, or voice-switch will not know it.
-        var kinds = Set<String>()
-        for (result, _) in Self.golden {
-            switch result {
-            case .blocked: kinds.insert("blocked")
-            case .noMatch: kinds.insert("noMatch")
-            case .unreadable: kinds.insert("unreadable")
-            case .noInput: kinds.insert("noInput")
-            case .replaced: kinds.insert("replaced")
-            case .delivered: kinds.insert("delivered")
-            case .started: kinds.insert("started")
-            case .failed: kinds.insert("failed")
-            }
-        }
-        XCTAssertEqual(kinds.count, 8)
+    func testEveryKindOfOutcomeHasAGoldenLine() {
+        // Why: a new FireResult case needs a new Kind (FireResult.kind is an exhaustive switch),
+        // and then this fails until the golden file and voice-switch's copy carry it.
+        XCTAssertEqual(Set(Self.golden.map(\.0.kind)), Set(FireResult.Kind.allCases))
     }
 }

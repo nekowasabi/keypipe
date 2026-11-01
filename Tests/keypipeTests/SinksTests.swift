@@ -69,4 +69,12 @@ final class SinksTests: XCTestCase {
         XCTAssertEqual(engine2.fire("@@@"), .delivered(rule: 0, viaFallback: true))
         XCTAssertEqual(saved["save"], "hi|unsupported")
     }
+
+    /// The fake keeps MacDesktop's contract: no caret with nothing focused or in a password field.
+    func testTypeTextNeedsACaretOnEveryDesktop() {
+        XCTAssertFalse(FakeDesktop(focus: .nothing).typeText("x"))
+        XCTAssertFalse(FakeDesktop(focus: .text, secure: true).typeText("x"))
+        XCTAssertTrue(FakeDesktop(focus: .terminal).typeText("x"))
+        XCTAssertTrue(FakeDesktop(focus: .text).typeText("x"))
+    }
 }
