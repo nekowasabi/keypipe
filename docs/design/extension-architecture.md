@@ -234,3 +234,21 @@ Context.swift 残す（V4a が照合する Snapshot と matches はここ）
 - `2a1fd05`（入っている Chromium 系ブラウザのスクリプトもコンパイル）を含め、両ブランチに確定した P0〜P2 は無し。Claude と Codex が互いの指摘を検証し、Grok が両方を確認した。
 - 指摘された P3 のうち2件は直した: テストのブラウザ一覧に Canary が抜けていた（追加）。voice-switch の `F_SETNOSIGPIPE` が Darwin 専用なのに Linux の url-test でもコンパイルされる（`#if canImport(Darwin)` で分け、Linux では SIGPIPE を無視する）。
 - 残した P3: コンパイル検査は構文とアプリの辞書までで、問い合わせ文の意味（本当に URL が返るか）は確かめられない。実機の M8 で確かめる。
+
+### 探索的改善（2026-11-01 夜、各段を ateam review にかけた）
+
+keypipe:
+
+- `b44fc40` URL を読めるブラウザの一覧を1か所にし、テストはその一覧を（入っているものだけ）コンパイルする。
+- `dbb4e06`・`2e33ff3`・`bd121ba`・`a0a9081` 引数を1回だけ解析する。`--help` は使い方を出して 0。知らない引数、値の無いフラグ、`--line` 無しの `--report`/`--app`、同じフラグの2回は、使い方を出して 2 で止まる（以前は黙ってデーモンが起動した）。値がフラグ名と同じでも値として読む（`--line --report` の `--report` はトリガー）。R2q・R2r・R2u・R2v・R2x。
+- `b3651f0` `app`/`url` の空の一覧を設定不正として拒否する。`{"app":["com.google.Chrome"],"url":[]}` の deny は何も止めずに素通りしていた。
+- `a00a5e8`・`211bb3e` Linux でビルドできなかった Shell.swift を直した（`5ae1475` から）。Linux のジョブが親の fd を受け継いでいた（glibc に `POSIX_SPAWN_CLOEXEC_DEFAULT` が無い）ので閉じる。setsid と fd の継承を ShellTests で固定し、R1d で Docker の `swift:6.0` に build と `swift test` をかける。
+- `17f781d`・`f8bead6`・`8a95fa7` README: 音声の節に voice-switch の keypipe 配送の例。日本語版に抜けていた `when.url`・`deny`・パスワード欄・`typeText`・端末の hotkey 例外。設定が不正なとき widget が黙ることと、理由の確かめ方。
+
+voice-switch（`feat/keypipe-delivery`）:
+
+- `1836fec`・`79c6dca`・`9857296` `runCapturing` の stdout を、`poll` で回す読み取りスレッドで集める。Linux の `readabilityHandler` は EOF を取りこぼしていた。期限の後は読むのをやめて読み取り端を閉じ、子孫の出力を溜めない。
+- `4f18b72` keypipe の報告が読めないときに通知する。`7b45b0f` `keypipe.binary`/`config` が絶対パスか `~` でなければ読み込み時に拒否する。
+- `2a62a7c`・`7b0329a` `make url-test-linux`。verify-voice-switch-mac に keypipe 配送の検証項目（KD1〜KD6）を足し、KD1 と KD4 をテストで押さえた。
+
+残したこと: `Term` は大文字と小文字を区別して照合する（`com.google.chrome` と書くと `com.google.Chrome` に一致しない）。照合の意味を変えるので、利用者の判断に残す。`--line ""` は exit 1、値の無い `--line` は exit 2 のまま。
