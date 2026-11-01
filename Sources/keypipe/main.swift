@@ -60,6 +60,8 @@ let (flags, values): (Set<String>, [String: String]) = {
     where flags.contains(modifier) && !flags.contains("--line") {
         refuse("\(modifier) needs --line")
     }
+    // Before the config is read, like every other bad argument (exit 2, not the config's 1).
+    if values["--line"]?.isEmpty == true { refuse("--line needs a trigger") }
     return (flags, values)
 }()
 if flags.contains("--job") { runJobProcess() }
