@@ -22,11 +22,11 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
     var errorPipe: [Int32] = [0, 0]
     guard pipe(&inputPipe) == 0 else { return .exited(1, stdout: "") }
     guard pipe(&outputPipe) == 0 else {
-        inputPipe.forEach { close($0) }
+        for fd in inputPipe { close(fd) }
         return .exited(1, stdout: "")
     }
     guard pipe(&errorPipe) == 0 else {
-        (inputPipe + outputPipe).forEach { close($0) }
+        for fd in inputPipe + outputPipe { close(fd) }
         return .exited(1, stdout: "")
     }
     // Why: if the caller's 0, 1 or 2 is closed, pipe() reuses that number and the
@@ -71,14 +71,14 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
     let variables: [UnsafeMutablePointer<CChar>?] =
         environment.sorted { $0.key < $1.key }.map { strdup("\($0.key)=\($0.value)") } + [nil]
     defer {
-        arguments.forEach { free($0) }
-        variables.forEach { free($0) }
+        for pointer in arguments { free(pointer) }
+        for pointer in variables { free(pointer) }
     }
     var pid: pid_t = 0
     configure(&actions)
     let launched = posix_spawn(&pid, "/bin/sh", &actions, &attributes, arguments, variables)
     guard launched == 0 else {
-        descriptors.forEach { close($0) }
+        for fd in descriptors { close(fd) }
         return .exited(1, stdout: "")
     }
     close(inputPipe[0])
@@ -222,7 +222,7 @@ func spawnDetached(
         }
     #endif
     let arguments: [UnsafeMutablePointer<CChar>?] = ([path] + args).map { strdup($0) } + [nil]
-    defer { arguments.forEach { free($0) } }
+    defer { for pointer in arguments { free(pointer) } }
     var pid: pid_t = 0
     let launched = posix_spawn(&pid, path, &actions, &attributes, arguments, environ)
     close(fds[0])

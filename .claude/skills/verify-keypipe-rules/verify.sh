@@ -62,10 +62,15 @@ fi
 cd "$REPO" || exit 1
 check "R1a swift build" "swift build > '$EV/build.log' 2>&1" "build.log"
 check "R1b swift test" "swift test > '$EV/test.log' 2>&1" "test.log"
-if command -v swift-format >/dev/null 2>&1; then
-  check "R1c swift-format lint" "swift-format lint --strict --recursive Sources Tests > '$EV/lint.log' 2>&1" "lint.log"
+# Why: Xcode ships swift-format as `swift format` without putting swift-format on PATH, so R1c
+# skipped on every Mac and the lint drifted to 497 warnings unnoticed.
+if command -v swift-format >/dev/null 2>&1; then FORMAT="swift-format"
+elif swift format --version >/dev/null 2>&1; then FORMAT="swift format"
+else FORMAT=""; fi
+if [ -n "$FORMAT" ]; then
+  check "R1c swift-format lint" "$FORMAT lint --strict --recursive Sources Tests > '$EV/lint.log' 2>&1" "lint.log"
 else
-  sk "R1c swift-format lint" "swift-format not on PATH"
+  sk "R1c swift-format lint" "neither swift-format nor swift format is available"
 fi
 # Why: README promises the Linux feed build, and only a Linux compiler shows a Glibc-only break
 # (Shell.swift once failed there while every Mac run passed). DOCKER names the binary if not on PATH.

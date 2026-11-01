@@ -64,7 +64,7 @@ final class ShellTests: XCTestCase {
         let high = fcntl(held[0], F_DUPFD, floor)
         XCTAssertGreaterThanOrEqual(high, floor)
         held.append(high)
-        defer { held.forEach { close($0) } }
+        defer { for fd in held { close(fd) } }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             .path
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)

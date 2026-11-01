@@ -36,8 +36,8 @@ final class EngineTests: XCTestCase {
             shell: { _, input, _, _ in
                 XCTAssertEqual(input, "hello")
                 return .exited(0, stdout: "HELLO")
-            }
-        ) { lines.append($0) }
+            },
+            emit: { lines.append($0) })
         engine.hotkey(try Hotkey.parse("cmd+c"))
         XCTAssertEqual(lines, [])
         engine.key("@")
@@ -429,8 +429,8 @@ final class EngineTests: XCTestCase {
                     XCTAssertEqual(input, "note")
                     XCTAssertEqual(env, ["KEYPIPE_APP": "editor"])
                     return outcome
-                }
-            ) { lines.append($0) }
+                },
+                emit: { lines.append($0) })
             engine.run(Job(rule: 0, input: "note", environment: ["KEYPIPE_APP": "editor"]))
             XCTAssertEqual(desktop.notifications, notified)
             if !notified.isEmpty { XCTAssertTrue(lines.contains("keypipe output-shell timeout 2")) }

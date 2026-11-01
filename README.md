@@ -340,7 +340,9 @@ swift-format lint --strict --recursive Sources Tests
 ```
 
 `swift-format` is the formatter and `.swift-format` at the repo root pins
-the style (four spaces). The lint above must exit 0. On Linux the box
+the style (four spaces). The lint above must exit 0. With Xcode only,
+`swift format lint ...` runs the same tool; `swift format format --in-place
+--recursive Sources Tests` fixes most of what it reports. On Linux the box
 toolchain additionally needs
 `LD_LIBRARY_PATH=/workspace/keypipe-mvp/scratch/swift-lib` for
 `libncurses.so.6` (`verify.sh` exports it when that dir exists).

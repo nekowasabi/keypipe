@@ -299,7 +299,9 @@ swift-format lint --strict --recursive Sources Tests
 
 `swift-format` がフォーマッタであり、リポジトリルートの `.swift-format` で
 スタイル（4 スペース）を固定しています。上記の lint は終了コード 0 である
-必要があります。Linux ではボックスのツールチェーンに追加で
+必要があります。Xcode だけの環境では `swift format lint ...` で同じ道具が動き、
+`swift format format --in-place --recursive Sources Tests` で指摘の大半を直せます。
+Linux ではボックスのツールチェーンに追加で
 `LD_LIBRARY_PATH=/workspace/keypipe-mvp/scratch/swift-lib` が必要です
 （そのディレクトリが存在する場合、`verify.sh` がエクスポートします）。
 

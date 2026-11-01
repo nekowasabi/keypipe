@@ -87,7 +87,8 @@ final class FactsTests: XCTestCase {
         for (snap, word) in snapshots {
             for focus in [When.Focus.textField, .any] {
                 for trigger in [Trigger.text("@@@"), .hotkey(hotkey)] {
-                    if word == "terminal" && trigger.isHotkey && focus == .any { continue }  // M18: allowed
+                    // M18: a focus-any hotkey is allowed in a terminal.
+                    if word == "terminal" && trigger.isHotkey && focus == .any { continue }
                     let desktop = CountingDesktop(snap)
                     let rule = Rule(
                         trigger: trigger, when: When(focus: focus),
@@ -241,9 +242,11 @@ final class FactsTests: XCTestCase {
             output: Guarded(primary: .shell("x")))
         let field = Snapshot(app: "com.google.Chrome", focus: .text, field: Field(token: 0))
         let cases: [(Snapshot, String)] = [
-            (Snapshot(app: "com.google.Chrome", focus: .nothing, secure: true), "x@@@"),  // moved to a password field
+            // Moved to a password field.
+            (Snapshot(app: "com.google.Chrome", focus: .nothing, secure: true), "x@@@"),
             (field, "x@@@ more"),  // kept typing
-            (Snapshot(app: "com.google.Chrome", focus: .text, field: Field(token: 1)), "x@@@"),  // another field, same app
+            // Another field of the same app.
+            (Snapshot(app: "com.google.Chrome", focus: .text, field: Field(token: 1)), "x@@@"),
         ]
         for (later, text) in cases {
             let desktop = Shifting([field, later], text: text)
