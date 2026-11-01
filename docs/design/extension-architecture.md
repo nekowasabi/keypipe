@@ -228,3 +228,9 @@ Context.swift 残す（V4a が照合する Snapshot と matches はここ）
 
 - 4回目: 3回目の製品修正（AppleScript の構文、待った後の再確認）は3名とも正しく回帰なしと判定。新しいテストの移植性（Chrome の無い Mac、osascript の無い環境、出力未確認、.scpt の残留）を `eb3b447` で直した。
 - 5回目: `eb3b447` は3名とも確定指摘なし。残した P3: Chromium 用の問い合わせ文（`URL of active tab of front window`）はテストでコンパイルしていない（Chrome の無い Mac で誤って落ちないよう、必ずある Safari だけをコンパイルしている）。実機の M8 で確かめる。
+
+### 最終確認レビュー（6回目、相互検証が成立）
+
+- `2a1fd05`（入っている Chromium 系ブラウザのスクリプトもコンパイル）を含め、両ブランチに確定した P0〜P2 は無し。Claude と Codex が互いの指摘を検証し、Grok が両方を確認した。
+- 指摘された P3 のうち2件は直した: テストのブラウザ一覧に Canary が抜けていた（追加）。voice-switch の `F_SETNOSIGPIPE` が Darwin 専用なのに Linux の url-test でもコンパイルされる（`#if canImport(Darwin)` で分け、Linux では SIGPIPE を無視する）。
+- 残した P3: コンパイル検査は構文とアプリの辞書までで、問い合わせ文の意味（本当に URL が返るか）は確かめられない。実機の M8 で確かめる。
