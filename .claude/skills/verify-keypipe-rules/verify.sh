@@ -67,6 +67,16 @@ if command -v swift-format >/dev/null 2>&1; then
 else
   sk "R1c swift-format lint" "swift-format not on PATH"
 fi
+# Why: README promises the Linux feed build, and only a Linux compiler shows a Glibc-only break
+# (Shell.swift once failed there while every Mac run passed). DOCKER names the binary if not on PATH.
+# --init: otherwise swift test is PID 1, never reaps the orphans ShellTests kills, and kill(pid, 0) sees zombies.
+DOCKER_BIN=${DOCKER:-$(command -v docker)}
+if [ -n "$DOCKER_BIN" ] && "$DOCKER_BIN" info > /dev/null 2>&1; then
+  check "R1d Linux build and swift test (swift:6.0)" \
+    "'$DOCKER_BIN' run --rm --init -v '$REPO':/src:ro swift:6.0 bash -c 'mkdir /w && cd /src && tar --exclude=.build --exclude=.verify-evidence -cf - . | tar -xf - -C /w && cd /w && swift test' > '$EV/linux.log' 2>&1" "linux.log"
+else
+  sk "R1d Linux build and swift test" "docker not available (set DOCKER=)"
+fi
 if [ ! -x "$BIN" ]; then
   ng "R2-R7" "binary missing at $BIN, feed items not run"
   echo "summary pass=$PASS fail=$FAIL skip=$SKIP evidence=$EV"; exit 1

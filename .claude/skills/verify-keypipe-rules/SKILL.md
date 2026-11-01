@@ -73,6 +73,7 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | --- | --- | --- |
 | R0a/R0b | macOS host, swift toolchain | doctor |
 | R1a-c | build, `swift test`, `swift-format lint --strict` | build |
+| R1d | the Linux build and `swift test` in a `swift:6.0` container (README promises the Linux feed build; a Glibc-only break never shows on a Mac). Skips without Docker; `DOCKER=<binary>` when it is not on PATH | build |
 | R2a-f | invalid configs exit 1 with `invalid config` (empty trigger, old `action` key, unknown output, empty `output.shell`, empty `transform`, unknown `focus`) | fake |
 | R2g | minimal rule accepted with defaults | fake |
 | R2h-l | hotkey config errors: `rule needs trigger or hotkey`, `rule has both trigger and hotkey`, `hotkey needs a modifier`, `unknown modifier <x>`, `shift is written in the key (ctrl+A)` | fake |

@@ -65,8 +65,10 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
     }
     var environment = ProcessInfo.processInfo.environment.merging(env) { _, new in new }
     environment["KEYPIPE_INPUT"] = input
-    let arguments = ["/bin/sh", "-c", script, "keypipe", input].map { strdup($0) } + [nil]
-    let variables = environment.sorted { $0.key < $1.key }.map { strdup("\($0.key)=\($0.value)") } + [nil]
+    // Typed: with Glibc the literal is otherwise inferred as an array of C pointers and does not compile.
+    let argv: [String] = ["/bin/sh", "-c", script, "keypipe", input]
+    let arguments: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) } + [nil]
+    let variables: [UnsafeMutablePointer<CChar>?] = environment.sorted { $0.key < $1.key }.map { strdup("\($0.key)=\($0.value)") } + [nil]
     defer {
         arguments.forEach { free($0) }
         variables.forEach { free($0) }
@@ -173,7 +175,8 @@ func spawnDetached(_ path: String, _ args: [String], stdin payload: Data) -> Boo
     #if canImport(Glibc)
         var actions = SpawnActions()
         var attributes = posix_spawnattr_t()
-        let flags = POSIX_SPAWN_SETSID
+        // Why: glibc defines POSIX_SPAWN_SETSID (0x80) only under _GNU_SOURCE, which Swift's Glibc module does not import.
+        let flags: Int32 = 0x80
     #else
         var actions: SpawnActions = nil
         var attributes: posix_spawnattr_t?
@@ -191,7 +194,7 @@ func spawnDetached(_ path: String, _ args: [String], stdin payload: Data) -> Boo
     posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0)
     posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0)
     posix_spawn_file_actions_addclose(&actions, fds[1])
-    let arguments = ([path] + args).map { strdup($0) } + [nil]
+    let arguments: [UnsafeMutablePointer<CChar>?] = ([path] + args).map { strdup($0) } + [nil]
     defer { arguments.forEach { free($0) } }
     var pid: pid_t = 0
     let launched = posix_spawn(&pid, path, &actions, &attributes, arguments, environ)
