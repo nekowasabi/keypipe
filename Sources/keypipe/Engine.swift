@@ -68,9 +68,17 @@ func performErase(_ field: Field, trigger: String, _ desktop: Desktop, emit: (St
 
 enum WriteOutcome: Equatable { case written, ignored, gone }
 
+/// Why: Chromium (and so Electron) applies an AXValue write about 12 ms after
+/// accepting it; an immediate readback would call a landed write ignored.
 func performWrite(_ field: Field, _ text: String, _ desktop: Desktop) -> WriteOutcome {
-    guard desktop.setText(field, text), let readback = desktop.text(field) else { return .gone }
-    return readback == text ? .written : .ignored
+    guard desktop.setText(field, text) else { return .gone }
+    let deadline = ProcessInfo.processInfo.systemUptime + 0.2
+    while true {
+        guard let readback = desktop.text(field) else { return .gone }
+        if readback == text { return .written }
+        if ProcessInfo.processInfo.systemUptime >= deadline { return .ignored }
+        Thread.sleep(forTimeInterval: 0.005)
+    }
 }
 
 struct Engine {

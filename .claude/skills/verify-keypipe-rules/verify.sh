@@ -128,6 +128,9 @@ check "R4c Backspaces delivered one per read: wait for all, no rewrite" \
 feed R4d "$UP" '{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"hello","ignoresBackspace":true}' '@@@'
 check "R4d app ignores Backspace: trigger removed by AXValue rewrite" \
   "has R4d 'keypipe erase-rewrite' && field R4d '\"HELLO\"'" "field HELLO"
+feed R4f "$UP" '{"app":"com.google.Chrome","focusIsTextField":true,"fieldText":"hello","writePerRead":true}' '@@@'
+check "R4f AXValue write lands one read later (Chromium): written, not ignored" \
+  "has R4f 'keypipe apply replaceInput \"HELLO\"' && lacks R4f 'keypipe apply-failed' && field R4f '\"HELLO\"'" "field HELLO"
 feed R4e "$UP" '{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"hello","keysPerRead":true}' '@@@'
 check "R4e trigger keys land after the tap sees them: wait before erasing" \
   "lacks R4e 'keypipe erase-rewrite' && field R4e '\"HELLO\"'" "field HELLO, not HE@@ or HELL@@"
@@ -324,6 +327,22 @@ if [ "${1:-}" != "--no-live" ] && [ "$(uname -s)" = Darwin ] && [ "${STARTED:-0}
   check "M3 Finder (no text field): @@@ seen, no rule fires, daemon alive" \
     "[ '$before_m' = '$after_m' ] && [ '$after_n' = '$((before_n + 1))' ] && kill -0 '$DPID' 2>/dev/null" \
     "matched $before_m->$after_m nomatch $before_n->$after_n, daemon.log"
+
+  if [ -d "/Applications/Google Chrome.app" ]; then
+    # Chromium lands AXValue writes a few ms after accepting them; the write must still count.
+    printf '%s' '<textarea id=t autofocus rows=4></textarea><script>t.focus()</script>' > "$EV/M7.html"
+    osa "tell application \"Google Chrome\" to open location \"file://$EV/M7.html\"" >/dev/null
+    osa 'tell application "Google Chrome" to activate' >/dev/null
+    sleep 2
+    osa 'tell application "System Events" to keystroke "hello@@@"' >/dev/null
+    sleep 2
+    cap 10 "$BIN" --probe > "$EV/M7.probe.json" 2>&1
+    osa 'tell application "Google Chrome" to close (every tab of front window whose URL ends with "M7.html")' >/dev/null
+    check "M7 Chrome textarea: hello@@@ becomes HELLO through a delayed AXValue write" \
+      "grep -q '\"fieldText\":\"HELLO\"' '$EV/M7.probe.json' && grep -q 'keypipe apply replaceInput \"HELLO\"' '$EV/daemon.log' && ! grep -q 'apply-failed' '$EV/daemon.log'" "M7.probe.json, daemon.log"
+  else
+    sk "M7 Chrome textarea" "/Applications/Google Chrome.app absent"
+  fi
 
   if [ -d /Applications/iTerm.app ]; then
     osa 'tell application "iTerm" to activate' >/dev/null

@@ -266,7 +266,7 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
 ## Open questions and risks
 
 - `shellTimeout` 既定 30 秒で `claude -p` の長文が収まるか。設定で変えられるので運用で測る。ルールごとの期限は要望が出てから。
-- Electron の欄で `setText` 後の読み戻しが一致しないとき、遅れて反映されることがあるか。あると `pbcopy` と二重になるが欄は壊れない。
+- Electron の欄で `setText` 後の読み戻しが遅れて反映されるか。**実測（2026-11-01）**: 遅れる。Chromium で約 12 ms、Grok Bot（Electron）で約 25 ms。直後の読み戻しで `ignored` と判定すると `pbcopy` と二重になるため、`performWrite` は一致まで最大 200 ms 待つ。
 - 閉じた窓の `AXUIElement` への書き込み。**実測（2026-11-01、TextEdit）**: 黙って成功を返し、読み戻しは古い値のまま。変換中（`sleep 3`）に文書を閉じると `apply-failed replaceInput ignored` と `apply notify "HELLO"` が出た。`gone` ではなく `ignored` に分類されるが、結果は通知され別の欄には書かない。`gone` が実機で出る条件（アプリ終了など）は未測定。
 - `POSIX_SPAWN_SETPGROUP` で切り離したグループが端末の SIGINT を受けない副作用は daemon で問題にならないか（推測）。
 - `replaceInput` 失敗の既定通知に結果の全文を載せてよいか（通知センターに残る）。
@@ -284,7 +284,7 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
 | 5 | 境界と発火手順。`Desktop` の原始操作 5 つ、`FakeDesktop`（`--context`）、`Engine`（改訂 3 の手順と固定の方針「変換失敗で通知」）、`performErase` / `performWrite`、`main.swift` の `Engine` 配線と `keypipe field` | `Desktop.swift`, `FakeDesktop.swift`, `Engine.swift`, `main.swift`, `EngineTests.swift` | `verify.sh --no-live` の R2〜R8 全 PASS。**ここで構造の改善は終わる** |
 | 6 | 実機。listen-only CGEventTap、自分の事象の除外、配送後にメインキューで `Engine.key`、`MacDesktop` の原始操作、`--probe` | `MacKeyTap.swift`, `MacDesktop.swift`, `main.swift` | Mac で `verify.sh` の M0〜M4 |
 | 7 | 代替。`onFail`、`shellTimeout`、拒否理由 4 つ、`Failure.empty/ignored/gone`、`KEYPIPE_FAILURE`、新しい出力行、`FakeDesktop` の `ignoresWrite` と `fieldGoneAfter` | `Config.swift`, `Engine.swift`, `FakeDesktop.swift`, `verify.sh`, `SKILL.md`, `config.example.json`, `README*.md`, 本書 | `swift test`、`verify.sh --no-live` の R9（下表） |
-| 8（保留） | 全選択して貼り付け | `BuiltinSink.paste`, `Desktop.paste`, `MacDesktop`, `FakeDesktop` | Electron で `AXValue` 無視を測ってから |
+| 8（取り下げ） | 全選択して貼り付け | 作らない | 2026-11-01 に測定。Chromium の `textarea` と `contenteditable`、実機の Electron（Grok Bot）はいずれも `AXValue` の書き込みを受理し、12〜25 ms 後に反映した。無視ではなく遅延なので、`performWrite` の読み戻しを最大 200 ms 待つ変更（R4f）で足りる。貼り付け送り先は無視するアプリが実測で見つかってから |
 
 段 7 の検証項目。
 
@@ -304,6 +304,6 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
 
 ## 実装の記録
 
-- 段 1〜5（2026-10-31）、段 6（2026-11-01、実機 M0〜M6）、段 7（2026-11-01、R9a〜l）まで実装済み。残りは段 8（保留）。
+- 段 1〜5（2026-10-31）、段 6（2026-11-01、実機 M0〜M6）、段 7（2026-11-01、R9a〜l）まで実装済み。段 8 は測定の結果取り下げ（上表）。
 - 段 7 で設計から変えた点。`Engine.runStage` は `runTransform` / `shellStage` / `apply` の 3 関数になった。`fallback` の出力行は代替の試行すべてに `fallback ` を前置する（`fallback apply replaceInput ...` も含む）。`performErase` は欄が消えたときだけ nil を返し、`trigger-absent` と `rewrite-ignored` は行を出して続行する。`FakeDesktop` の `fieldGoneAfter: "erase"` は「消去後の最初の書き込みが失敗し、以後の読みが nil」として近似した（消去の読み戻し中に消えると発火が終わるだけで `gone` の経路に入らないため）。`ignoresWrite` は結果が欄と同じ文字のとき観測できない（読み戻しが一致する）。
-- 次の候補。段 8 は Electron で `AXValue` 無視を測ってから。
+- 次の候補。`AXValue` の書き込みを本当に無視するアプリが見つかったら、そのとき貼り付け送り先を検討する。

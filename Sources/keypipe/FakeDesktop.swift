@@ -11,6 +11,7 @@ final class FakeDesktop: Desktop {
         var keysPerRead: Bool?
         var ignoresWrite: Bool?
         var fieldGoneAfter: String?
+        var writePerRead: Bool?
     }
 
     private let app: String?
@@ -20,6 +21,8 @@ final class FakeDesktop: Desktop {
     private let keysPerRead: Bool
     private let ignoresWrite: Bool
     private let goneAfterErase: Bool
+    private let writePerRead: Bool
+    private var pendingWrite: String?
     private var erased = false
     private var gone = false
     private var pendingBackspaces = 0
@@ -33,9 +36,11 @@ final class FakeDesktop: Desktop {
     /// ignoresWrite accepts setText but keeps the old text (Electron-style).
     /// goneAfterErase makes the first write after the erase fail and every
     /// later read return nil, like a window closed during a slow transform.
+    /// writePerRead applies setText on the read after the next one, like
+    /// Chromium landing an AXValue write a few milliseconds later.
     init(app: String? = nil, focus: Focus = .nothing, fieldText: String = "",
          ignoresBackspace: Bool = false, backspacePerRead: Bool = false, keysPerRead: Bool = false,
-         ignoresWrite: Bool = false, goneAfterErase: Bool = false) {
+         ignoresWrite: Bool = false, goneAfterErase: Bool = false, writePerRead: Bool = false) {
         self.app = app
         self.focus = focus
         self.fieldText = fieldText
@@ -44,6 +49,7 @@ final class FakeDesktop: Desktop {
         self.keysPerRead = keysPerRead
         self.ignoresWrite = ignoresWrite
         self.goneAfterErase = goneAfterErase
+        self.writePerRead = writePerRead
     }
 
     convenience init(path: String) throws {
@@ -63,7 +69,8 @@ final class FakeDesktop: Desktop {
             backspacePerRead: context.backspacePerRead ?? false,
             keysPerRead: context.keysPerRead ?? false,
             ignoresWrite: context.ignoresWrite ?? false,
-            goneAfterErase: context.fieldGoneAfter == "erase")
+            goneAfterErase: context.fieldGoneAfter == "erase",
+            writePerRead: context.writePerRead ?? false)
     }
 
     func key(_ character: Character) {
@@ -82,6 +89,7 @@ final class FakeDesktop: Desktop {
 
     func text(_ field: Field) -> String? {
         guard field.token == 0 && focus == .text && !gone else { return nil }
+        defer { if let pending = pendingWrite { fieldText = pending; pendingWrite = nil } }
         if !pendingKeys.isEmpty { fieldText.append(pendingKeys.removeFirst()) }
         if pendingBackspaces > 0 {
             pendingBackspaces -= 1
@@ -96,7 +104,8 @@ final class FakeDesktop: Desktop {
             gone = true
             return false
         }
-        if !ignoresWrite { fieldText = text }
+        if ignoresWrite { return true }
+        if writePerRead { pendingWrite = text } else { fieldText = text }
         return true
     }
 

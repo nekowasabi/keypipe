@@ -221,7 +221,7 @@ struct Engine {
 
 ## リスク（未検証）
 
-- 一部アプリ（Electron 系）は `AXValue` の書き込みを無視する。`replaceInput` は書き込み後に読み戻し、失敗したら「全選択してペースト」に落とす。
+- 一部アプリ（Electron 系）が `AXValue` の書き込みを無視するという想定は、2026-11-01 の測定で外れた。Chromium（`textarea`、`contenteditable`）と Grok Bot（Electron）は受理して 12〜25 ms 後に反映する。`replaceInput` は読み戻しが一致するまで最大 200 ms 待ち、それでも違えば `ignored` として `onFail.output` へ。「全選択してペースト」は無視するアプリが見つかるまで作らない。
 - ターミナルをテキスト欄から外す判別。`AXRoleDescription` が TextEdit では取れ、iTerm2 ではエラー（-25212）だったのが候補。2 種以上のターミナルとブラウザの欄で測ってから型にする。
 - TextEdit が合成 Backspace を無視する原因と、ブラウザの欄での挙動。iTerm2 が合成 Backspace を受けるか。
 - TextEdit 以外のアプリが `AXTextInputMarkedRange` を出すか。出さないアプリでは変換中を `text` と見て、かなを消す。

@@ -93,6 +93,17 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(lines.contains("keypipe fallback output-shell exit 0"))
     }
 
+    func testDelayedWriteCountsAsWrittenNotIgnored() {
+        let desktop = FakeDesktop(focus: .text, fieldText: "hello", writePerRead: true)
+        let rule = Rule(trigger: "@@@", when: When(focus: .textField),
+                        transform: Guarded(primary: "tr"), output: Guarded(primary: .builtin(.replaceInput)))
+        let (_, lines) = run(rules: [rule], desktop: desktop) { _, _, _, _ in .exited(0, stdout: "HELLO") }
+        XCTAssertTrue(lines.contains(#"keypipe apply replaceInput "HELLO""#))
+        XCTAssertFalse(lines.contains { $0.hasPrefix("keypipe apply-failed") })
+        XCTAssertEqual(desktop.fieldText, "HELLO")
+        XCTAssertEqual(desktop.notifications, [])
+    }
+
     func testIgnoredWriteFallsBackAndGoneFieldNotifiesByDefault() {
         let ignoring = FakeDesktop(focus: .text, fieldText: "hello", ignoresWrite: true)
         let withFallback = Rule(trigger: "@@@", when: When(focus: .textField), transform: Guarded(primary: "tr"),

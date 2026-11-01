@@ -31,7 +31,7 @@ Read-only. Reports the host OS, the swift toolchain, and, when the binary exists
 
 Live items need two Accessibility grants in System Settings > Privacy & Security > Accessibility: the built `keypipe` binary (for the tap and AX) and the terminal running the script (for `System Events` keystrokes). The terminal also needs Automation grants for TextEdit and System Events; the first `osascript` call raises the dialog and blocks until it is answered (AppleEvent timeout -1712 after about 60 s). Set the input source to ABC. Any text expander (espanso) must not own a trigger that is a prefix of a test trigger (`@@` once was; it has been removed from the user's config, and the live run passes with espanso running). Keys are translated from keycode and shift with `UCKeyTranslate` on the current layout (since the hotkey change), so a `System Events` keystroke for a shifted key now arrives as the shifted character even though the event's stored string is unshifted (`probes/chord.swift` shows both). M6 types the shifted `!!!` to prove it.
 
-Throwaway probes that settled the design's runtime risks live in [`probes/`](probes/) (`axprobe.swift`, `tap.swift`, `imsel.swift`); build each with `swiftc -O -o <out> <file>`. Results are in `docs/design/verification-plan.md`.
+Throwaway probes that settled the design's runtime risks live in [`probes/`](probes/) (`axprobe.swift`, `axwrite.swift`, `tap.swift`, `chord.swift`, `imsel.swift`); build each with `swiftc -O -o <out> <file>`. Results are in `docs/design/verification-plan.md`.
 
 ## Contract the script asserts
 
@@ -57,7 +57,7 @@ Transcript lines the binary prints, in both harnesses.
 
 Line names share prefixes (`erase`, `erase-rewrite`), so a `lacks` check on a bare name matches up to the trailing space: `'keypipe erase '`.
 
-Context JSON for `--context`: `{"app":"<bundle id>","focusIsTextField":true,"fieldText":"...","composing":false,"ignoresBackspace":false,"backspacePerRead":false}`. `backspacePerRead` delivers one queued Backspace per field read, like an app that processes key events between polls; `keysPerRead` does the same for typed keys, like the tap seeing a key before the app has appended it. `ignoresWrite` accepts `setText` but keeps the old text (only observable when the result differs from the field). `"fieldGoneAfter":"erase"` makes the first write after the erase fail and later reads return nil, like a window closed during a slow transform. Typed keys append to `fieldText`; erase removes from its end. A rule only reads the field when it declares `"when":{"focus":"textField"}` (design revision 3); `focus: any` rules get an empty input, so every item that asserts field text through `$1` or stdin declares `textField`.
+Context JSON for `--context`: `{"app":"<bundle id>","focusIsTextField":true,"fieldText":"...","composing":false,"ignoresBackspace":false,"backspacePerRead":false}`. `backspacePerRead` delivers one queued Backspace per field read, like an app that processes key events between polls; `keysPerRead` does the same for typed keys, like the tap seeing a key before the app has appended it. `ignoresWrite` accepts `setText` but keeps the old text (only observable when the result differs from the field). `"fieldGoneAfter":"erase"` makes the first write after the erase fail and later reads return nil, like a window closed during a slow transform. `writePerRead` applies `setText` on the read after the next one, like Chromium and Electron landing an AXValue write about 12 to 25 ms later (measured with `probes/axwrite.swift`). Typed keys append to `fieldText`; erase removes from its end. A rule only reads the field when it declares `"when":{"focus":"textField"}` (design revision 3); `focus: any` rules get an empty input, so every item that asserts field text through `$1` or stdin declares `textField`.
 
 `--smoke-feed` exits 0 when at least one rule matched (even if a later stage failed), 2 when none, 1 on invalid config.
 
@@ -82,6 +82,7 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | R4c | Backspaces delivered one per read: the engine waits for all of them, no rewrite | fake |
 | R4d | app ignores Backspace: trigger removed by `AXValue` rewrite (`erase-rewrite`) | fake |
 | R4e | trigger keys land after the tap sees them: the engine waits for the trigger suffix before erasing | fake |
+| R4f | AXValue write lands one read later (Chromium, Electron): `apply replaceInput`, no `apply-failed` | fake |
 | R5a | transform gets input on stdin, `$1`, `KEYPIPE_INPUT`, and app in `KEYPIPE_APP` | fake |
 | R5b | one trailing newline stripped from transform output | fake |
 | R5c | failing transform applies nothing, notifies, keeps field | fake |
@@ -109,6 +110,7 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | M5 | TextEdit `1hello` then `keystroke "@" using control down` under a `ctrl+@` textField rule: field becomes `1HELLO`, nothing erased | live |
 | M6 | TextEdit `1xyz!!!` under a `!!!` any rule: shifted key translated to `!`, trigger erased (field `1xyz`) | live |
 | M3 | Finder frontmost, `@@@` is seen (`nomatch` +1), no rule fires, daemon still alive | live |
+| M7 | Chrome `textarea` (file URL): `hello@@@` becomes `HELLO` through a delayed AXValue write, no `apply-failed`; the tab is closed afterwards | live |
 | M4 | iTerm2 probe recorded (risk check, not a behavior claim) | live |
 
 Feature recipes live in [`features/`](features/README.md).
@@ -134,4 +136,4 @@ Fake feeds are independent processes and can run in parallel. Live items cannot:
 
 ## Status
 
-Stages 1 to 7 of `docs/design/failure-fallback.md` are implemented: `--no-live` passes every R item (R1c skips without swift-format), the live items M0 to M6 run against the real CGEventTap and AX (`MacKeyTap`, `MacDesktop`), and per-stage fallbacks (`onFail`, `shellTimeout`, `KEYPIPE_FAILURE`) are covered by R9. Stage 8 (select-all and paste) waits on an Electron measurement.
+Stages 1 to 7 of `docs/design/failure-fallback.md` are implemented: `--no-live` passes every R item (R1c skips without swift-format), the live items M0 to M6 run against the real CGEventTap and AX (`MacKeyTap`, `MacDesktop`), and per-stage fallbacks (`onFail`, `shellTimeout`, `KEYPIPE_FAILURE`) are covered by R9. Stage 8 (select-all and paste) was dropped: Chromium and a real Electron app accept AXValue writes with a short delay instead of ignoring them (measured 2026-11-01), so `performWrite` waits up to 200 ms for the readback (R4f) and no paste sink exists.
