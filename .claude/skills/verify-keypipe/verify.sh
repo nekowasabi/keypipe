@@ -141,10 +141,10 @@ fi
 # V4 S4 context
 if grep -q 'struct Snapshot' Sources/keypipe/Context.swift 2>/dev/null \
   && grep -q 'var app: String' Sources/keypipe/Context.swift \
-  && grep -q 'func matches(' Sources/keypipe/Context.swift; then
+  && grep -q 'func evaluate(' Sources/keypipe/Context.swift; then
   vpass "V4a context field + stub matcher types" "S4" "Context grep"
 else
-  vfail "V4a context field + stub matcher types" "S4" "need Snapshot.app + matches() in Context.swift"
+  vfail "V4a context field + stub matcher types" "S4" "need Snapshot.app + evaluate() in Context.swift"
 fi
 if grep -rqi 'context' Tests/ 2>/dev/null; then
   vpass "V4b context covered by unit test" "S4" "Tests grep"

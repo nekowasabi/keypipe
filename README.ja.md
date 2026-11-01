@@ -281,7 +281,7 @@ cmd のどれかが押されていればホットキー、それ以外は文字�
 - `Sources/keypipe/Config.swift`: 唯一の JSON 境界。理由付きで拒否する
   `loadConfig(path:)`。
 - `Sources/keypipe/Context.swift`: `Focus`、`Field`、`Snapshot` と純粋なルール選択
-  （`matches`、`select`）。
+  （`evaluate`: フォーカス、次に事実の条件を安い順に）。
 - `Sources/keypipe/Trigger.swift`: `Trigger`（文字列かホットキー）、`Hotkey` の
   解析、純粋なトリガーバッファマッチャー（最長一致優先、64 文字バッファ）。
 - `Sources/keypipe/Engine.swift`: 発火手順（変換中の門、選択、読み戻し付きの消去、

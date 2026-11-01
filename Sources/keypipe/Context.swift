@@ -21,12 +21,3 @@ func evaluate(_ when: When, _ sheet: FactSheet) -> Conditions.Verdict {
     guard when.focus == .any || sheet.snapshot.focus == .text else { return .noMatch }
     return when.conditions.evaluate(sheet)
 }
-
-/// Whether `when` holds on a snapshot alone (a fact beyond the snapshot counts as absent).
-func matches(_ when: When, _ snapshot: Snapshot) -> Bool {
-    evaluate(when, FactSheet(snapshot, desktop: nil)) == .match
-}
-
-func select(_ candidates: [Rule], _ snapshot: Snapshot) -> Rule? {
-    candidates.first { matches($0.when, snapshot) }
-}

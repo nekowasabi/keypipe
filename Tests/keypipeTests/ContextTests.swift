@@ -2,6 +2,11 @@ import XCTest
 
 @testable import keypipe
 
+/// The first rule whose `when` holds on a snapshot alone (a fact beyond it counts as absent).
+private func select(_ candidates: [Rule], _ snapshot: Snapshot) -> Rule? {
+    candidates.first { evaluate($0.when, FactSheet(snapshot, desktop: nil)) == .match }
+}
+
 final class ContextTests: XCTestCase {
     func testFocusAndAppSelection() {
         let any = Rule(trigger: "@@@")
