@@ -73,9 +73,10 @@ done
   && vpass "V2a entrypoint Sources/keypipe/main.swift" "S2" "main.swift" \
   || vfail "V2a entrypoint Sources/keypipe/main.swift" "S2" "missing"
 if [ -d Sources ]; then
-  ! grep -rq 'NSStatusItem\|NSStatusBar\|NSMenu(\|import AppKit\|import Cocoa' Sources/ \
-    && vpass "V2b no menu bar code" "S2" "grep NSStatusItem/NSStatusBar/AppKit" \
-    || vfail "V2b no menu bar code" "S2" "menu bar or AppKit reference found"
+  # Why: AppKit is imported for NSWorkspace (front app); only menu bar APIs break "no menu bar".
+  ! grep -rq 'NSStatusItem\|NSStatusBar\|NSMenu(' Sources/ \
+    && vpass "V2b no menu bar code" "S2" "grep NSStatusItem/NSStatusBar/NSMenu" \
+    || vfail "V2b no menu bar code" "S2" "menu bar API (NSStatusItem/NSStatusBar/NSMenu) found"
   grep -rq 'SIGINT\|SIGTERM' Sources/ \
     && vpass "V2c signal handling SIGINT/SIGTERM" "S2" "signal grep" \
     || vfail "V2c signal handling SIGINT/SIGTERM" "S2" "no signal handling found"
@@ -138,10 +139,12 @@ else
 fi
 
 # V4 S4 context
-if grep -rlq 'appBundleId\|processName' Sources/ 2>/dev/null && grep -rqi 'contextMatches\|func matches' Sources/ 2>/dev/null; then
+if grep -q 'struct Snapshot' Sources/keypipe/Context.swift 2>/dev/null \
+  && grep -q 'var app: String' Sources/keypipe/Context.swift \
+  && grep -q 'func matches(' Sources/keypipe/Context.swift; then
   vpass "V4a context field + stub matcher types" "S4" "Context grep"
 else
-  vfail "V4a context field + stub matcher types" "S4" "need MatchContext fields + matcher"
+  vfail "V4a context field + stub matcher types" "S4" "need Snapshot.app + matches() in Context.swift"
 fi
 if grep -rqi 'context' Tests/ 2>/dev/null; then
   vpass "V4b context covered by unit test" "S4" "Tests grep"
@@ -165,22 +168,28 @@ if grep -rqi 'CGEvent\|CGEventTap\|Accessibility\|key tap' README.md Sources/ 2>
 else
   vfail "V5c macOS tap hook point documented" "S5" "document CGEvent/AX hook in README or source"
 fi
-if grep -q 'TriggerMatcher' Sources/keypipe/main.swift 2>/dev/null && grep -rq 'smoke-feed\|feed-stdin' Sources/ 2>/dev/null; then
-  vpass "V5d daemon wires TriggerMatcher with feed-stdin/smoke-feed" "S5" "main.swift wiring"
+# Why: main.swift builds an Engine, and the Engine owns the TriggerMatcher.
+if grep -q 'TriggerMatcher(' Sources/keypipe/Engine.swift 2>/dev/null \
+  && grep -q 'Engine(' Sources/keypipe/main.swift \
+  && grep -q 'smoke-feed' Sources/keypipe/main.swift && grep -q 'feed-stdin' Sources/keypipe/main.swift; then
+  vpass "V5d daemon wires TriggerMatcher with feed-stdin/smoke-feed" "S5" "main.swift Engine + Engine.swift TriggerMatcher"
 else
   vfail "V5d daemon wires TriggerMatcher with feed-stdin/smoke-feed" "S5" "wire matcher into main.swift with a Linux/dev feed path"
 fi
 if [ "$SWIFT_OK" = 1 ] && [ -x "$BIN" ]; then
-  printf '{"rules": [{"trigger": "@@@", "action": {"type": "shell", "command": "echo kp-smoke-marker"}}]}' > "$EVIDENCE/smoke-shell.json"
-  printf '{"rules": [{"trigger": "@@@", "action": {"type": "log", "message": "kp-log-marker"}}], "logPath": "%s"}' "$EVIDENCE/smoke.log.out" > "$EVIDENCE/smoke-log.json"
+  # Why: the transcript does not carry shell stdout, so the shell writes a file as its side effect.
+  printf '{"rules": [{"trigger": "@@@", "when": {"focus": "any"}, "output": {"shell": "printf kp-smoke-marker > %s"}}]}' "$EVIDENCE/smoke.out" > "$EVIDENCE/smoke-shell.json"
+  rm -f "$EVIDENCE/smoke.out"
   if "$BIN" --config "$EVIDENCE/smoke-shell.json" --smoke-feed '@@@' > "$EVIDENCE/smoke-shell.log" 2>&1 \
-    && grep -q 'kp-smoke-marker' "$EVIDENCE/smoke-shell.log" \
-    && grep -q 'matched' "$EVIDENCE/smoke-shell.log" \
-    && "$BIN" --config "$EVIDENCE/smoke-log.json" --smoke-feed 'hi @@@ there' > "$EVIDENCE/smoke-log-run.log" 2>&1 \
-    && grep -q 'kp-log-marker' "$EVIDENCE/smoke.log.out"; then
-    vpass "V5e smoke-feed executes shell and log side effects" "S5" "shell stdout + log file"
+    && grep -q 'matched @@@' "$EVIDENCE/smoke-shell.log" \
+    && grep -q 'output-shell exit 0' "$EVIDENCE/smoke-shell.log" \
+    && grep -q 'kp-smoke-marker' "$EVIDENCE/smoke.out" \
+    && rm -f "$EVIDENCE/smoke.out" \
+    && "$BIN" --config "$EVIDENCE/smoke-shell.json" --smoke-feed 'hi @@@ there' > "$EVIDENCE/smoke-mid.log" 2>&1 \
+    && grep -q 'kp-smoke-marker' "$EVIDENCE/smoke.out"; then
+    vpass "V5e smoke-feed executes shell side effect" "S5" "matched + output-shell exit 0 + smoke.out, also mid-text"
   else
-    vfail "V5e smoke-feed executes shell and log side effects" "S5" "see smoke-*.log"
+    vfail "V5e smoke-feed executes shell side effect" "S5" "see smoke-*.log"
   fi
 elif grep -rq 'runAction\|feedAndRun' Sources/ 2>/dev/null; then
   vpass "V5e action execution path present (static)" "S5" "static grep; runtime MAC_UNVERIFIED"
