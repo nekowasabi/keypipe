@@ -26,9 +26,10 @@ swift build
 ## Run
 
 ```sh
-swift run keypipe --config ./config.example.json
-# or
-.build/debug/keypipe --config /path/to/keypipe.json
+mkdir -p ~/.config/keypipe && cp config.example.json ~/.config/keypipe/config.json
+.build/debug/keypipe &
+# or point at any file
+.build/debug/keypipe --config /path/to/keypipe.json &
 ```
 
 On start the daemon prints `keypipe started` with the rule count and the
@@ -58,7 +59,10 @@ contract is in `.claude/skills/verify-keypipe-rules/SKILL.md`.
 
 One JSON file (only the `"json"` format is accepted in MVP; TOML and YAML are
 out of scope). Path is passed with `--config` and defaults to
-`./config.example.json`. Copy `config.example.json` to start:
+`$XDG_CONFIG_HOME/keypipe/config.json`, which is
+`~/.config/keypipe/config.json` when the variable is unset. Without
+`--config`, a missing file exits 1 and names that path. Copy
+`config.example.json` there to start:
 
 ```json
 {

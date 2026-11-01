@@ -25,9 +25,10 @@ swift build
 ## 実行
 
 ```sh
-swift run keypipe --config ./config.example.json
-# or
-.build/debug/keypipe --config /path/to/keypipe.json
+mkdir -p ~/.config/keypipe && cp config.example.json ~/.config/keypipe/config.json
+.build/debug/keypipe &
+# または任意のファイルを指す
+.build/debug/keypipe --config /path/to/keypipe.json &
 ```
 
 起動時にデーモンはルール数と設定パスとともに `keypipe started` を出力します。
@@ -56,8 +57,11 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
 ## 設定
 
 1 つの JSON ファイル（MVP では `"json"` 形式のみ受け付けます。TOML と YAML は
-対象外です）。パスは `--config` で渡し、既定値は `./config.example.json` です。
-まず `config.example.json` をコピーして開始してください。
+対象外です）。パスは `--config` で渡し、既定値は
+`$XDG_CONFIG_HOME/keypipe/config.json`（変数が無ければ
+`~/.config/keypipe/config.json`）です。`--config` 無しでファイルが無いと
+終了コード 1 でそのパスを案内します。まず `config.example.json` をそこへ
+コピーして開始してください。
 
 ```json
 {

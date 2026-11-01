@@ -31,7 +31,14 @@ if args.contains("--probe") {
     exit(0)
 }
 
-let configFile = argument("--config", in: args) ?? "config.example.json"
+/// $XDG_CONFIG_HOME/keypipe/config.json, or ~/.config/keypipe/config.json.
+let defaultConfigFile: String = {
+    let environment = ProcessInfo.processInfo.environment
+    let base = environment["XDG_CONFIG_HOME"].flatMap { $0.isEmpty ? nil : $0 }
+        ?? NSString(string: "~/.config").expandingTildeInPath
+    return base + "/keypipe/config.json"
+}()
+let configFile = argument("--config", in: args) ?? defaultConfigFile
 let loaded: KeypipeConfig
 let fake: FakeDesktop
 do {
@@ -40,6 +47,9 @@ do {
     else { fake = FakeDesktop() }
 } catch {
     fputs("\(error)\n", stderr)
+    if argument("--config", in: args) == nil {
+        fputs("keypipe: no --config given; copy config.example.json to \(defaultConfigFile)\n", stderr)
+    }
     exit(1)
 }
 
