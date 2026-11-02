@@ -138,43 +138,13 @@ else
   vfail "V3c invalid config error path present (static)" "S3" "no error/exit path in Sources/"
 fi
 
-# V4 S4 context
-if grep -q 'struct Snapshot' Sources/keypipe/Context.swift 2>/dev/null \
-  && grep -q 'var app: String' Sources/keypipe/Context.swift \
-  && grep -q 'func evaluate(' Sources/keypipe/Context.swift; then
-  vpass "V4a context field + stub matcher types" "S4" "Context grep"
+# V4 S4 context, V5 S5 trigger pipeline.
+# Why no source greps: V4a/V5a/V5d checked type and function names, failed on every rename
+# (da918df, 8d3bd48) and passed while behavior broke. swift test (V7b) and V5e run the code.
+if grep -rqi 'CGEvent\|CGEventTap\|Accessibility\|key tap' README.md 2>/dev/null; then
+  vpass "V5c macOS tap hook point documented" "S5" "README grep"
 else
-  vfail "V4a context field + stub matcher types" "S4" "need Snapshot.app + evaluate() in Context.swift"
-fi
-if grep -rqi 'context' Tests/ 2>/dev/null; then
-  vpass "V4b context covered by unit test" "S4" "Tests grep"
-else
-  if [ "$SWIFT_OK" = 1 ]; then vfail "V4b context covered by unit test" "S4" "no context test"; else vskip "V4b context covered by unit test" "S4" "$SWIFT_WHY, no Tests/ yet"; fi
-fi
-
-# V5 S5 trigger pipeline
-if grep -rlq 'TriggerMatcher\|func feed' Sources/ 2>/dev/null; then
-  vpass "V5a pure trigger matcher module with feed" "S5" "Trigger grep"
-else
-  vfail "V5a pure trigger matcher module with feed" "S5" "need TriggerMatcher.feed"
-fi
-if grep -rq '@@@' Tests/ 2>/dev/null && grep -rqi 'feed\|TriggerMatcher' Tests/ 2>/dev/null; then
-  vpass "V5b unit test detects @@@ completion" "S5" "Tests grep"
-else
-  if [ "$SWIFT_OK" = 1 ]; then vfail "V5b unit test detects @@@ completion" "S5" "no @@@ trigger test"; else vskip "V5b unit test detects @@@ completion" "S5" "$SWIFT_WHY, no Tests/ yet"; fi
-fi
-if grep -rqi 'CGEvent\|CGEventTap\|Accessibility\|key tap' README.md Sources/ 2>/dev/null; then
-  vpass "V5c macOS tap hook point documented" "S5" "hook doc grep"
-else
-  vfail "V5c macOS tap hook point documented" "S5" "document CGEvent/AX hook in README or source"
-fi
-# Why: main.swift builds an Engine, and the Engine owns the TriggerMatcher.
-if grep -q 'TriggerMatcher(' Sources/keypipe/Engine.swift 2>/dev/null \
-  && grep -q 'Engine(' Sources/keypipe/main.swift \
-  && grep -q 'smoke-feed' Sources/keypipe/main.swift && grep -q 'feed-stdin' Sources/keypipe/main.swift; then
-  vpass "V5d daemon wires TriggerMatcher with feed-stdin/smoke-feed" "S5" "main.swift Engine + Engine.swift TriggerMatcher"
-else
-  vfail "V5d daemon wires TriggerMatcher with feed-stdin/smoke-feed" "S5" "wire matcher into main.swift with a Linux/dev feed path"
+  vfail "V5c macOS tap hook point documented" "S5" "document the CGEvent/AX hook in README"
 fi
 if [ "$SWIFT_OK" = 1 ] && [ -x "$BIN" ]; then
   # Why: the transcript does not carry shell stdout, so the shell writes a file as its side effect.
@@ -191,10 +161,8 @@ if [ "$SWIFT_OK" = 1 ] && [ -x "$BIN" ]; then
   else
     vfail "V5e smoke-feed executes shell side effect" "S5" "see smoke-*.log"
   fi
-elif grep -rq 'runAction\|feedAndRun' Sources/ 2>/dev/null; then
-  vpass "V5e action execution path present (static)" "S5" "static grep; runtime MAC_UNVERIFIED"
 else
-  vfail "V5e action execution path present (static)" "S5" "no action execution in Sources/"
+  vskip "V5e smoke-feed executes shell side effect" "S5" "$SWIFT_WHY or binary missing (MAC_UNVERIFIED)"
 fi
 
 # V6 S6 skill + pstack trace
