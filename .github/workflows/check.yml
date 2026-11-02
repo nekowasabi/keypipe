@@ -1,0 +1,12 @@
+name: check
+on:
+  push:
+  pull_request:
+jobs:
+  check:
+    # Why macOS: the lint uses Xcode's `swift format`, and the daemon code only builds fully here.
+    # The live verify scripts need Accessibility and a desktop, so CI runs only `make check`.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make check
