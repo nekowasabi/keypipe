@@ -62,10 +62,20 @@ fi
 cd "$REPO" || exit 1
 check "R1a swift build" "swift build > '$EV/build.log' 2>&1" "build.log"
 check "R1b swift test" "swift test > '$EV/test.log' 2>&1" "test.log"
-if command -v swift-format >/dev/null 2>&1; then
-  check "R1c swift-format lint" "swift-format lint --strict --recursive Sources Tests > '$EV/lint.log' 2>&1" "lint.log"
+# Why: the Makefile owns the formatter lookup; a missing tool fails here instead of skipping,
+# because the skip hid 497 lint warnings on every Mac.
+check "R1c swift-format lint" "make -s -C '$REPO' lint > '$EV/lint.log' 2>&1" "lint.log"
+# Why: README promises the Linux feed build, and only a Linux compiler shows a Glibc-only break
+# (Shell.swift once failed there while every Mac run passed). DOCKER names the binary if not on PATH.
+# --init: otherwise swift test is PID 1, never reaps the orphans ShellTests kills, and kill(pid, 0) sees zombies.
+# timeout inside the container: the docker client ignores cap's SIGALRM. A hung image pull is not bounded.
+# --ulimit: lets ShellTests hold fd 70000, which a bounded descriptor scan once leaked to background jobs.
+DOCKER_BIN=${DOCKER:-$(command -v docker)}
+if [ -n "$DOCKER_BIN" ] && "$DOCKER_BIN" info > /dev/null 2>&1; then
+  check "R1d Linux build and swift test (swift:6.0)" \
+    "'$DOCKER_BIN' run --rm --init --ulimit nofile=131072:131072 -v '$REPO':/src:ro swift:6.0 bash -c 'mkdir /w && cd /src && tar --exclude=.build --exclude=.verify-evidence -cf - . | tar -xf - -C /w && cd /w && timeout -k 30 900 swift test' > '$EV/linux.log' 2>&1" "linux.log"
 else
-  sk "R1c swift-format lint" "swift-format not on PATH"
+  sk "R1d Linux build and swift test" "docker not available (set DOCKER=)"
 fi
 if [ ! -x "$BIN" ]; then
   ng "R2-R7" "binary missing at $BIN, feed items not run"
@@ -93,6 +103,30 @@ bad R2f '{"rules":[{"trigger":"@@@","when":{"focus":"window"}}]}' "unknown focus
 feed R2g '{"rules":[{"trigger":"@@@"}]}' "$TXT" '@@@'
 check "R2g minimal rule accepted" "exitis R2g 0 && has R2g 'keypipe matched @@@ rule 0'" "defaults: when any, identity, output none"
 bad R2h '{"rules":[{"output":"none"}]}' "rule needs trigger or hotkey"
+# An unknown argument must stop with the usage, not start the daemon (cap kills a daemon, so exit is not 2).
+argv() { local id=$1; shift; cap 10 "$BIN" "$@" > "$EV/$id.out" 2>&1; echo $? > "$EV/$id.exit"; }
+argv R2u --config "$EV/R2g.config.json" --hepl
+check "R2u unknown argument: usage, exit 2, no daemon" "exitis R2u 2 && has R2u 'keypipe: unknown argument --hepl' && has R2u 'usage: keypipe'" ""
+argv R2v --help; argv R2w -h
+check "R2v --help and -h print the usage, exit 0" "exitis R2v 0 && has R2v 'usage: keypipe' && exitis R2w 0 && has R2w 'usage: keypipe'" ""
+argv R2x --config "$EV/R2g.config.json" --report; argv R2y --config "$EV/R2g.config.json" --smoke-feed
+argv R2z --config "$EV/R2g.config.json" --app com.example.app
+argv R2s --config /dev/null --line ""
+argv R2r --config "$EV/R2g.config.json" --config "$EV/R2g.config.json" --triggers
+check "R2r a flag given twice: exit 2" "exitis R2r 2 && has R2r 'keypipe: --config given twice'" ""
+# Two modes used to run whichever branch came first in main.swift and drop the other.
+argv R2p --config "$EV/R2g.config.json" --triggers --feed-stdin
+argv R2o --config "$EV/R2g.config.json" --line @@@ --smoke-hotkey ctrl+@
+check "R2p two modes at once: exit 2 before the config is used" \
+  "exitis R2p 2 && has R2p 'keypipe: pick one mode, got --triggers --feed-stdin' \
+   && exitis R2o 2 && has R2o 'keypipe: pick one mode, got --line --smoke-feed'" ""
+# A value that looks like a flag is still the value: trigger "--report" without report mode.
+printf 'x' | cap 10 "$BIN" --config "$EV/R2g.config.json" --line --report > "$EV/R2q.out" 2>&1; echo $? > "$EV/R2q.exit"
+check "R2q a flag-like value stays a value (--line --report is the trigger --report)" \
+  "exitis R2q 2 && has R2q 'keypipe nomatch --report' && lacks R2q '\"outcome\"'" ""
+check "R2x a modifier without --line, a flag without its value: exit 2, no daemon" \
+  "exitis R2x 2 && has R2x 'keypipe: --report needs --line' && exitis R2y 2 && has R2y 'keypipe: --smoke-feed needs a value' \
+   && exitis R2z 2 && has R2z 'keypipe: --app needs --line' && exitis R2s 2 && has R2s 'keypipe: --line needs a trigger'" ""
 bad R2i '{"rules":[{"trigger":"@@@","hotkey":"ctrl+@"}]}' "rule has both trigger and hotkey"
 bad R2j '{"rules":[{"hotkey":"@"}]}' "hotkey needs a modifier"
 bad R2k '{"rules":[{"hotkey":"meta+@"}]}' "unknown modifier meta"
@@ -228,6 +262,86 @@ cap 20 "$BIN" --config "$EV/R10c.config.json" --context "$EV/R10c.context.json" 
 echo $? > "$EV/R10c.exit"
 check "R10c unconfigured chord: no transcript line, no nomatch, exit 2" \
   "exitis R10c 2 && lacks R10c 'keypipe nomatch' && lacks R10c 'keypipe matched'" "cmd+c is silent"
+
+# R11 --line --report (PR1 of docs/design/extension-architecture.md)
+# line <name> <config-json> <trigger> <stdin> [extra args...]: stdout to .out, stderr to .err
+line() {
+  local name=$1 cfg=$2 trig=$3 input=$4; shift 4
+  printf '%s' "$cfg" > "$EV/$name.config.json"
+  printf '%s' "$input" | cap 20 "$BIN" --config "$EV/$name.config.json" --line "$trig" "$@" > "$EV/$name.out" 2> "$EV/$name.err"
+  echo $? > "$EV/$name.exit"
+}
+same() { [ "$(cat "$EV/$1.out")" = "$2" ]; }
+LR='{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"transform":"tr a-z A-Z","output":"replaceInput"},{"trigger":";;;","when":{"focus":"textField"},"transform":"exit 3"},{"trigger":"///","when":{"focus":"textField"},"output":{"shell":"cat > /dev/null"}}]}'
+line R11a1 "$LR" '@@@' 'hello' --report
+line R11a2 "$LR" ';;;' 'hello' --report
+line R11a3 "$LR" '///' 'hello' --report
+line R11a4 "$LR" 'zz' 'hello' --report
+line R11a5 "$LR" ';;;' 'hello'
+line R11a6 "$LR" 'zz' 'hello'
+check "R11a --report: one JSON line per outcome, exit 0; plain --line unchanged" \
+  "exitis R11a1 0 && same R11a1 '{\"outcome\":\"replaced\",\"rule\":0,\"text\":\"HELLO\",\"v\":1}' \
+   && same R11a2 '{\"failure\":\"exit 3\",\"outcome\":\"failed\",\"rule\":1,\"stage\":\"transform\",\"v\":1}' \
+   && same R11a3 '{\"outcome\":\"delivered\",\"rule\":2,\"v\":1}' \
+   && exitis R11a4 0 && same R11a4 '{\"outcome\":\"nomatch\",\"v\":1}' \
+   && exitis R11a5 0 && same R11a5 'hello' && exitis R11a6 2 && same R11a6 ''" \
+  "R11a*.out: failed transform is still a hit for plain --line (exit 0, line unchanged)"
+# R11b: a background output reports started only with a job that did spawn. The failing spawn
+# is covered in-process (EngineTests.testFailedSpawnIsReportedAsFailedNotStarted): breaking
+# posix_spawn from outside the binary is not reliable.
+line R11b '{"rules":[{"trigger":"&&&","when":{"focus":"textField"},"output":{"shell":"true","background":true}}]}' '&&&' 'note' --report
+check "R11b background spawn reports started, and never next to background-failed spawn" \
+  "same R11b '{\"outcome\":\"started\",\"rule\":0,\"v\":1}' && ! grep -qF 'background-failed spawn' '$EV/R11b.err'" \
+  "R11b.out/.err"
+
+# R12 condition facts, deny and gates (PR2). Facts come from the context's "facts" by name.
+URLR='{"rules":[{"trigger":"@@@","when":{"app":["com.google.Chrome"],"focus":"textField","url":["https://github.com/*"]},"transform":"tr a-z A-Z","output":"replaceInput"},{"trigger":"@@@","when":{"focus":"textField"},"transform":"tr a-z A-Y","output":"replaceInput"}]}'
+CHROME='{"app":"com.google.Chrome","focusIsTextField":true,"fieldText":"hiz"'
+feed R12a1 "$URLR" "$CHROME"',"facts":{"url":"https://github.com/a/b"}}' '@@@'
+feed R12a2 "$URLR" "$CHROME"',"facts":{"url":"https://example.com/"}}' '@@@'
+check "R12a url rule fires only on its site; elsewhere the next rule does" \
+  "has R12a1 'keypipe matched @@@ rule 0' && field R12a1 '\"HIZ\"' && has R12a2 'keypipe matched @@@ rule 1' && field R12a2 '\"HIY\"'" "R12a*.out"
+feed R12b1 "$URLR" "$CHROME"',"unreadableFacts":{"url":"timeout"}}' '@@@'
+feed R12b2 "$URLR" '{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"hiz"}' '@@@'
+check "R12b unreadable url stops the fire (no erase, no next rule); another app never reads it" \
+  "has R12b1 'keypipe unreadable @@@ url' && lacks R12b1 'keypipe matched' && field R12b1 '\"hiz@@@\"' \
+   && exitis R12b1 2 && has R12b2 'keypipe matched @@@ rule 1'" "R12b*.out"
+bad R12c1 '{"deny":[{"url":["*bank*"]}],"rules":[]}' 'deny url requires app'
+bad R12c5 '{"deny":[{"app":["com.google.Chrome"],"url":[]}],"rules":[]}' 'empty url list'
+DENY='{"deny":[{"app":["com.google.Chrome"],"url":["*bank.example*"]}],"rules":[{"trigger":"@@@"}]}'
+feed R12c2 "$DENY" '{"app":"com.google.Chrome","focusIsTextField":false,"fieldText":"","facts":{"url":"https://bank.example/x"}}' '@@@'
+feed R12c3 "$DENY" '{"app":"com.google.Chrome","focusIsTextField":false,"fieldText":"","unreadableFacts":{"url":"timeout"}}' '@@@'
+feed R12c4 "$DENY" '{"app":"com.google.Chrome","focusIsTextField":false,"fieldText":"","facts":{"url":"https://github.com"}}' '@@@'
+check "R12c deny with app+url blocks on match, stops with a reason when unreadable, passes elsewhere" \
+  "has R12c2 'keypipe deny @@@' && has R12c3 'keypipe deny-unreadable @@@ url' && lacks R12c3 'keypipe matched' \
+   && has R12c4 'keypipe matched @@@ rule 0'" "R12c*.out"
+feed R12d '{"rules":[{"trigger":"@@@","output":{"shell":"echo ran > '"$EV"'/R12d.sent"}}]}' '{"app":"x","focusIsTextField":false,"fieldText":"","secure":true}' '@@@'
+check "R12d password field: keypipe secure, nothing runs" \
+  "has R12d 'keypipe secure @@@' && lacks R12d 'keypipe matched' && [ ! -e '$EV/R12d.sent' ]" "R12d.out"
+TERMHK='{"rules":[{"hotkey":"ctrl+@","when":{"focus":"textField"},"output":{"shell":"echo no >> '"$EV"'/R12e.sent"}},{"hotkey":"ctrl+@","output":{"shell":"printf \"[%s]\" \"$1\" >> '"$EV"'/R12e.sent"}},{"trigger":"@@@","output":{"shell":"echo text >> '"$EV"'/R12e.sent"}}]}'
+printf '%s' "$TERMHK" > "$EV/R12e.config.json"; printf '%s' '{"app":"com.example.term","ownsPty":true,"focusIsTextField":true,"fieldText":"pane-secret"}' > "$EV/R12e.context.json"
+cap 20 "$BIN" --config "$EV/R12e.config.json" --context "$EV/R12e.context.json" --smoke-feed '@@@' --smoke-hotkey 'ctrl+@' > "$EV/R12e.out" 2>&1
+check "R12e terminal: a focus-any hotkey runs with empty input; text triggers and textField rules stay blocked" \
+  "has R12e 'keypipe terminal @@@' && has R12e 'keypipe matched ctrl+@ rule 1' && [ \"\$(cat '$EV/R12e.sent')\" = '[]' ]" "R12e.out R12e.sent"
+feed R12f '{"rules":[{"trigger":"@@@","when":{"focus":"textField","url":["*"]},"output":{"shell":"true"}}]}' "$CHROME"',"facts":{"url":"https://x/"},"appAfterSlowRead":"com.apple.TextEdit"}' '@@@'
+check "R12f app switched during the URL read: no erase, nothing runs" \
+  "has R12f 'keypipe front-changed @@@' && lacks R12f 'keypipe matched' && field R12f '\"hiz@@@\"'" "R12f.out"
+feed R12g '{"rules":[{"trigger":"@@@","when":{"app":["com.apple.*"]},"output":"none"}]}' "$TXT" '@@@'
+check "R12g app globs: com.apple.* matches TextEdit" "has R12g 'keypipe matched @@@ rule 0'" "R12g.out"
+feed R12h '{"rules":[{"trigger":"@@@","when":{"focus":"textField","url":["*"]},"transform":"tr a-z A-Z","output":"replaceInput"}]}' \
+  '{"app":"com.google.Chrome","focusIsTextField":true,"fieldText":"hello","keysPerRead":true,"facts":{"url":"https://example.com/"}}' '@@@'
+check "R12h a URL rule still waits for a late trigger key (R4e with a slow fact): fires, no front-changed" \
+  "exitis R12h 0 && lacks R12h 'front-changed' && field R12h '\"HELLO\"'" "R12h.out"
+
+# R13 native outputs from the sink table (PR3)
+TT='{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"transform":"printf X","output":"typeText"},{"trigger":";;;","when":{"focus":"textField"},"transform":"printf Y","output":"typeText","onFail":{"output":{"shell":"printf \"%s|%s\" \"$1\" \"$KEYPIPE_FAILURE\" > '"$EV"'/R13a.sent"}}}]}'
+feed R13a1 "$TT" "$TXT" '@@@'
+line R13a2 "$TT" '@@@' 'hello' --report
+line R13a3 "$TT" ';;;' 'hello' --report
+check "R13a typeText types at the caret; through --line it fails as unsupported and onFail.output gets it" \
+  "field R13a1 '\"helloX\"' && same R13a2 '{\"failure\":\"unsupported\",\"outcome\":\"failed\",\"rule\":0,\"stage\":\"output\",\"v\":1}' \
+   && same R13a3 '{\"fallback\":true,\"outcome\":\"delivered\",\"rule\":1,\"v\":1}' && [ \"\$(cat '$EV/R13a.sent')\" = 'Y|unsupported' ]" \
+  "R13a*.out R13a.sent"
 
 # M live macOS items: real CGEventTap and AX, driven through System Events
 if [ "${1:-}" = "--no-live" ] || [ "$(uname -s)" != Darwin ]; then

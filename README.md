@@ -109,6 +109,29 @@ out of scope). Path is passed with `--config` and defaults to
   receives the chord too; keypipe cannot tell whether the app binds it. If an
   app owns `ctrl+@`, scope the rule with `when.app` so keypipe fires only
   where you want it, otherwise both act.
+- `when.url` is a list of globs over the front browser tab's URL (Chrome,
+  Arc, Brave, Edge, Vivaldi, Safari; read through `osascript`, so macOS asks
+  once to let keypipe control the browser). The URL is read only when the
+  rule's cheaper conditions (`app`, `focus`) already hold, at most once per
+  fire. When a browser is in front but the URL cannot be read (permission
+  denied, a 1 s timeout), the fire stops with a notification instead of
+  falling through to the next rule of the same trigger. In a non-browser
+  app, and on the `--line` path (zsh, voice), `url` simply does not match.
+  If the front app changes while the URL is read, nothing is erased or run
+  (`keypipe front-changed`).
+- Every fact condition (`app`, `url`) is a list of globs (`fnmatch`, `*`
+  crosses `/`), so `"app": ["com.apple.*"]` works and an exact id stays exact.
+  An empty list matches nothing, so it is refused (`invalid config: empty
+  <name> list`).
+- `deny` (top level) is a list of `when`-shaped objects without `focus`, such
+  as `{"app": ["com.1password.1password"]}`. When one holds, keypipe stops
+  before any rule and before reading the field (`keypipe deny`). An entry with
+  `url` must also have `app`, so no keystroke trigger asks a browser while
+  another app is in front. An unreadable `url` in `deny` also stops the fire.
+  On the `--line` path (zsh, voice) there is no live read, so a `deny` entry
+  with `url` never matches there and does not stop those fires.
+- keypipe never acts in a password field (`AXSecureTextField`): `keypipe
+  secure`, no erase, no read, no shell.
 - `when.app` is a list of bundle ids (omit for any app). `when.focus` is
   `textField` or `any` (default). `textField` rules fire only when a text
   element is focused; they erase the trigger and read the field, which
@@ -122,7 +145,10 @@ out of scope). Path is passed with `--config` and defaults to
   `onFail.transform` runs if present, otherwise nothing is delivered and a
   notification says why.
 - `output` is `"replaceInput"` (writes the result back into the same field;
-  requires `focus: textField`), `"notify"`, `"none"` (default), or
+  requires `focus: textField`), `"typeText"` (types the result at the caret
+  with key events keypipe's own tap ignores; through `--line` there is no
+  caret, so it fails with `unsupported`; if the front app, focus or field changed
+  while the transform ran, nothing is typed and it fails with `gone`), `"notify"`, `"none"` (default), or
   `{ "shell": "..." }`, which receives the result the same way a transform
   receives its input. Clipboard is `{ "shell": "pbcopy" }`, a webhook is
   `curl`.
@@ -139,7 +165,8 @@ out of scope). Path is passed with `--config` and defaults to
   non-zero or timed-out `output.shell`, or a `replaceInput` whose AXValue
   write did not stick (`ignored`) or whose field vanished during the
   transform (`gone`). The fallback shell sees the reason in
-  `KEYPIPE_FAILURE` (`exit <n>`, `timeout`, `empty`, `ignored`, `gone`).
+  `KEYPIPE_FAILURE` (`exit <n>`, `timeout`, `empty`, `ignored`, `gone`,
+  `unsupported`).
   There is no fallback of a fallback: if it fails too, keypipe notifies.
   Without `onFail`, a failed `replaceInput` notifies the result so the text
   is not lost, and a failed `output.shell` is only logged. A plain retry of
@@ -161,8 +188,10 @@ out of scope). Path is passed with `--config` and defaults to
 
 A terminal shows its whole pane as one AX text field, so the daemon does
 nothing when the front app holds a pty master (`/dev/ptmx`): no erase, no
-read, no shell (`keypipe terminal <trigger>`). At a zsh prompt the ZLE widget
-runs the same JSON rules on the line being typed:
+read, no shell (`keypipe terminal <trigger>`). The one exception is a
+`hotkey` rule with `focus: any`: it reads no field, so it still runs there
+with empty input (a pane summary, a notification). At a zsh prompt the ZLE
+widget runs the same JSON rules on the line being typed:
 
 ```sh
 # .zshrc
@@ -175,7 +204,9 @@ each text trigger once per line. `keypipe --config C --line <trigger> [--app
 <bundle id>]` reads the line (trigger removed) on stdin, runs the rule as a
 focused text field of that app (default: the front app), and prints the new
 line to stdout: the `replaceInput` result, otherwise the line unchanged. Exit
-0 matched, 2 no rule (the widget keeps the trigger), 1 invalid config. The
+0 matched; 2 nothing ran (no rule held, a gate stopped it: terminal, composing,
+secure, deny, front-changed, or a fact could not be read) or a bad argument,
+an empty trigger included (the widget keeps the trigger); 1 invalid config. The
 transcript goes to stderr.
 
 Only zsh is supported. The widget is ZLE code, so bash, fish and other
@@ -188,7 +219,8 @@ widget around the same `--triggers` and `--line` flags (bash `bind -x` with
 behave the same. Point it at the same build the daemon runs (for example a
 release build installed on `PATH`), otherwise a stale build may reject config
 keys the newer one accepts. If `KEYPIPE_BIN` is not executable or the config
-is unreadable, sourcing the widget does nothing.
+is unreadable or invalid, sourcing the widget does nothing and says nothing;
+`keypipe --config C --triggers` prints the reason.
 
 ## Voice (voice-switch)
 
@@ -213,12 +245,47 @@ does for the zsh widget. What differs from the keyboard:
 - Only `trigger` rules fire; `hotkey` rules do not.
 - A rule needs `"when": {"focus": "textField"}` to receive the text. With the
   default `focus: any`, the rule runs with empty input.
-- `replaceInput` has no visible effect: the rewritten line goes to stdout,
-  which voice-switch discards. Use `output.shell`, `notify`, or `background`.
+- With a `command` action, `replaceInput` has no visible effect: the rewritten
+  line goes to stdout, which voice-switch discards. voice-switch's `keypipe`
+  action runs `--line --report` instead and pastes a `replaced` result.
 - `--app` is left out when `VOICE_SWITCH_APP` is empty, because `--app ""` is
   the app name `""`, not the front app.
 
 voice-switch's README (Shell command delivery) covers the action's own keys.
+
+To have a `replaceInput` result pasted, use voice-switch's `keypipe` delivery
+instead of a `command` (Mac; `superwhisperMode` must name a mode with
+auto-paste off, see voice-switch's README, keypipe delivery):
+
+```json
+"keypipe": { "binary": "/usr/local/bin/keypipe", "config": "~/.config/keypipe/config.json" },
+"macOS": { "actions": [
+  { "name": "keigo", "wakeWords": ["けいご"], "keypipe": "@@@k", "superwhisperMode": "voice_switch" }
+] }
+```
+
+### `--report`: what the fire did
+
+`keypipe --config C --line <trigger> --report [--app <bundle id>]` runs the
+same fire and prints one JSON line instead of the new line, exit 0 whenever a
+report was written (1 for a bad config, 2 for a bad argument; stderr only). voice-switch's
+`keypipe` delivery uses it to paste only a `replaced` result and never the
+original text on failure.
+
+| `outcome` | Meaning | Extra keys |
+| --- | --- | --- |
+| `replaced` | `replaceInput` wrote the result | `rule`, `text`, `fallback` if `onFail.output` did it |
+| `delivered` | any other output succeeded | `rule`, `fallback` |
+| `started` | a background job did start | `rule` |
+| `failed` | a stage failed | `rule`, `stage` (`transform`, `output`, `spawn`), `failure` (the `KEYPIPE_FAILURE` token) |
+| `nomatch` | no rule for this trigger holds | |
+| `blocked` | a gate stopped the fire before anything was erased or run | `reason` (`terminal`, `composing`, `secure`, `deny`, `front-changed`) |
+| `unreadable` | a condition fact could not be read, so the fire stopped | `fact`, `reason` |
+| `noinput` | a rule matched but the field vanished | `rule` |
+
+Every line carries `"v":1`. Keys are only ever added within v1. The full set
+is `Tests/keypipeTests/Fixtures/report-v1.jsonl`, which voice-switch's tests
+decode too.
 
 ## macOS key tap and Accessibility
 
@@ -248,11 +315,15 @@ TextEdit and System Events.
 - `Package.swift`: Swift package `keypipe`, executable target `keypipe`,
   test target `keypipeTests`.
 - `Sources/keypipe/main.swift`: entrypoint, `--config`, `--context`,
-  `--smoke-feed`, `--feed-stdin`, `--probe`, and the macOS daemon loop.
+  `--smoke-feed`, `--feed-stdin`, `--probe`, `--triggers`, `--line`, and the
+  macOS daemon loop. `--help` prints the usage; an unknown argument, or two
+  modes at once (`--triggers --feed-stdin`), prints it and exits 2 instead of
+  starting the daemon or running only one of them.
 - `Sources/keypipe/Config.swift`: the only JSON boundary, `loadConfig(path:)`
   with reason-specific rejections.
 - `Sources/keypipe/Context.swift`: `Focus`, `Field`, `Snapshot`, and the
-  pure rule selection (`matches`, `select`).
+  rule check (`evaluate`: focus, then the fact conditions in cost order; a slow
+  fact is read through the desktop only when the cheaper ones hold).
 - `Sources/keypipe/Trigger.swift`: `Trigger` (text or hotkey), `Hotkey`
   parsing, and the pure trigger buffer matcher (longest match first,
   64-character buffer).
@@ -277,10 +348,12 @@ swift-format lint --strict --recursive Sources Tests
 ```
 
 `swift-format` is the formatter and `.swift-format` at the repo root pins
-the style (four spaces). The lint above must exit 0. On Linux the box
+the style (four spaces). The lint above must exit 0. With Xcode only,
+`swift format lint ...` runs the same tool; `swift format format --in-place
+--recursive Sources Tests` fixes most of what it reports. On Linux the box
 toolchain additionally needs
 `LD_LIBRARY_PATH=/workspace/keypipe-mvp/scratch/swift-lib` for
-`libncurses.so.6` (`verify.sh` exports it when that dir exists).
+`libncurses.so.6` (`.claude/skills/verify-keypipe/verify.sh` exports it when that dir exists; the other verify scripts do not).
 
 ## Verification
 

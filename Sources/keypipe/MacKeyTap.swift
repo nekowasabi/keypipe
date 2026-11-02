@@ -13,17 +13,20 @@
         init?(onInput: @escaping (Input) -> Void) {
             self.onInput = onInput
             let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
-            guard let tap = CGEvent.tapCreate(
-                tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly,
-                eventsOfInterest: mask,
-                callback: { _, type, event, info in
-                    Unmanaged<MacKeyTap>.fromOpaque(info!).takeUnretainedValue().handle(type, event)
-                    return Unmanaged.passUnretained(event)
-                },
-                userInfo: Unmanaged.passUnretained(self).toOpaque())
+            guard
+                let tap = CGEvent.tapCreate(
+                    tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly,
+                    eventsOfInterest: mask,
+                    callback: { _, type, event, info in
+                        Unmanaged<MacKeyTap>.fromOpaque(info!).takeUnretainedValue().handle(
+                            type, event)
+                        return Unmanaged.passUnretained(event)
+                    },
+                    userInfo: Unmanaged.passUnretained(self).toOpaque())
             else { return nil }
             self.tap = tap
-            CFRunLoopAddSource(CFRunLoopGetCurrent(), CFMachPortCreateRunLoopSource(nil, tap, 0), .commonModes)
+            CFRunLoopAddSource(
+                CFRunLoopGetCurrent(), CFMachPortCreateRunLoopSource(nil, tap, 0), .commonModes)
             CGEvent.tapEnable(tap: tap, enable: true)
         }
 
@@ -33,7 +36,9 @@
                 fputs("keypipe tap re-enabled after \(type.rawValue)\n", stderr)
                 return
             }
-            guard type == .keyDown, event.getIntegerValueField(.eventSourceUserData) != keypipeEventTag else { return }
+            guard type == .keyDown,
+                event.getIntegerValueField(.eventSourceUserData) != keypipeEventTag
+            else { return }
             let key = keyString(event)
             var modifiers = Set<Modifier>()
             if event.flags.contains(.maskControl) { modifiers.insert(.ctrl) }
@@ -61,15 +66,18 @@
                     var length = 0
                     var units = [UniChar](repeating: 0, count: 8)
                     let shift = event.flags.contains(.maskShift) ? UInt32(shiftKey >> 8) & 0xFF : 0
-                    let status = UCKeyTranslate(layout, code, UInt16(kUCKeyActionDown), shift, UInt32(LMGetKbdType()),
-                                                UInt32(kUCKeyTranslateNoDeadKeysMask), &dead, units.count, &length, &units)
-                    return status == noErr && length > 0 ? String(utf16CodeUnits: units, count: length) : nil
+                    let status = UCKeyTranslate(
+                        layout, code, UInt16(kUCKeyActionDown), shift, UInt32(LMGetKbdType()),
+                        UInt32(kUCKeyTranslateNoDeadKeysMask), &dead, units.count, &length, &units)
+                    return status == noErr && length > 0
+                        ? String(utf16CodeUnits: units, count: length) : nil
                 }
                 if let translated { return translated }
             }
             var length = 0
             var units = [UniChar](repeating: 0, count: 8)
-            event.keyboardGetUnicodeString(maxStringLength: units.count, actualStringLength: &length, unicodeString: &units)
+            event.keyboardGetUnicodeString(
+                maxStringLength: units.count, actualStringLength: &length, unicodeString: &units)
             return String(utf16CodeUnits: units, count: length)
         }
     }

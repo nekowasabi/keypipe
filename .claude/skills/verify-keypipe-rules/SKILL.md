@@ -72,10 +72,17 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | ID | What | Harness |
 | --- | --- | --- |
 | R0a/R0b | macOS host, swift toolchain | doctor |
-| R1a-c | build, `swift test`, `swift-format lint --strict` | build |
+| R1a-c | build, `swift test`, `make lint` (the Makefile picks `swift-format` or Xcode's `swift format`; no tool is a FAIL) | build |
+| R1d | the Linux build and `swift test` in a `swift:6.0` container (README promises the Linux feed build; a Glibc-only break never shows on a Mac). Skips without Docker; `DOCKER=<binary>` when it is not on PATH. `swift test` gets SIGTERM at 900 s and SIGKILL 30 s later (`timeout -k 30 900` inside the container; the docker client ignores SIGALRM, so the pull itself is not bounded); it fails, not skips, when Docker runs but the `swift:6.0` image cannot be pulled (offline). `--ulimit nofile=131072` makes fd 70000 usable. `ShellTests.testDetachedJobHasItsOwnSessionAndNoInheritedDescriptors` pins setsid and that a held pipe, low and at fd 70000 (200 on a Mac), is not inherited; `ShellTests.testDetachedJobDoesNotStartWhenDescriptorsCannotBeListed` (Linux only) pins that no job starts when the descriptor listing fails | build |
 | R2a-f | invalid configs exit 1 with `invalid config` (empty trigger, old `action` key, unknown output, empty `output.shell`, empty `transform`, unknown `focus`) | fake |
 | R2g | minimal rule accepted with defaults | fake |
 | R2h-l | hotkey config errors: `rule needs trigger or hotkey`, `rule has both trigger and hotkey`, `hotkey needs a modifier`, `unknown modifier <x>`, `shift is written in the key (ctrl+A)` | fake |
+| R2u | an unknown argument (`--hepl`) prints `keypipe: unknown argument` and the usage and exits 2 instead of starting the daemon | binary |
+| R2v | `--help` and `-h` print the usage and exit 0 | binary |
+| R2q | a value that looks like a flag stays the value: `--line --report` is the trigger `--report` in plain mode (one parse; flags are no longer looked up by position) | binary |
+| R2r | a flag given twice (`--config A --config B`) exits 2 instead of picking one value | binary |
+| R2p | two modes at once (`--triggers --feed-stdin`, `--line X --smoke-hotkey C`) exit 2 instead of running whichever comes first | binary |
+| R2x | `--report` (or `--app`) without `--line`, a flag missing its value (`--smoke-feed`), and an empty `--line ""` (checked before the config, here with an unreadable one), exit 2 instead of starting the daemon | binary |
 | R3a-d | rule selection by focus, by app, none satisfied (no erase), config order on ties | fake |
 | R3e | `focus: any` in a text field: trigger erased, input empty, field untouched | fake |
 | R4a/b | trigger erased before the field is read | fake |
@@ -115,6 +122,32 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 
 Feature recipes live in [`features/`](features/README.md).
 
+## Items for the extension design
+
+For `docs/design/extension-architecture.md`. R11a, R11b, R12a-g and R13a are in
+`verify.sh` and run with `--no-live`. R11c is covered in-process
+(`EngineTests.testJobParsesTheParentsBytesNotTheFile`) because a job reads its
+config at start and cannot be raced from outside. M8 and M9 are live items that
+are still to do: they need a person at the Mac (Automation prompt, real typing). Property-style
+checks are in `verify-keypipe-trigger` (P1-P10).
+
+| ID | PR | What | Harness |
+| --- | --- | --- | --- |
+| R11a | PR1 | `--line --report` prints one JSON line per outcome and exit 0; without `--report` stdout and exit are byte-identical to today (B1-B8 in `verify-keypipe-terminals` stay the oracle) | fake |
+| R11b | PR1 | a background output reports `started` with a job that did spawn. The failing spawn is checked in-process only (`EngineTests.testFailedSpawnIsReportedAsFailedNotStarted`, a stub that returns false); breaking `posix_spawn` from outside is not reliable. On Linux `spawnDetached` also returns false when it cannot list the descriptors to close, pinned per function in ShellTests (see R1d) | fake |
+| R11c | PR1 | the job parses the parent's config bytes, not the file (`JobRequest.configBytes`); jobs.log keeps `job rule N from <path>`. In-process only (`EngineTests.testJobParsesTheParentsBytesNotTheFile`): a job reads its config at start and cannot be raced from outside. `configBytes` is optional only so a daemon started from an older binary can still hand jobs to a rebuilt one | fake |
+| R12a | PR2 | `when.url` rule matches only with `"facts":{"url":...}` naming its site; another URL, or no `url` fact at all (`absent`, as on the `--line` path and in non-browser apps), falls through to the next rule. `unreadableFacts` is what stops a fire (R12b) | fake |
+| R12b | PR2 | two rules on one trigger, rule 0 `url`, rule 1 catch-all: TextEdit context never reads `url` (`reads` list) and fires rule 1; Chrome context with unreadable url stops without firing rule 1 | fake |
+| R12c | PR2 | `deny` with `app`+`url` blocks on match (`keypipe deny`); an unreadable url stops the fire with a reason (`keypipe deny-unreadable`); `deny` with `url` alone is `invalid config: deny url requires app`, and an empty list (`"url": []`, which would let every URL through) is `invalid config: empty url list`. The `unreadable` result and the one notification are checked in-process (`FactsTests.testDenyNeedsAppNextToASlowFactAndBlocksWhenUnreadable`): `--line` reads no live fact | fake |
+| R12d | PR2 | `"secure": true` context: `keypipe secure <t>`, no erase, no read, no shell | fake |
+| R12e | PR2 | terminal context (`ownsPty`): `focus: any` hotkey rule fires with empty input; `focus: textField` rule still `keypipe terminal <t>` | fake |
+| R12f | PR2 | after a slow read the gates are taken again, before and after waiting for a late trigger key: another app, another focus kind or a password field, another field of the same app (`Desktop.sameField`, AX `CFEqual` on a Mac), or a field that no longer ends with the trigger stops the fire with no Backspace (`keypipe front-changed`, `blocked` with reason `front-changed`). Same-app cases are in-process (`FactsTests.testSlowReadRetakesTheGatesBeforeErasing`). The real URL script is compiled and its error handler driven in `FactsTests.testFrontTabScriptCompilesAndKeepsRealErrors` (R1b runs it) | fake |
+| R12g | PR2 | `when.app: ["com.apple.*"]` matches TextEdit; every existing R3 config still selects the same rule | fake |
+| R12h | PR2 | a URL rule with a late trigger key (`keysPerRead`): the re-check after the slow read waits for the key like the fast path, so the rule fires (no `front-changed`) | fake |
+| M8 | PR2 | Chrome on a local `file:///tmp/M8.html` textarea with a rule whose `when.url` is `["file:///tmp/M8.html"]` (a `https://github.com/*` rule does not match a `file://` page; use a real GitHub page to test that glob): first fire prompts for Automation; after granting, `hello@@@` becomes the transform result; a denied prompt stops the fire with a notification; TextEdit never prompts. Note whether the prompt survives the 1 s read deadline | live |
+| R13a | PR3 | `typeText` via `--line`: `failed ... unsupported`, `onFail.output: notify` runs. Moving the front (another app, a terminal, a password field, another field) during the transform types nothing and fails as `gone`, primary and `onFail.output` alike (`SinksTests.testTypeTextTypesNothingWhenTheFrontMovedDuringTheTransform`, R1b) | fake |
+| M9 | PR3 | `typeText` in TextEdit types the transform result after the erased trigger, tagged events not re-matched (no second fire). Repeat with a Japanese input source on and nothing being composed: the result must arrive as written, not reinterpreted by the IME (record what happens; if it is mangled, typeText must refuse non-keyboard-layout input sources). Also switch apps during a slow transform: nothing is typed (`gone`) | live |
+
 ## Evidence
 
 Per run: `.verify-evidence/rules-<timestamp>-<pid>/` in the repo (gitignored). Override with `KP_EVIDENCE`.
@@ -136,4 +169,4 @@ Fake feeds are independent processes and can run in parallel. Live items cannot:
 
 ## Status
 
-Stages 1 to 7 of `docs/design/failure-fallback.md` are implemented: `--no-live` passes every R item (R1c skips without swift-format), the live items M0 to M6 run against the real CGEventTap and AX (`MacKeyTap`, `MacDesktop`), and per-stage fallbacks (`onFail`, `shellTimeout`, `KEYPIPE_FAILURE`) are covered by R9. Stage 8 (select-all and paste) was dropped: Chromium and a real Electron app accept AXValue writes with a short delay instead of ignoring them (measured 2026-11-01), so `performWrite` waits up to 200 ms for the readback (R4f) and no paste sink exists.
+Stages 1 to 7 of `docs/design/failure-fallback.md` are implemented: `--no-live` passes every R item (R1c runs `make lint`, which fails without `swift-format` or the toolchain's `swift format`), the live items M0 to M6 run against the real CGEventTap and AX (`MacKeyTap`, `MacDesktop`), and per-stage fallbacks (`onFail`, `shellTimeout`, `KEYPIPE_FAILURE`) are covered by R9. Stage 8 (select-all and paste) was dropped: Chromium and a real Electron app accept AXValue writes with a short delay instead of ignoring them (measured 2026-11-01), so `performWrite` waits up to 200 ms for the readback (R4f) and no paste sink exists.

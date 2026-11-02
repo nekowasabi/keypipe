@@ -104,6 +104,26 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   tap は listen-only なので前面アプリも必ず同じキーを受け取り、アプリがそのキーを
   束縛しているかを keypipe は判別できません。アプリが `ctrl+@` を持っているなら
   `when.app` で発火先を絞ってください。絞らなければ両方が動きます。
+- `when.url` は、前面のブラウザのタブの URL に対するグロブの一覧です（Chrome、Arc、
+  Brave、Edge、Vivaldi、Safari。`osascript` で読むので、macOS がブラウザの操作の
+  許可を一度だけ求めます）。URL は、ルールの安い条件（`app`、`focus`）が満たされた
+  ときだけ、1 回の発火につき最大 1 回読みます。ブラウザが前面なのに URL を読めない
+  とき（許可が無い、1 秒の期限切れ）は、同じトリガーの次のルールへ進まず、通知して
+  止まります。ブラウザ以外のアプリと `--line` の経路（zsh、音声）では、`url` は単に
+  一致しません。URL を読むあいだに前面アプリが変わったら、何も消さず何も走らせません
+  （`keypipe front-changed`）。
+- 事実の条件（`app`、`url`）はどれもグロブの一覧です（`fnmatch`。`*` は `/` も
+  またぎます）。`"app": ["com.apple.*"]` と書け、そのままの id は完全一致のままです。
+  空の一覧は何にも一致しないので、`invalid config: empty url list` のように拒否します。
+- `deny`（トップレベル）は、`focus` を除いた `when` と同じ形のオブジェクトの一覧です
+  （例: `{"app": ["com.1password.1password"]}`）。どれかが満たされると、keypipe は
+  ルールも欄の読み取りも行う前に止まります（`keypipe deny`）。`url` を書く項目には
+  `app` も要ります。別のアプリが前面のときに、キー入力のトリガーがブラウザへ問い
+  合わせないためです。`deny` の `url` が読めないときも止まります。`--line` の経路
+  （zsh、音声）では事実をその場で読まないので、`url` を書いた `deny` の項目は一致せず、
+  その発火を止めません。
+- パスワード欄（`AXSecureTextField`）では何もしません（`keypipe secure`）。消さず、
+  読まず、シェルも走らせません。
 - `when.app` は bundle id の一覧（省略で全アプリ）。`when.focus` は `textField` か
   `any`（既定）。`textField` のルールはテキスト要素にフォーカスがあるときだけ
   発火し、トリガーを消して欄を読み、それが入力になります。`any` のルールはどこでも
@@ -115,6 +135,9 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   出力は失敗です。`onFail.transform` があればそれを走らせ、無ければ何も送らず
   理由を通知します。
 - `output` は `"replaceInput"`（同じ欄に結果を書き戻す。`focus: textField` が必要）、
+  `"typeText"`（キャレットの位置に結果をキーイベントで打つ。keypipe 自身の tap は
+  このイベントを無視する。`--line` にはキャレットが無いので `unsupported` で失敗。変換のあいだに前面の
+  アプリ・フォーカス・欄が変わったら何も打たず `gone` で失敗）、
   `"notify"`、`"none"`（既定）、または `{ "shell": "..." }`（変換と同じ経路で結果を
   受ける）。クリップボードは `{ "shell": "pbcopy" }`、webhook は `curl` で書きます。
   `{ "shell": "...", "background": true }` はすぐ戻ります。切り離したジョブ（独自の
@@ -128,7 +151,7 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   失敗したとき同じ結果で一度だけ走ります。失敗とは `output.shell` の非ゼロか期限切れ、
   `replaceInput` の書き込みが反映されない（`ignored`）か変換中に欄が消えた（`gone`）
   ことです。代替のシェルは理由を `KEYPIPE_FAILURE`（`exit <n>` / `timeout` / `empty` /
-  `ignored` / `gone`）で受けます。代替の代替はありません。代替も失敗したら通知します。
+  `ignored` / `gone` / `unsupported`）で受けます。代替の代替はありません。代替も失敗したら通知します。
   `onFail` が無いときは、`replaceInput` の失敗は結果を通知して文字を失わず、
   `output.shell` の失敗は記録だけです。同じコマンドの言い換えはシェルの `||` で
   書き、別の行き先へ逃がすときやシェルから見えない失敗を拾うときに `onFail` を使います。
@@ -147,8 +170,9 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
 
 ターミナルは画面全体を一つの AX テキスト欄として見せるので、前面アプリが pty の
 マスター（`/dev/ptmx`）を持つときデーモンは何もしません。消さず、読まず、シェルも
-走らせません（`keypipe terminal <trigger>`）。zsh のプロンプトでは ZLE ウィジェットが
-同じ JSON のルールを入力中の行に適用します。
+走らせません（`keypipe terminal <trigger>`）。例外は `focus: any` の `hotkey`
+ルールだけです。欄を読まないので、空の入力のまま動きます（ペインの要約や通知など）。
+zsh のプロンプトでは ZLE ウィジェットが同じ JSON のルールを入力中の行に適用します。
 
 ```sh
 # .zshrc
@@ -161,7 +185,15 @@ source ~/repos/keypipe/shell/keypipe.zsh   # 任意: KEYPIPE_APP=<bundle id>
 [--app <bundle id>]` は stdin でトリガーを除いた行を受け、そのアプリ（既定は前面
 アプリ）のフォーカスされたテキスト欄としてルールを走らせ、新しい行を stdout に
 出します。`replaceInput` なら結果、それ以外は行をそのままです。終了コードは一致 0、
-ルール無し 2（ウィジェットはトリガーを残す）、設定不正 1 です。記録は stderr に出ます。
+何も走らなかったとき（ルールが無い、ゲートで止まった: terminal・composing・secure・
+deny・front-changed、事実を読めなかった）と引数の不正（空のトリガーを含む）は 2
+（ウィジェットはトリガーを残す）、設定不正 1 です。記録は stderr に出ます。
+
+`--report` を付けると、新しい行の代わりに、発火の結果を JSON 1 行で出します（終了
+コードは書けたら 0、設定不正なら 1、引数の不正なら 2）。`outcome` は `replaced`・`delivered`・
+`started`・`failed`・`nomatch`・`blocked`・`unreadable`・`noinput` のどれかです。
+voice-switch の `keypipe` 配送はこれを読み、`replaced` のときだけ結果を貼ります。
+全種類の例は `Tests/keypipeTests/Fixtures/report-v1.jsonl` にあります。
 
 対応するシェルは zsh だけです。ウィジェットは ZLE のコードなので、bash や fish
 などではターミナルでルールが動きません。ターミナル内の全画面プログラム（nvim、
@@ -172,8 +204,9 @@ less、REPL）でも動きません。他のシェルで使うには、同じ `-
 `KEYPIPE_BIN` はウィジェットが呼ぶバイナリを指すだけで、デバッグ版とリリース版で
 動作は変わりません。デーモンと同じビルド（たとえば `PATH` に入れたリリース版）を
 指してください。古いビルドを指したままだと、新しいビルドで足した設定キーを拒否する
-ことがあります。`KEYPIPE_BIN` が実行できないか設定を読めないとき、ウィジェットは
-何もしません。
+ことがあります。`KEYPIPE_BIN` が実行できないか、設定を読めないか設定が不正なとき、
+ウィジェットは何もせず、何も表示しません。理由は `keypipe --config C --triggers` で
+確かめられます。
 
 ## 音声（voice-switch）
 
@@ -197,12 +230,25 @@ keypipe は zsh ウィジェットのときと同じく、その文章をその�
 - 動くのは `trigger` ルールだけで、`hotkey` ルールは動きません。
 - 文章を受け取るルールには `"when": {"focus": "textField"}` が要ります。既定の
   `focus: any` のままだと、ルールは空の入力で動きます。
-- `replaceInput` は何も起こしません。書き換えた行は stdout に出ますが、voice-switch が
-  捨てます。代わりに `output.shell`、`notify`、`background` を使ってください。
+- `command` のアクションでは、`replaceInput` は何も起こしません。書き換えた行は
+  stdout に出ますが、voice-switch が捨てます。代わりに `output.shell`、`notify`、
+  `background` を使うか、下の `keypipe` 配送を使ってください。
 - `VOICE_SWITCH_APP` が空のときは `--app` ごと省きます。`--app ""` は `""` という
   アプリ名であって、前面アプリにはならないためです。
 
 アクション側のキーは voice-switch の README（シェルコマンドへの受け渡し）にあります。
+
+`replaceInput` の結果を貼り付けたいときは、`command` の代わりに voice-switch の
+`keypipe` 配送を使います（Mac のみ）。voice-switch は `--line --report` で keypipe を
+動かし、`replaced` の結果だけを貼ります。`superwhisperMode` には自動貼り付けが
+オフのモードを指定します（voice-switch の README、keypipe delivery）。
+
+```json
+"keypipe": { "binary": "/usr/local/bin/keypipe", "config": "~/.config/keypipe/config.json" },
+"macOS": { "actions": [
+  { "name": "keigo", "wakeWords": ["けいご"], "keypipe": "@@@k", "superwhisperMode": "voice_switch" }
+] }
+```
 
 ## macOS のキー取得と Accessibility
 
@@ -229,11 +275,15 @@ cmd のどれかが押されていればホットキー、それ以外は文字�
 - `Package.swift`: Swift パッケージ `keypipe`、実行ターゲット `keypipe`、
   テストターゲット `keypipeTests`。
 - `Sources/keypipe/main.swift`: エントリーポイント、`--config`、`--context`、
-  `--smoke-feed`、`--feed-stdin`、`--probe`、macOS のデーモンループ。
+  `--smoke-feed`、`--feed-stdin`、`--probe`、`--triggers`、`--line`、macOS の
+  デーモンループ。`--help` は使い方を出します。知らない引数や、2 つのモードの
+  同時指定（`--triggers --feed-stdin`）は使い方を出して終了コード 2 で止まり、
+  デーモンの起動も片方だけの実行もしません。
 - `Sources/keypipe/Config.swift`: 唯一の JSON 境界。理由付きで拒否する
   `loadConfig(path:)`。
-- `Sources/keypipe/Context.swift`: `Focus`、`Field`、`Snapshot` と純粋なルール選択
-  （`matches`、`select`）。
+- `Sources/keypipe/Context.swift`: `Focus`、`Field`、`Snapshot` とルールの判定
+  （`evaluate`: フォーカス、次に事実の条件を安い順に。遅い事実は、安い条件が
+  満たされたときだけデスクトップから読む）。
 - `Sources/keypipe/Trigger.swift`: `Trigger`（文字列かホットキー）、`Hotkey` の
   解析、純粋なトリガーバッファマッチャー（最長一致優先、64 文字バッファ）。
 - `Sources/keypipe/Engine.swift`: 発火手順（変換中の門、選択、読み戻し付きの消去、
@@ -256,9 +306,11 @@ swift-format lint --strict --recursive Sources Tests
 
 `swift-format` がフォーマッタであり、リポジトリルートの `.swift-format` で
 スタイル（4 スペース）を固定しています。上記の lint は終了コード 0 である
-必要があります。Linux ではボックスのツールチェーンに追加で
+必要があります。Xcode だけの環境では `swift format lint ...` で同じ道具が動き、
+`swift format format --in-place --recursive Sources Tests` で指摘の大半を直せます。
+Linux ではボックスのツールチェーンに追加で
 `LD_LIBRARY_PATH=/workspace/keypipe-mvp/scratch/swift-lib` が必要です
-（そのディレクトリが存在する場合、`verify.sh` がエクスポートします）。
+（そのディレクトリが存在する場合、`.claude/skills/verify-keypipe/verify.sh` がエクスポートします。ほかの verify スクリプトはしません）。
 
 ## 検証
 

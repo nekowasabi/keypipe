@@ -22,11 +22,11 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
     var errorPipe: [Int32] = [0, 0]
     guard pipe(&inputPipe) == 0 else { return .exited(1, stdout: "") }
     guard pipe(&outputPipe) == 0 else {
-        inputPipe.forEach { close($0) }
+        for fd in inputPipe { close(fd) }
         return .exited(1, stdout: "")
     }
     guard pipe(&errorPipe) == 0 else {
-        (inputPipe + outputPipe).forEach { close($0) }
+        for fd in inputPipe + outputPipe { close(fd) }
         return .exited(1, stdout: "")
     }
     // Why: if the caller's 0, 1 or 2 is closed, pipe() reuses that number and the
@@ -65,17 +65,20 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
     }
     var environment = ProcessInfo.processInfo.environment.merging(env) { _, new in new }
     environment["KEYPIPE_INPUT"] = input
-    let arguments = ["/bin/sh", "-c", script, "keypipe", input].map { strdup($0) } + [nil]
-    let variables = environment.sorted { $0.key < $1.key }.map { strdup("\($0.key)=\($0.value)") } + [nil]
+    // Typed: with Glibc the literal is otherwise inferred as an array of C pointers and does not compile.
+    let argv: [String] = ["/bin/sh", "-c", script, "keypipe", input]
+    let arguments: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) } + [nil]
+    let variables: [UnsafeMutablePointer<CChar>?] =
+        environment.sorted { $0.key < $1.key }.map { strdup("\($0.key)=\($0.value)") } + [nil]
     defer {
-        arguments.forEach { free($0) }
-        variables.forEach { free($0) }
+        for pointer in arguments { free(pointer) }
+        for pointer in variables { free(pointer) }
     }
     var pid: pid_t = 0
     configure(&actions)
     let launched = posix_spawn(&pid, "/bin/sh", &actions, &attributes, arguments, variables)
     guard launched == 0 else {
-        descriptors.forEach { close($0) }
+        for fd in descriptors { close(fd) }
         return .exited(1, stdout: "")
     }
     close(inputPipe[0])
@@ -119,10 +122,13 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
         if writer >= 0 {
             if offset < bytes.count {
                 let count = bytes.withUnsafeBytes {
-                    write(writer, $0.baseAddress!.advanced(by: offset), min(16384, bytes.count - offset))
+                    write(
+                        writer, $0.baseAddress!.advanced(by: offset),
+                        min(16384, bytes.count - offset))
                 }
-                if count > 0 { offset += count }
-                else if count < 0 && errno != EAGAIN && errno != EINTR {
+                if count > 0 {
+                    offset += count
+                } else if count < 0 && errno != EAGAIN && errno != EINTR {
                     close(writer)
                     writer = -1
                 }
@@ -160,20 +166,27 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
 /// A macOS notification, the one notifier the daemon, the bridge and background jobs share.
 func notifyUser(_ text: String) {
     // Why: the text rides in argv, never in the AppleScript source (R8).
-    let script = "osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title \"keypipe\"' -e 'end run' \"$1\""
+    let script =
+        "osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title \"keypipe\"' -e 'end run' \"$1\""
     _ = runShell(script, input: text, env: [:], timeout: 5)
 }
 
 /// Starts `path args` in its own session with `stdin` as its standard input and
 /// /dev/null for output, and returns without waiting. false if it did not start.
-func spawnDetached(_ path: String, _ args: [String], stdin payload: Data) -> Bool {
+/// `descriptors` is where Linux lists the open descriptors to close (a parameter only so a test can
+/// make the listing fail).
+func spawnDetached(
+    _ path: String, _ args: [String], stdin payload: Data,
+    descriptors: String = "/proc/self/fd"
+) -> Bool {
     signal(SIGPIPE, SIG_IGN)
     var fds: [Int32] = [0, 0]
     guard pipe(&fds) == 0 else { return false }
     #if canImport(Glibc)
         var actions = SpawnActions()
         var attributes = posix_spawnattr_t()
-        let flags = POSIX_SPAWN_SETSID
+        // Why: glibc defines POSIX_SPAWN_SETSID (0x80) only under _GNU_SOURCE, which Swift's Glibc module does not import.
+        let flags: Int32 = 0x80
     #else
         var actions: SpawnActions = nil
         var attributes: posix_spawnattr_t?
@@ -191,8 +204,25 @@ func spawnDetached(_ path: String, _ args: [String], stdin payload: Data) -> Boo
     posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0)
     posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0)
     posix_spawn_file_actions_addclose(&actions, fds[1])
-    let arguments = ([path] + args).map { strdup($0) } + [nil]
-    defer { arguments.forEach { free($0) } }
+    #if canImport(Glibc)
+        // Why: glibc has no POSIX_SPAWN_CLOEXEC_DEFAULT, so close what the job would inherit instead.
+        // The open descriptors are listed, not scanned up to a bound, so a high number is not missed.
+        // After the dup2 above, so fds[0] is already stdin; fds[1] has its own close.
+        // ponytail: a descriptor another thread opens between this listing and the spawn still leaks;
+        // nothing on Linux runs such a thread (no daemon), so closefrom is not worth an extra glibc floor.
+        // Without the listing (no /proc, a chroot) the job would inherit everything, so it does not start.
+        guard let open = try? FileManager.default.contentsOfDirectory(atPath: descriptors) else {
+            close(fds[0])
+            close(fds[1])
+            return false
+        }
+        for fd in open.compactMap({ Int32($0) })
+        where fd > 2 && fd != fds[1] && fcntl(fd, F_GETFD) != -1 {
+            posix_spawn_file_actions_addclose(&actions, fd)
+        }
+    #endif
+    let arguments: [UnsafeMutablePointer<CChar>?] = ([path] + args).map { strdup($0) } + [nil]
+    defer { for pointer in arguments { free(pointer) } }
     var pid: pid_t = 0
     let launched = posix_spawn(&pid, path, &actions, &attributes, arguments, environ)
     close(fds[0])
@@ -203,7 +233,8 @@ func spawnDetached(_ path: String, _ args: [String], stdin payload: Data) -> Boo
     payload.withUnsafeBytes { buffer in
         var offset = 0
         while offset < buffer.count {
-            let count = write(fds[1], buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
+            let count = write(
+                fds[1], buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
             if count > 0 { offset += count } else if errno != EINTR { break }
         }
     }

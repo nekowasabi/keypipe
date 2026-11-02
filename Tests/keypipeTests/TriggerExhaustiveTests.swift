@@ -19,8 +19,10 @@ final class TriggerExhaustiveTests: XCTestCase {
         }
     }
 
-    /// Mirrors feedAndRun in Sources/keypipe/main.swift: feed each character,
-    /// and on a hit run the action and reset the matcher.
+    /// Mirrors Engine.key in Sources/keypipe/Engine.swift: feed each character,
+    /// and on a hit reset the matcher, then fire. (feedAndRun in main.swift was
+    /// folded into Engine.key; --smoke-feed drives Engine.key, so the binary
+    /// sweep in check.sh still exercises the real loop.)
     private func actualFires(_ input: [Character], maxBuffer: Int, resetOnHit: Bool) -> [Int] {
         var matcher = TriggerMatcher(triggers: [trigger], maxBuffer: maxBuffer)
         var fires: [Int] = []
@@ -63,7 +65,9 @@ final class TriggerExhaustiveTests: XCTestCase {
                 let actual = actualFires(input, maxBuffer: maxBuffer, resetOnHit: true)
                 let expected = expectedFiresWithReset(input)
                 if actual != expected {
-                    XCTFail("maxBuffer \(maxBuffer), keys [\(describe(input))]: fired at \(actual), want \(expected)")
+                    XCTFail(
+                        "maxBuffer \(maxBuffer), keys [\(describe(input))]: fired at \(actual), want \(expected)"
+                    )
                     return false
                 }
                 return true
@@ -77,7 +81,9 @@ final class TriggerExhaustiveTests: XCTestCase {
                 let actual = actualFires(input, maxBuffer: maxBuffer, resetOnHit: false)
                 let expected = expectedFiresWithoutReset(input)
                 if actual != expected {
-                    XCTFail("maxBuffer \(maxBuffer), keys [\(describe(input))]: hit at \(actual), want \(expected)")
+                    XCTFail(
+                        "maxBuffer \(maxBuffer), keys [\(describe(input))]: hit at \(actual), want \(expected)"
+                    )
                     return false
                 }
                 return true
@@ -92,7 +98,8 @@ final class TriggerExhaustiveTests: XCTestCase {
             let actual = actualFires(input, maxBuffer: triggerMaxBuffer, resetOnHit: true)
             let expected = expectedFiresWithReset(input)
             XCTAssertEqual(actual, expected, "prefix length \(length)")
-            XCTAssertEqual(actual.last, input.count - 1, "prefix length \(length): final @@@ must fire")
+            XCTAssertEqual(
+                actual.last, input.count - 1, "prefix length \(length): final @@@ must fire")
         }
     }
 }

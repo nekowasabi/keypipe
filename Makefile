@@ -9,7 +9,12 @@ CONFIG  ?=
 CONFIG_FLAG := $(if $(CONFIG),--config $(CONFIG),)
 
 .DEFAULT_GOAL := dev
-.PHONY: help dev build start stop restart status log test verify verify-auto
+.PHONY: help dev build start stop restart status log test lint check-docs check verify verify-auto
+
+# Why: Xcode ships the formatter as `swift format` without swift-format on PATH. Each verify
+# script once looked the tool up on its own, missed this, and skipped the lint on every Mac
+# (28de2bc, 8630c35). Scripts call `make lint`; `=` keeps the lookup out of other targets.
+FORMAT = $(shell command -v swift-format 2>/dev/null || (swift format --version >/dev/null 2>&1 && echo "swift format"))
 
 help: ## 利用可能なターゲット一覧を表示する
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -46,6 +51,15 @@ log: ## ログを追いかける
 
 test: ## swift test
 	swift test
+
+lint: ## swift-format lint --strict（Xcode の swift format も使う。道具が無ければ失敗）
+	@test -n "$(FORMAT)" || { echo "make lint: neither swift-format nor swift format found" >&2; exit 1; }
+	$(FORMAT) lint --strict --recursive Sources Tests
+
+check-docs: ## README と SKILL.md が名指しする Swift のシンボルが実在するか
+	scripts/check-doc-symbols.sh
+
+check: build test lint check-docs ## 人手の要らない静的検査一式（CI と同じコマンド）
 
 verify: ## 検証スキル（実機 M 項目を含む。--no-live は VERIFY_ARGS=--no-live）
 	.claude/skills/verify-keypipe-rules/verify.sh $(VERIFY_ARGS)
