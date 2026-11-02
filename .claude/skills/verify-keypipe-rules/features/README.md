@@ -20,3 +20,4 @@ The maintained source for verifying context rules. Read this index, then the fea
 - [Transform](./transform.md) runs a replaceable shell command over the field text.
 - [Output](./output.md) sends the result to a builtin sink or any shell destination.
 - [Live capture on macOS](./live-capture.md) proves the real key tap and AX read and write.
+- [Fired HUD](./hud.md) shows one pill per finished fire with label and icon (H1-H10; H10 MAC_UNVERIFIED).

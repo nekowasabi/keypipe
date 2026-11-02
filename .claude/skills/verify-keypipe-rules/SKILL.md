@@ -54,6 +54,7 @@ Transcript lines the binary prints, in both harnesses.
 | `keypipe fallback output-shell exit <n>` / `keypipe fallback apply ...` | result of `onFail.output`; if it fails too, `apply notify "<trigger> output failed: <reason>"` |
 | `keypipe erase-failed trigger-absent` / `rewrite-ignored` | the field did not end with the trigger / the rewrite did not stick; the fire continues with the field as read |
 | `keypipe field <json-string>` | FakeDesktop only, final field text |
+| `keypipe hud <trigger> <status> ...` | one line per fire that reaches the pill: status ok, failed, or started, then the label and the icon (H1-H8); draws only on macOS |
 
 Line names share prefixes (`erase`, `erase-rewrite`), so a `lacks` check on a bare name matches up to the trailing space: `'keypipe erase '`.
 
@@ -147,6 +148,24 @@ checks are in `verify-keypipe-trigger` (P1-P10).
 | M8 | PR2 | Chrome on a local `file:///tmp/M8.html` textarea with a rule whose `when.url` is `["file:///tmp/M8.html"]` (a `https://github.com/*` rule does not match a `file://` page; use a real GitHub page to test that glob): first fire prompts for Automation; after granting, `hello@@@` becomes the transform result; a denied prompt stops the fire with a notification; TextEdit never prompts. Note whether the prompt survives the 1 s read deadline | live |
 | R13a | PR3 | `typeText` via `--line`: `failed ... unsupported`, `onFail.output: notify` runs. Moving the front (another app, a terminal, a password field, another field) during the transform types nothing and fails as `gone`, primary and `onFail.output` alike (`SinksTests.testTypeTextTypesNothingWhenTheFrontMovedDuringTheTransform`, R1b) | fake |
 | M9 | PR3 | `typeText` in TextEdit types the transform result after the erased trigger, tagged events not re-matched (no second fire). Repeat with a Japanese input source on and nothing being composed: the result must arrive as written, not reinterpreted by the IME (record what happens; if it is mangled, typeText must refuse non-keyboard-layout input sources). Also switch apps during a slow transform: nothing is typed (`gone`) | live |
+
+## Items for the fired HUD (SPEC-hud.md H1-H10)
+
+Fake harness everywhere below (`--no-live` covers all of it). Full contract
+in [`features/hud.md`](features/hud.md).
+
+| ID | What | Harness |
+| --- | --- | --- |
+| H1 | sync success (`delivered`, `replaced`): one `keypipe hud <trigger> ok` line | fake |
+| H2 | `.failed` after busy: one `keypipe hud <trigger> failed` line; the notify still present | fake |
+| H3 | `.started` once; `blocked` / `front-changed` / `noMatch` / `unreadable` / no-busy fires emit none | fake |
+| H4 | label: rule name, else primary shell script to 40 graphemes, else builtin name; whitespace collapsed; never stdout or field text | fake |
+| H5 | rule `icon` accepted for `.app` path, image path, emoji; echoed verbatim, `none` when omitted | fake |
+| H6 | top-level `hud` default true; false silences the pill; unknown keys still rejected | fake + binary |
+| H7 | the pill hook default no-op: `--line` / `--job` never draw; Linux still builds (R1d) | fake |
+| H8 | emit line matches `keypipe hud <trigger> <status>` with status ok, failed, or started | fake |
+| H9 | `make check` passes; README + README.ja document hud/icon/HUD (docs FAIL until the implement phase) | build + docs |
+| H10 | MAC_UNVERIFIED: live pill (placement, durations, replace, icon render) is a manual Mac checklist, always SKIP | manual |
 
 ## Evidence
 

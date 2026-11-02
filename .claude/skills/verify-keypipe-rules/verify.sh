@@ -343,6 +343,73 @@ check "R13a typeText types at the caret; through --line it fails as unsupported 
    && same R13a3 '{\"fallback\":true,\"outcome\":\"delivered\",\"rule\":1,\"v\":1}' && [ \"\$(cat '$EV/R13a.sent')\" = 'Y|unsupported' ]" \
   "R13a*.out R13a.sent"
 
+# H fired HUD + rule icon (SPEC-hud.md H1-H10). Linux-auto: every item below
+# runs here, in both live and --no-live runs. H1-H8 and the H9 docs items
+# FAIL until the implement phase (the H7 row fails on H7b, which needs the
+# hud key; H7a/c already prove the bridge and stay green). H3b, H6b-c, H9a
+# are keep-green guards; H10 is MAC_UNVERIFIED and always skips (manual Mac
+# proof, see features/hud.md). No Sources/Tests change in this phase: the
+# failing items prove the feature is absent from the binary.
+hudcount() { [ "$(grep -cF -- "$2" "$EV/$1.out")" = "$3" ]; }
+feed H1 "$UP" "$TXT" '@@@'
+check "H1 delivered/replaced: one hud-ok line" \
+  "has H1 'keypipe hud @@@ ok' && hudcount H1 'keypipe hud' 1 && field H1 '\"HELLO\"'" "H1.out"
+feed H2 '{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"transform":"exit 3","output":"replaceInput"}]}' "$TXT" '@@@'
+check "H2 failed after busy: one hud-failed line, notify still present, field kept" \
+  "has H2 'keypipe hud @@@ failed' && hudcount H2 'keypipe hud' 1 && has H2 'keypipe apply notify' && field H2 '\"hello\"'" "H2.out"
+feed H3a '{"rules":[{"trigger":"&&&","when":{"focus":"textField"},"output":{"shell":"true","background":true}}]}' '{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"note"}' '&&&'
+check "H3a background spawn ok: one hud-started line" \
+  "has H3a 'keypipe hud &&& started' && hudcount H3a 'keypipe hud' 1" "H3a.out"
+feed H3b1 '{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"output":"replaceInput"}]}' '{"app":"com.example.term","ownsPty":true,"focusIsTextField":true,"fieldText":"pane"}' '@@@'
+feed H3b2 "$UP" '{"app":"com.apple.finder","focusIsTextField":false,"fieldText":""}' '@@@'
+feed H3b3 "$UP" '{"app":"com.apple.TextEdit","focusIsTextField":true,"fieldText":"hello","composing":true}' '@@@'
+check "H3b blocked/noMatch/composing: zero hud lines (guard, green before and after)" \
+  "lacks H3b1 'keypipe hud' && lacks H3b2 'keypipe hud' && lacks H3b3 'keypipe hud'" "H3b*.out"
+feed H4a '{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"name":"My Rule","transform":"tr a-z A-Z","output":"replaceInput"}]}' "$TXT" '@@@'
+check "H4a label: rule name wins" \
+  "has H4a '\"@@@ → My Rule\"' && hudcount H4a 'keypipe hud' 1" "H4a.out"
+feed H4b '{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"output":{"shell":"true abcdefghijklmnopqrstuvwxyz-0123456789-EXTRA"}}]}' "$TXT" '@@@'
+check "H4b label: primary shell script truncated to 40 graphemes" \
+  "has H4b 'true abcdefghijklmnopqrstuvwxyz-01234567' && lacks H4b 'true abcdefghijklmnopqrstuvwxyz-012345678' && lacks H4b 'EXTRA'" "H4b.out"
+feed H4c '{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"name":"Line1\nLine2","output":"replaceInput"}]}' "$TXT" '@@@'
+check "H4c label: newline collapses to one space on one line" \
+  "has H4c '\"@@@ → Line1 Line2\"' && hudcount H4c 'keypipe hud' 1" "H4c.out"
+feed H4d '{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"transform":"printf CANARY-9f3","output":"replaceInput"}]}' "$TXT" '@@@'
+check "H4d label: builtin name; transform stdout never reaches the pill" \
+  "has H4d '\"@@@ → replaceInput\"' && ! grep -F 'keypipe hud' '$EV/H4d.out' | grep -qF 'CANARY-9f3'" "H4d.out"
+feed H5a '{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"transform":"tr a-z A-Z","output":"replaceInput","icon":"/Applications/TextEdit.app"}]}' "$TXT" '@@@'
+check "H5a icon: .app path echoed verbatim" \
+  "has H5a 'keypipe hud @@@ ok' && has H5a '\"/Applications/TextEdit.app\"'" "H5a.out"
+feed H5b '{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"transform":"tr a-z A-Z","output":"replaceInput","icon":"/tmp/keypipe-icon.png"}]}' "$TXT" '@@@'
+check "H5b icon: image path echoed verbatim" \
+  "has H5b 'keypipe hud @@@ ok' && has H5b '\"/tmp/keypipe-icon.png\"'" "H5b.out"
+feed H5c '{"rules":[{"trigger":"@@@","when":{"focus":"textField"},"transform":"tr a-z A-Z","output":"replaceInput","icon":"🚀"}]}' "$TXT" '@@@'
+check "H5c icon: emoji echoed verbatim" \
+  "has H5c 'keypipe hud @@@ ok' && has H5c '🚀'" "H5c.out"
+feed H5d "$UP" "$TXT" '@@@'
+check "H5d icon omitted: line ends with bare none" \
+  "has H5d 'keypipe hud @@@ ok' && has H5d 'replaceInput\" none'" "H5d.out"
+feed H6a '{"hud":false,"rules":[{"trigger":"@@@","when":{"focus":"textField"},"transform":"tr a-z A-Z","output":"replaceInput"}]}' "$TXT" '@@@'
+check "H6a hud:false: matched, exit 0, zero hud lines" \
+  "exitis H6a 0 && has H6a 'keypipe matched @@@ rule 0' && lacks H6a 'keypipe hud' && field H6a '\"HELLO\"'" "H6a.out"
+bad H6b '{"rules":[{"trigger":"@@@","bogus":1}]}' "unknown key bogus"
+bad H6c '{"frobnicate":true,"rules":[]}' "unknown key frobnicate"
+line H7a "$LR" '@@@' 'hello'
+line H7b '{"hud":false,"rules":[{"trigger":"@@@","when":{"focus":"textField"},"transform":"tr a-z A-Z","output":"replaceInput"}]}' '@@@' 'hello'
+line H7c "$LR" '@@@' 'hello' --report
+check "H7a-c --line bridge and --report byte-identical with/without hud (guard: no pill off-Mac)" \
+  "same H7a 'HELLO' && same H7b 'HELLO' && same H7c '{\"outcome\":\"replaced\",\"rule\":0,\"text\":\"HELLO\",\"v\":1}'" "H7*.out"
+feed H8 "$UP" "$TXT" '@@@'
+check "H8 emit matches keypipe hud <trigger> <status>" \
+  "grep -qE -- 'keypipe hud @@@ (ok|failed|started)' '$EV/H8.out' && hudcount H8 'keypipe hud' 1" "H8.out"
+check "H9a make check-docs passes (guard: SKILL.md names no future symbols)" \
+  "make -s -C '$REPO' check-docs > '$EV/H9a.log' 2>&1" "H9a.log"
+check "H9b README documents hud and icon" \
+  "grep -qi 'hud' '$REPO/README.md' && grep -qi 'icon' '$REPO/README.md'" "README.md"
+check "H9c README.ja documents hud and icon" \
+  "grep -qi 'hud' '$REPO/README.ja.md' && grep -qi 'icon' '$REPO/README.ja.md'" "README.ja.md"
+sk "H10 live pill (placement, durations, replace, icon render)" "MAC_UNVERIFIED: manual Mac proof per features/hud.md"
+
 # M live macOS items: real CGEventTap and AX, driven through System Events
 if [ "${1:-}" = "--no-live" ] || [ "$(uname -s)" != Darwin ]; then
   sk "M1-M4 live macOS" "not Darwin or --no-live"
