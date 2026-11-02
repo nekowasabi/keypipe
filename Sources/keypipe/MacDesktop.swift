@@ -148,6 +148,69 @@
             return CFEqual(x, y)
         }
 
+        func showBusy(near field: Field?) {
+            // AX reads stay on the engine queue; only the window work goes to main.
+            let point = field.flatMap(element).flatMap(caretPoint) ?? NSEvent.mouseLocation
+            DispatchQueue.main.async { BusySpinner.shared.show(at: point) }
+        }
+
+        func hideBusy() {
+            DispatchQueue.main.async { BusySpinner.shared.hide() }
+        }
+
+        /// The caret's right edge in AppKit coordinates, or the field's bottom-left corner when the
+        /// app does not report text bounds (Electron often does not).
+        private func caretPoint(_ element: AXUIElement) -> NSPoint? {
+            let rect = caretRect(element) ?? frameRect(element)
+            guard let rect, let primary = NSScreen.screens.first else { return nil }
+            // Why: AX measures from the top-left of the primary display, AppKit from its bottom-left.
+            return NSPoint(x: rect.maxX, y: primary.frame.height - rect.midY)
+        }
+
+        private func caretRect(_ element: AXUIElement) -> CGRect? {
+            guard let value = attribute(element, kAXSelectedTextRangeAttribute),
+                CFGetTypeID(value) == AXValueGetTypeID()
+            else { return nil }
+            var range = CFRange()
+            guard AXValueGetValue(value as! AXValue, .cfRange, &range) else { return nil }
+            // Why: some apps answer an empty range with a zero rect; the character before the
+            // caret has a real one.
+            let candidates = [
+                CFRange(location: range.location, length: 0),
+                CFRange(location: max(range.location - 1, 0), length: 1),
+            ]
+            for var candidate in candidates {
+                guard let axRange = AXValueCreate(.cfRange, &candidate) else { continue }
+                var bounds: CFTypeRef?
+                guard
+                    AXUIElementCopyParameterizedAttributeValue(
+                        element, kAXBoundsForRangeParameterizedAttribute as CFString, axRange,
+                        &bounds) == .success,
+                    let bounds, CFGetTypeID(bounds) == AXValueGetTypeID()
+                else { continue }
+                var rect = CGRect.zero
+                if AXValueGetValue(bounds as! AXValue, .cgRect, &rect), rect.height > 0 {
+                    return rect
+                }
+            }
+            return nil
+        }
+
+        private func frameRect(_ element: AXUIElement) -> CGRect? {
+            guard let position = attribute(element, kAXPositionAttribute),
+                let size = attribute(element, kAXSizeAttribute),
+                CFGetTypeID(position) == AXValueGetTypeID(), CFGetTypeID(size) == AXValueGetTypeID()
+            else { return nil }
+            var origin = CGPoint.zero
+            var extent = CGSize.zero
+            guard AXValueGetValue(position as! AXValue, .cgPoint, &origin),
+                AXValueGetValue(size as! AXValue, .cgSize, &extent)
+            else { return nil }
+            // A zero-width rect at the field's left edge, one line high at its bottom.
+            let line = min(extent.height, 20)
+            return CGRect(x: origin.x, y: origin.y + extent.height - line, width: 0, height: line)
+        }
+
         private func element(_ field: Field) -> AXUIElement? {
             lock.lock()
             defer { lock.unlock() }
@@ -193,6 +256,58 @@ func frontTabURLScript(_ bundleID: String) -> String? {
 }
 
 #if os(macOS)
+    /// A small spinning indicator beside the caret while a fire runs. Main thread only.
+    final class BusySpinner {
+        static let shared = BusySpinner()
+        private let size: CGFloat = 22
+        private let arc = CAShapeLayer()
+        private lazy var panel: NSPanel = {
+            let panel = NSPanel(
+                contentRect: NSRect(x: 0, y: 0, width: size, height: size),
+                styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            // Why: non-activating and mouse-transparent, so the field keeps focus and the
+            // replaceInput write still lands in it.
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = false
+            panel.ignoresMouseEvents = true
+            panel.hidesOnDeactivate = false
+            panel.level = .statusBar
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+            // Why: an NSProgressIndicator in this never-activated panel put a window on screen
+            // but drew nothing; a Core Animation layer is drawn by the window server itself.
+            let view = panel.contentView!
+            view.wantsLayer = true
+            view.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.6).cgColor
+            view.layer?.cornerRadius = 6
+            arc.frame = view.bounds
+            arc.path = CGPath(ellipseIn: view.bounds.insetBy(dx: 5, dy: 5), transform: nil)
+            arc.fillColor = nil
+            arc.strokeColor = NSColor.white.cgColor
+            arc.lineWidth = 2
+            arc.lineCap = .round
+            arc.strokeEnd = 0.75
+            view.layer?.addSublayer(arc)
+            return panel
+        }()
+
+        func show(at point: NSPoint) {
+            panel.setFrameOrigin(NSPoint(x: point.x + 4, y: point.y - size / 2))
+            let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+            spin.fromValue = 0
+            spin.toValue = -2 * Double.pi
+            spin.duration = 0.8
+            spin.repeatCount = .infinity
+            arc.add(spin, forKey: "spin")
+            panel.orderFrontRegardless()
+        }
+
+        func hide() {
+            panel.orderOut(nil)
+            arc.removeAnimation(forKey: "spin")
+        }
+    }
+
     /// Whether `pid` has /dev/ptmx open, which is what makes an app a terminal emulator.
     /// Why: a libproc error reads as "not a terminal", the behaviour before this check.
     func ownsPtyMaster(_ pid: pid_t) -> Bool {

@@ -37,6 +37,8 @@ final class FakeDesktop: Desktop {
     private var pendingKeys: [Character] = []
     private(set) var fieldText: String
     private(set) var notifications: [String] = []
+    /// showBusy and hideBusy calls in order: true shown, false hidden.
+    private(set) var busy: [Bool] = []
     private let secure: Bool
     private let facts: [FactName: FactRead]
     private let appAfterSlowRead: String?
@@ -177,4 +179,7 @@ final class FakeDesktop: Desktop {
     }
 
     func notify(_ text: String) { notifications.append(text) }
+
+    func showBusy(near field: Field?) { busy.append(true) }
+    func hideBusy() { busy.append(false) }
 }

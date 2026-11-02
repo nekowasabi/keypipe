@@ -222,7 +222,10 @@ if flags.contains("--feed-stdin") {
         exit(1)
     }
     emit("keypipe started with \(loaded.rules.count) rule(s) from \(configFile)")
-    withExtendedLifetime(tap) { CFRunLoopRun() }
+    // Why: the busy spinner is an AppKit window, which a bare CFRunLoopRun does not drive.
+    // Accessory keeps keypipe off the Dock and the menu bar; the tap is on .commonModes.
+    NSApplication.shared.setActivationPolicy(.accessory)
+    withExtendedLifetime(tap) { NSApplication.shared.run() }
 #else
     fputs("keypipe: the daemon needs macOS; use --smoke-feed or --feed-stdin here\n", stderr)
     exit(1)
