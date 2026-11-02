@@ -155,6 +155,20 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   `onFail` が無いときは、`replaceInput` の失敗は結果を通知して文字を失わず、
   `output.shell` の失敗は記録だけです。同じコマンドの言い換えはシェルの `||` で
   書き、別の行き先へ逃がすときやシェルから見えない失敗を拾うときに `onFail` を使います。
+- `name` と `icon` は任意のルール文字列です。`name` は発火したピルの表示名です
+  （スクリプトや送り先名より優先）。無いときは主の `output.shell` の最初の
+  40 文字か、組み込みの送り先名を出します。`icon` は `.app` のパス（そのアプリの
+  アイコン）、画像のパス、絵文字などの短い文字です。省略時は状態の記号だけに
+  なります。表示文は `<trigger> → <label>` で、空白の連続は 1 つにまとめます。
+  変換の stdout や欄の文字は決して載りません。どちらも `keypipe hud` の記録行に
+  JSON で載ります。
+- `hud`（最上位、真偽値、既定 true、`KeypipeConfig.hud`）。発火が終わるとデーモンは
+  スピナーを消し、`Desktop.showFired` で 1 つの `FiredEvent` としてピルを出し、
+  `keypipe hud <trigger> <status>` を表示名とアイコン付きで記録します。成功と裏起動は
+  1.5 秒、失敗は 3 秒です。`hud: false` でピルも記録行も出しません。`--line`、
+  `--job`、Linux ではピルを出しません（記録行は stderr やログに載ります）。
+  見えるピルは画面上部中央の非アクティブなパネルです。位置・表示時間・アイコンの
+  描画は Mac の実機確認までは MAC_UNVERIFIED です。
 - `shellTimeout`（最上位、秒、既定 30）は keypipe が走らせる全シェルの期限です。
   過ぎたらプロセスグループごと止めます。
 - `backgroundTimeout`（最上位、秒、既定 300）は裏のジョブ全体の期限です。達したら
@@ -162,7 +176,8 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
 - 未知のキー、空の `trigger` / `transform` / `output.shell`、未知の `output` や
   `focus`、`focus: textField` の無い `replaceInput`、`transform` の無い
   `onFail.transform`、失敗しない送り先（`none`、`notify`）への `onFail.output`、
-  代替への `background`、`replaceInput` へ逃がす裏の送り先、正でない `shellTimeout`
+  代替への `background`、`replaceInput` へ逃がす裏の送り先、空の `name` や `icon`、
+  真偽値でない `hud`、正でない `shellTimeout`
   や `backgroundTimeout` は読み込み時に `invalid config: <理由>` で拒否し、
   終了コード 1 です。
 

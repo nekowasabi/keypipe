@@ -158,6 +158,10 @@
             DispatchQueue.main.async { BusySpinner.shared.hide() }
         }
 
+        func showFired(_ event: FiredEvent) {
+            DispatchQueue.main.async { FiredHUD.shared.show(event) }
+        }
+
         /// The caret's right edge in AppKit coordinates, or the field's bottom-left corner when the
         /// app does not report text bounds (Electron often does not).
         private func caretPoint(_ element: AXUIElement) -> NSPoint? {
@@ -305,6 +309,113 @@ func frontTabURLScript(_ bundleID: String) -> String? {
         func hide() {
             panel.orderOut(nil)
             arc.removeAnimation(forKey: "spin")
+        }
+    }
+
+    /// One finished fire's pill, top-center of the focused screen. Main thread only.
+    /// MAC_UNVERIFIED: placement, durations, replacement and icon rendering need a Mac
+    /// with Accessibility granted; never script clicks at the pill (inactive, no buttons).
+    final class FiredHUD {
+        static let shared = FiredHUD()
+        private let iconSize: CGFloat = 20
+        private let padX: CGFloat = 14
+        private let padY: CGFloat = 9
+        private let spacing: CGFloat = 8
+        private var panel: NSPanel?
+        private var hideWork: DispatchWorkItem?
+
+        func show(_ event: FiredEvent) {
+            // Why: a second fire replaces the first pill instead of stacking windows.
+            hideWork?.cancel()
+            hideWork = nil
+            panel?.orderOut(nil)
+            panel = nil
+            let label = NSTextField(labelWithString: event.label)
+            label.font = .systemFont(ofSize: 13)
+            label.textColor = .white
+            label.sizeToFit()
+            let icon = makeIcon(event.icon, status: event.status)
+            let width =
+                padX + iconSize + spacing + label.frame.width + padX
+            let height = max(label.frame.height, iconSize) + padY * 2
+            let content = NSRect(
+                x: 0, y: 0, width: ceil(width), height: ceil(height))
+            let panel = NSPanel(
+                contentRect: content,
+                styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            // Why: non-activating and mouse-transparent, like the spinner, so the field
+            // keeps focus and clicks pass through to whatever is under the pill.
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = true
+            panel.ignoresMouseEvents = true
+            panel.hidesOnDeactivate = false
+            panel.level = .statusBar
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+            let effect = NSVisualEffectView(frame: content)
+            effect.material = .hudWindow
+            effect.blendingMode = .behindWindow
+            effect.state = .active
+            effect.wantsLayer = true
+            effect.layer?.cornerRadius = 10
+            panel.contentView = effect
+            icon.frame = NSRect(
+                x: padX, y: (content.height - iconSize) / 2, width: iconSize, height: iconSize)
+            label.frame = NSRect(
+                x: padX + iconSize + spacing,
+                y: (content.height - label.frame.height) / 2,
+                width: label.frame.width, height: label.frame.height)
+            effect.addSubview(icon)
+            effect.addSubview(label)
+            // Why: top-center of the focused screen, falling back to the main one.
+            let screen = NSApp.keyWindow?.screen ?? NSScreen.main
+            if let frame = screen?.visibleFrame {
+                panel.setFrameOrigin(
+                    NSPoint(
+                        x: frame.midX - content.width / 2,
+                        y: frame.maxY - content.height - 48))
+            }
+            panel.orderFrontRegardless()
+            self.panel = panel
+            let work = DispatchWorkItem { [weak self] in
+                self?.panel?.orderOut(nil)
+                self?.panel = nil
+            }
+            hideWork = work
+            // Why: a failure stays longer, so the stage has time to be read.
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + (event.status == .failed ? 3 : 1.5), execute: work)
+        }
+
+        private func makeIcon(_ raw: String?, status: FiredStatus) -> NSView {
+            if let path = raw, path.hasSuffix(".app") {
+                return imageView(NSWorkspace.shared.icon(forFile: path))
+            }
+            if let path = raw, let image = NSImage(contentsOfFile: path) {
+                return imageView(image)
+            }
+            let glyph: String
+            if let text = raw {
+                glyph = text
+            } else {
+                switch status {
+                case .ok: glyph = "✓"
+                case .failed: glyph = "✕"
+                case .started: glyph = "●"
+                }
+            }
+            let field = NSTextField(labelWithString: glyph)
+            field.font = .systemFont(ofSize: 14)
+            field.textColor = .white
+            field.alignment = .center
+            return field
+        }
+
+        private func imageView(_ image: NSImage) -> NSView {
+            let view = NSImageView(frame: .zero)
+            view.image = image
+            view.imageScaling = .scaleProportionallyUpOrDown
+            return view
         }
     }
 
