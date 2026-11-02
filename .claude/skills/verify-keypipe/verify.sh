@@ -241,16 +241,11 @@ else
 fi
 
 # V7 S7 gates
-# Same detection as R1c: Xcode ships the tool as `swift format` without swift-format on PATH.
-FORMAT=""
-if command -v swift-format >/dev/null 2>&1; then FORMAT="swift-format"
-elif [ "$SWIFT_OK" = 1 ] && swift format --version >/dev/null 2>&1; then FORMAT="swift format"; fi
-if [ "$SWIFT_OK" = 1 ] && [ -n "$FORMAT" ]; then
-  if $FORMAT lint --strict --recursive Sources Tests > "$EVIDENCE/swift-format.log" 2>&1; then vpass "V7a formatter/lint verify exit 0" "S7" "$FORMAT lint --strict"; else vfail "V7a formatter/lint verify exit 0" "S7" "see swift-format.log"; fi
-elif grep -qi 'swift-format\|format' README.md 2>/dev/null; then
-  vskip "V7a formatter/lint verify exit 0" "S7" "formatter documented but neither swift-format nor swift format is available (MAC_UNVERIFIED)"
+# Same command as R1c: the Makefile owns the formatter lookup.
+if [ "$SWIFT_OK" = 1 ]; then
+  if make -s -C "$REPO" lint > "$EVIDENCE/swift-format.log" 2>&1; then vpass "V7a formatter/lint verify exit 0" "S7" "make lint"; else vfail "V7a formatter/lint verify exit 0" "S7" "see swift-format.log"; fi
 else
-  vfail "V7a formatter/lint verify exit 0" "S7" "no formatter tool or documented equivalent"
+  vskip "V7a formatter/lint verify exit 0" "S7" "$SWIFT_WHY"
 fi
 if [ "$SWIFT_OK" = 1 ]; then
   if kp_timeout 600 swift test > "$EVIDENCE/swift-test.log" 2>&1; then vpass "V7b swift test exit 0" "S7" "swift test"; else vfail "V7b swift test exit 0" "S7" "see swift-test.log"; fi

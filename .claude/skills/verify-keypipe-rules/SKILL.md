@@ -72,7 +72,7 @@ Invalid configs print `invalid config: <reason>` with one of these reasons, whic
 | ID | What | Harness |
 | --- | --- | --- |
 | R0a/R0b | macOS host, swift toolchain | doctor |
-| R1a-c | build, `swift test`, `swift-format lint --strict` (`swift format lint` when only the toolchain has it, as on a Mac with Xcode) | build |
+| R1a-c | build, `swift test`, `make lint` (the Makefile picks `swift-format` or Xcode's `swift format`; no tool is a FAIL) | build |
 | R1d | the Linux build and `swift test` in a `swift:6.0` container (README promises the Linux feed build; a Glibc-only break never shows on a Mac). Skips without Docker; `DOCKER=<binary>` when it is not on PATH. `swift test` gets SIGTERM at 900 s and SIGKILL 30 s later (`timeout -k 30 900` inside the container; the docker client ignores SIGALRM, so the pull itself is not bounded); it fails, not skips, when Docker runs but the `swift:6.0` image cannot be pulled (offline). `--ulimit nofile=131072` makes fd 70000 usable. `ShellTests.testDetachedJobHasItsOwnSessionAndNoInheritedDescriptors` pins setsid and that a held pipe, low and at fd 70000 (200 on a Mac), is not inherited; `ShellTests.testDetachedJobDoesNotStartWhenDescriptorsCannotBeListed` (Linux only) pins that no job starts when the descriptor listing fails | build |
 | R2a-f | invalid configs exit 1 with `invalid config` (empty trigger, old `action` key, unknown output, empty `output.shell`, empty `transform`, unknown `focus`) | fake |
 | R2g | minimal rule accepted with defaults | fake |
@@ -169,4 +169,4 @@ Fake feeds are independent processes and can run in parallel. Live items cannot:
 
 ## Status
 
-Stages 1 to 7 of `docs/design/failure-fallback.md` are implemented: `--no-live` passes every R item (R1c uses `swift-format` or the toolchain's `swift format`, and skips only without either), the live items M0 to M6 run against the real CGEventTap and AX (`MacKeyTap`, `MacDesktop`), and per-stage fallbacks (`onFail`, `shellTimeout`, `KEYPIPE_FAILURE`) are covered by R9. Stage 8 (select-all and paste) was dropped: Chromium and a real Electron app accept AXValue writes with a short delay instead of ignoring them (measured 2026-11-01), so `performWrite` waits up to 200 ms for the readback (R4f) and no paste sink exists.
+Stages 1 to 7 of `docs/design/failure-fallback.md` are implemented: `--no-live` passes every R item (R1c runs `make lint`, which fails without `swift-format` or the toolchain's `swift format`), the live items M0 to M6 run against the real CGEventTap and AX (`MacKeyTap`, `MacDesktop`), and per-stage fallbacks (`onFail`, `shellTimeout`, `KEYPIPE_FAILURE`) are covered by R9. Stage 8 (select-all and paste) was dropped: Chromium and a real Electron app accept AXValue writes with a short delay instead of ignoring them (measured 2026-11-01), so `performWrite` waits up to 200 ms for the readback (R4f) and no paste sink exists.
