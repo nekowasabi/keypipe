@@ -102,7 +102,7 @@ Sync history: `f3299d2` → `b48baf6` (2026-11-01). Between them `feedAndRun`
 was folded into `Engine.key` (commit 504917d) and hotkeys were added (c911d62).
 The check kept passing across that span because `--smoke-feed` followed the
 loop into `Engine.key`; only the description (line ranges, the test comment, the
-`contextMatches` stub note) was stale. No property changed.
+`contextMatches` stub note) was stale. No property changed. <!-- docsym-ok: names a removed stub in a history note, expires 2027-05-01, approved-by (pending) -->
 
 ## Checks for the extension design
 
@@ -134,7 +134,7 @@ items"); this list is the exhaustive / property part.
 | P6 | PR2 | Gates run before any field read: for every snapshot in {composing, terminal, secure, deny-match} × {textField, any} × {text trigger, hotkey}, `desktop.text(_:)` is never called when a gate blocks; `terminal` blocks only candidates with `focus: textField` (M18). | keypipe reads a password field; terminal pane leaks into a shell | In-process exhaustive over the product above with a `Desktop` stub that fails the test on `text(_:)` |
 | P7 | PR2 | `deny` parse rule: a slow fact in a `deny` entry without an `app` term is rejected at load; with `app` it is accepted; an unreadable fact in `deny` blocks. | browser asked on every fire in a text editor | Config fixtures (3) + one fake feed |
 | P8 | PR2 | Glob matching keeps every existing exact-match config meaning: for every bundle id in the test corpus, `anyOf([id]).matches(id)` and no other id in the corpus matches. | a rule starts firing in the wrong app after the glob change | In-process over the ids used in `Tests/` and `config.example.json` |
-| P9 | PR3 | Output rules are derived, not listed: for every `Sink` case, `parseOutput` rejects `onFail.output` iff `spec.failures` is empty, rejects it as a background fallback iff `!detachable`, requires `focus: textField` iff `needsTextField`; the error strings equal today's (`ConfigTests`). | a new sink silently escapes the onFail / background rules | In-process over `Sink.allCases` |
+| P9 | PR3 | Output rules are derived, not listed: for every `BuiltinSink` case, `parseOutput` rejects `onFail.output` iff `spec.failures` is empty, rejects it as a background fallback iff `!detachable`, requires `focus: textField` iff `needsTextField`; the error strings equal today's (`ConfigTests`). | a new sink silently escapes the onFail / background rules | In-process over `BuiltinSink.allCases` |
 | P10 | PR3 | No fake success: `typeText` on a `Desktop` whose `typeText` returns false yields `Failure.unsupported`, and `--line --report` shows `"failure":"unsupported"`. | voice reports delivered while the text went nowhere | Fake feed through `--line` |
 
 Deliberately not planned: a property over the erase/readback polling
