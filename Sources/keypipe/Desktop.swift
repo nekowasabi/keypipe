@@ -11,6 +11,9 @@ protocol Desktop {
     /// Whether two handles from two snapshots are the same element. A handle is a fresh token each
     /// time, so tokens alone cannot say it.
     func sameField(_ a: Field, _ b: Field) -> Bool
+    /// Shows that a matched fire is running, next to the field's caret when it can be found.
+    func showBusy(near field: Field?)
+    func hideBusy()
 }
 
 extension Desktop {
@@ -23,4 +26,8 @@ extension Desktop {
     func typeText(_ text: String) -> Bool { false }
 
     func sameField(_ a: Field, _ b: Field) -> Bool { a == b }
+
+    /// Why: only the live daemon has a screen to draw on; --line and jobs have no caret.
+    func showBusy(near field: Field?) {}
+    func hideBusy() {}
 }

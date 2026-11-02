@@ -80,6 +80,22 @@ final class EngineTests: XCTestCase {
         }
     }
 
+    /// A failing transform, so a hide placed only on the success path would fail this test.
+    func testBusyShownDuringTransformAndHiddenAfterFailure() {
+        let desktop = FakeDesktop(focus: .text, fieldText: "hello")
+        let rule = Rule(
+            trigger: "@@@", when: When(focus: .textField), transform: Guarded(primary: "exit 3"),
+            output: Guarded(primary: .builtin(.replaceInput)))
+        _ = run(rules: [rule], desktop: desktop) { _, _, _, _ in
+            XCTAssertEqual(desktop.busy, [true], "shown while the transform runs")
+            return .exited(3, stdout: "")
+        }
+        XCTAssertEqual(desktop.busy, [true, false])
+        let quiet = FakeDesktop(focus: .text, fieldText: "hello")
+        _ = run("@@x", rules: [rule], desktop: quiet)
+        XCTAssertEqual(quiet.busy, [], "no match, no spinner")
+    }
+
     func testFallbackFailureNotifiesWithoutRetrying() {
         let desktop = FakeDesktop(focus: .text, fieldText: "hello")
         let rule = Rule(

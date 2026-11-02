@@ -290,6 +290,10 @@ struct Engine {
         }
         hits += 1
         emit("keypipe matched \(trigger) rule \(index)")
+        // Why: a transform can take seconds with no visible change; the field is read before
+        // the erase so the spinner sits where the trigger was typed.
+        desktop.showBusy(near: snapshot.field)
+        defer { desktop.hideBusy() }
         let input: String
         switch (trigger, rule.when.focus) {
         case (.text(let text), .textField):
