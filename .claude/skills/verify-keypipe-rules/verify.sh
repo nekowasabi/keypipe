@@ -121,6 +121,12 @@ argv R2z --config "$EV/R2g.config.json" --app com.example.app
 argv R2s --config /dev/null --line ""
 argv R2r --config "$EV/R2g.config.json" --config "$EV/R2g.config.json" --triggers
 check "R2r a flag given twice: exit 2" "exitis R2r 2 && has R2r 'keypipe: --config given twice'" ""
+# Two modes used to run whichever branch came first in main.swift and drop the other.
+argv R2p --config "$EV/R2g.config.json" --triggers --feed-stdin
+argv R2o --config "$EV/R2g.config.json" --line @@@ --smoke-hotkey ctrl+@
+check "R2p two modes at once: exit 2 before the config is used" \
+  "exitis R2p 2 && has R2p 'keypipe: pick one mode, got --triggers --feed-stdin' \
+   && exitis R2o 2 && has R2o 'keypipe: pick one mode, got --line --smoke-feed'" ""
 # A value that looks like a flag is still the value: trigger "--report" without report mode.
 printf 'x' | cap 10 "$BIN" --config "$EV/R2g.config.json" --line --report > "$EV/R2q.out" 2>&1; echo $? > "$EV/R2q.exit"
 check "R2q a flag-like value stays a value (--line --report is the trigger --report)" \

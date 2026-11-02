@@ -276,8 +276,9 @@ cmd のどれかが押されていればホットキー、それ以外は文字�
   テストターゲット `keypipeTests`。
 - `Sources/keypipe/main.swift`: エントリーポイント、`--config`、`--context`、
   `--smoke-feed`、`--feed-stdin`、`--probe`、`--triggers`、`--line`、macOS の
-  デーモンループ。`--help` は使い方を出します。知らない引数は使い方を出して
-  終了コード 2 で止まり、デーモンは起動しません。
+  デーモンループ。`--help` は使い方を出します。知らない引数や、2 つのモードの
+  同時指定（`--triggers --feed-stdin`）は使い方を出して終了コード 2 で止まり、
+  デーモンの起動も片方だけの実行もしません。
 - `Sources/keypipe/Config.swift`: 唯一の JSON 境界。理由付きで拒否する
   `loadConfig(path:)`。
 - `Sources/keypipe/Context.swift`: `Focus`、`Field`、`Snapshot` とルールの判定

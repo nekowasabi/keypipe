@@ -62,6 +62,13 @@ let (flags, values): (Set<String>, [String: String]) = {
     }
     // Before the config is read, like every other bad argument (exit 2, not the config's 1).
     if values["--line"]?.isEmpty == true { refuse("--line needs a trigger") }
+    // Why: the branches below run the first mode they find, so a second mode was silently
+    // dropped. --smoke-feed and --smoke-hotkey are one mode (they run together).
+    let modes = ["--job", "--probe", "--triggers", "--line", "--smoke-feed", "--feed-stdin"]
+        .filter {
+            flags.contains($0) || ($0 == "--smoke-feed" && flags.contains("--smoke-hotkey"))
+        }
+    if modes.count > 1 { refuse("pick one mode, got \(modes.joined(separator: " "))") }
     return (flags, values)
 }()
 if flags.contains("--job") { runJobProcess() }
@@ -130,11 +137,7 @@ if flags.contains("--triggers") {
 }
 
 // The zsh widget's bridge: stdin is the line without the trigger, stdout the new line.
-if flags.contains("--line") {
-    guard let trigger = values["--line"], !trigger.isEmpty else {
-        fputs("keypipe: --line needs a trigger\n", stderr)
-        exit(2)
-    }
+if let trigger = values["--line"] {
     var app = values["--app"]
     #if os(macOS)
         if app == nil { app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
