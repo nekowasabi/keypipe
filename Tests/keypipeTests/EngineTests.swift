@@ -350,7 +350,8 @@ final class EngineTests: XCTestCase {
         desktop.key("&")
         XCTAssertEqual(engine.fire("&&&"), .started(rule: 0))
         XCTAssertEqual(jobs, [Job(rule: 0, input: "note", environment: ["KEYPIPE_APP": "editor"])])
-        XCTAssertEqual(lines.last, "keypipe background rule 0")
+        XCTAssertTrue(lines.contains("keypipe background rule 0"))
+        XCTAssertEqual(lines.last, #"keypipe hud &&& started "&&& → curl" none"#)
         XCTAssertEqual(desktop.fieldText, "note")
     }
 

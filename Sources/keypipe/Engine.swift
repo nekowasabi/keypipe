@@ -88,6 +88,24 @@ func performWrite(_ field: Field, _ text: String, _ desktop: Desktop) -> WriteOu
     }
 }
 
+/// The pill and transcript text for a finished fire. The rule name wins; otherwise the
+/// primary shell script; otherwise the builtin sink name. Every run of whitespace collapses
+/// to one space before the label text is capped at 40 graphemes.
+/// Never stdout or field text.
+func firedLabel(trigger: Trigger, rule: Rule) -> String {
+    let raw: String
+    if let name = rule.name {
+        raw = name
+    } else {
+        switch rule.output.primary {
+        case .shell(let shell): raw = shell.script
+        case .builtin(let sink): raw = sink.rawValue
+        }
+    }
+    let text = String(raw.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(40))
+    return "\(trigger) → \(text.trimmingCharacters(in: .whitespaces))"
+}
+
 /// A background fire handed to a detached job: the rule by config index, the read input,
 /// and the environment the shells see.
 struct Job: Codable, Equatable {
@@ -293,7 +311,17 @@ struct Engine {
         // Why: a transform can take seconds with no visible change; the field is read before
         // the erase so the spinner sits where the trigger was typed.
         desktop.showBusy(near: snapshot.field)
-        defer { desktop.hideBusy() }
+        let result = runAfterBusy(rule: rule, index: index, trigger: trigger, snapshot: snapshot)
+        desktop.hideBusy()
+        showFiredIfNeeded(result, trigger: trigger, rule: rule)
+        return result
+    }
+
+    /// Everything after the spinner is up: erase, input, background spawn or the sync stages.
+    /// The caller hides the spinner and decides the pill, so every path here leaves both to it.
+    private func runAfterBusy(rule: Rule, index: Int, trigger: Trigger, snapshot: Snapshot)
+        -> FireResult
+    {
         let input: String
         switch (trigger, rule.when.focus) {
         case (.text(let text), .textField):
@@ -328,6 +356,29 @@ struct Engine {
             return .started(rule: index)
         }
         return run(rule, index, input, environment, snapshot)
+    }
+
+    /// One pill per finished fire that earned it, then one transcript line for it. Fires that
+    /// never reached the spinner (gates, no match, unreadable facts) and a vanished field
+    /// (noInput) report nothing: there is no finished work to show.
+    private func showFiredIfNeeded(_ result: FireResult, trigger: Trigger, rule: Rule) {
+        guard config.hud else { return }
+        let status: FiredStatus
+        switch result {
+        case .replaced, .delivered: status = .ok
+        case .started: status = .started
+        case .failed: status = .failed
+        case .blocked, .noMatch, .unreadable, .noInput: return
+        }
+        var stage: String? = nil
+        if case .failed(_, let failedStage, _) = result { stage = failedStage.rawValue }
+        let event = FiredEvent(
+            trigger: trigger, label: firedLabel(trigger: trigger, rule: rule), status: status,
+            stage: stage, icon: rule.icon)
+        desktop.showFired(event)
+        emit(
+            "keypipe hud \(trigger) \(status.rawValue) \(jsonString(event.label)) \(rule.icon.map(jsonString) ?? "none")"
+        )
     }
 
     /// The detached half of a background fire: same stages, no field to write.

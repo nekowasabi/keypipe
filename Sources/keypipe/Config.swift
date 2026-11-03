@@ -22,6 +22,10 @@ struct Rule: Equatable {
     var when: When = When()
     var transform: Guarded<String>? = nil
     var output: Guarded<Output> = Guarded(primary: .builtin(.none))
+    /// Pill and transcript label override. nil falls back to the output script or sink name.
+    var name: String? = nil
+    /// Pill icon: a .app path, an image path, or short text such as an emoji. nil is status-only.
+    var icon: String? = nil
 }
 
 struct KeypipeConfig: Equatable {
@@ -33,6 +37,8 @@ struct KeypipeConfig: Equatable {
     var shellTimeout: TimeInterval = 30
     /// Deadline for a whole background job, transform and fallbacks included.
     var backgroundTimeout: TimeInterval = 300
+    /// Finished fires show a pill and emit their transcript line. false disables both.
+    var hud: Bool = true
 }
 
 enum ConfigError: Error, CustomStringConvertible {
@@ -76,6 +82,28 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
         guard !string.isEmpty else { throw ConfigError.invalid("empty \(name)") }
         return string
     }
+    func nonblank(_ value: Any, name: String) throws -> String {
+        let string = try nonempty(value, name: name)
+        guard !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ConfigError.invalid("empty \(name)")
+        }
+        return string
+    }
+    func boolean(_ value: Any, name: String) throws -> Bool {
+        #if canImport(Darwin)
+            // Why: Darwin's JSONSerialization returns 0 and 1 as NSNumber, which `as? Bool`
+            // accepts; only a CFBoolean is a JSON true or false.
+            guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID()
+            else { throw ConfigError.invalid("\(name) must be a boolean") }
+            return number.boolValue
+        #else
+            // Why: swift-corelibs returns JSON numbers as Int or Double, never Bool.
+            guard let flag = value as? Bool else {
+                throw ConfigError.invalid("\(name) must be a boolean")
+            }
+            return flag
+        #endif
+    }
     let json: Any
     do { json = try JSONSerialization.jsonObject(with: data) } catch {
         throw ConfigError.invalid("JSON decoding failed: \(error.localizedDescription)")
@@ -93,10 +121,7 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
             let sink = try object(value, keys: primary ? ["shell", "background"] : ["shell"])
             var background = false
             if let value = sink["background"] {
-                guard let flag = value as? Bool else {
-                    throw ConfigError.invalid("background must be a boolean")
-                }
-                background = flag
+                background = try boolean(value, name: "background")
             }
             output = .shell(
                 ShellOutput(
@@ -123,7 +148,8 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
         }
         return Conditions(terms)
     }
-    let root = try object(json, keys: ["rules", "deny", "shellTimeout", "backgroundTimeout"])
+    let root = try object(
+        json, keys: ["rules", "deny", "shellTimeout", "backgroundTimeout", "hud"])
     var deny: [Conditions] = []
     if let value = root["deny"] {
         guard let entries = value as? [Any] else {
@@ -150,12 +176,17 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
     }
     let shellTimeout = try seconds("shellTimeout", default: 30)
     let backgroundTimeout = try seconds("backgroundTimeout", default: 300)
+    var hud = true
+    if let value = root["hud"] {
+        hud = try boolean(value, name: "hud")
+    }
     guard let values = root["rules"] as? [Any] else {
         throw ConfigError.invalid("rules must be an array")
     }
     let rules = try values.map { value -> Rule in
         let entry = try object(
-            value, keys: ["trigger", "hotkey", "when", "transform", "output", "onFail"])
+            value,
+            keys: ["trigger", "hotkey", "when", "transform", "output", "onFail", "name", "icon"])
         let trigger: Trigger
         switch (entry["trigger"], entry["hotkey"]) {
         case (nil, nil): throw ConfigError.invalid("rule needs trigger or hotkey")
@@ -210,8 +241,15 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
                 }
             }
         }
-        return Rule(trigger: trigger, when: when, transform: transform, output: output)
+        var name: String? = nil
+        if let value = entry["name"] { name = try nonblank(value, name: "name") }
+        var icon: String? = nil
+        if let value = entry["icon"] { icon = try nonblank(value, name: "icon") }
+        return Rule(
+            trigger: trigger, when: when, transform: transform, output: output, name: name,
+            icon: icon)
     }
     return KeypipeConfig(
-        rules: rules, deny: deny, shellTimeout: shellTimeout, backgroundTimeout: backgroundTimeout)
+        rules: rules, deny: deny, shellTimeout: shellTimeout, backgroundTimeout: backgroundTimeout,
+        hud: hud)
 }

@@ -39,6 +39,11 @@ final class FakeDesktop: Desktop {
     private(set) var notifications: [String] = []
     /// showBusy and hideBusy calls in order: true shown, false hidden.
     private(set) var busy: [Bool] = []
+    /// showFired calls in order, so a test can demand exactly one pill per finished fire.
+    private(set) var fired: [FiredEvent] = []
+    /// spin, unspin and pill in the one order the engine posted them; the HudFlow model in
+    /// .claude/skills/verify-keypipe-hud-flow assumes exactly this per-fire order.
+    private(set) var windows: [String] = []
     private let secure: Bool
     private let facts: [FactName: FactRead]
     private let appAfterSlowRead: String?
@@ -180,6 +185,17 @@ final class FakeDesktop: Desktop {
 
     func notify(_ text: String) { notifications.append(text) }
 
-    func showBusy(near field: Field?) { busy.append(true) }
-    func hideBusy() { busy.append(false) }
+    func showBusy(near field: Field?) {
+        busy.append(true)
+        windows.append("spin")
+    }
+    func hideBusy() {
+        busy.append(false)
+        windows.append("unspin")
+    }
+
+    func showFired(_ event: FiredEvent) {
+        fired.append(event)
+        windows.append("pill")
+    }
 }
