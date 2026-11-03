@@ -11,7 +11,7 @@ gets repeated must move up to a check in the same change. Drop a row once the mi
 
 | Rule | Enforced by | Past mistakes |
 |------|-------------|---------------|
-| A bad command line exits 2 before the config is read; it never starts the daemon or runs one of two modes | the single parse in `Sources/keypipe/main.swift` (`refuse`), R2p/R2r/R2u/R2x in `verify-keypipe-rules` | dbb4e06, 2e33ff3, bd121ba, a0a9081, 285184d, 0017de2 |
+| A bad command line exits 2 before the config is read; it never starts the daemon or runs one of two modes. A missing name under `--rule` exits 2 after loading, like a nonmatching `--line` | the single parse in `Sources/keypipe/main.swift` (`refuse`), R2p/R2r/R2u/R2x in `verify-keypipe-rules`, `EngineTests` testFireRule* in `make check`, P1/P3 in `verify-keypipe-rule-by-name` (manual) | dbb4e06, 2e33ff3, bd121ba, a0a9081, 285184d, 0017de2 |
 | A new flag goes into `takesValue` or `alone` in that parse, and a new mode into `modes`; never look up `CommandLine.arguments` elsewhere | review only (judgment) | bd121ba |
 | Run the formatter only through `make lint`; scripts do not look for swift-format themselves | `Makefile` `FORMAT`, R1c and V7a call `make lint` | 28de2bc, 8630c35 |
 | Checks run the binary or `swift test`; never grep Sources for type or function names | V4a/V5a/V5d were deleted; review only | da918df, 8d3bd48 |

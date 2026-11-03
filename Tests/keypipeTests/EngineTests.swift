@@ -255,6 +255,66 @@ final class EngineTests: XCTestCase {
         }
     }
 
+    /// --rule: the named rule runs, not an earlier rule of the same trigger, and its input is the
+    /// caller's text in every focus (with --line, focus any gets empty input).
+    func testFireRuleRunsOnlyThatRuleWithTheCallersInputInEveryFocus() throws {
+        for trigger in [Trigger.text("@@@"), .hotkey(try Hotkey.parse("ctrl+cmd+g"))] {
+            for focus in [When.Focus.any, .textField] {
+                let suffix: String
+                if case .text(let text) = trigger { suffix = text } else { suffix = "" }
+                let desktop = LineDesktop(app: "editor", line: "note" + suffix)
+                let rules = [
+                    Rule(trigger: trigger, output: Guarded(primary: .shell("first"))),
+                    Rule(
+                        trigger: trigger, when: When(focus: focus),
+                        output: Guarded(primary: .shell("second")), name: "b"),
+                ]
+                var ran: [String] = []
+                var engine = Engine(
+                    config: KeypipeConfig(rules: rules), desktop: desktop,
+                    shell: { script, input, _, _ in
+                        ran.append("\(script):\(input)")
+                        return .exited(0, stdout: "")
+                    }, emit: { _ in })
+                XCTAssertEqual(
+                    engine.fire(rule: 1, input: "note"), .delivered(rule: 1, viaFallback: false),
+                    "\(trigger) \(focus)")
+                XCTAssertEqual(ran, ["second:note"], "\(trigger) \(focus)")
+            }
+        }
+    }
+
+    func testFireRuleStopsAtDenyAndHandsTheInputToABackgroundJob() {
+        let rule = Rule(
+            trigger: "@@@",
+            output: Guarded(primary: .shell(ShellOutput(script: "curl", background: true))),
+            name: "a")
+        for (app, denied) in [("bank", true), ("editor", false)] {
+            var jobs: [Job] = []
+            var engine = Engine(
+                config: KeypipeConfig(
+                    rules: [rule], deny: [Conditions([Term(fact: .app, globs: ["bank"])])]),
+                desktop: LineDesktop(app: app, line: "note@@@"),
+                shell: { _, _, _, _ in
+                    XCTFail("the job, not the caller, runs the stages")
+                    return .exited(0, stdout: "")
+                }, emit: { _ in },
+                background: {
+                    jobs.append($0)
+                    return true
+                })
+            let result = engine.fire(rule: 0, input: "note")
+            if denied {
+                XCTAssertEqual(result, .blocked("deny"))
+                XCTAssertEqual(jobs, [])
+            } else {
+                XCTAssertEqual(result, .started(rule: 0))
+                XCTAssertEqual(
+                    jobs, [Job(rule: 0, input: "note", environment: ["KEYPIPE_APP": "editor"])])
+            }
+        }
+    }
+
     func testFailedTransformNotifiesAndPreservesErasedField() {
         let desktop = FakeDesktop(focus: .text, fieldText: "hello")
         let rule = Rule(

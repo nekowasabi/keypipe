@@ -88,14 +88,14 @@ func performWrite(_ field: Field, _ text: String, _ desktop: Desktop) -> WriteOu
     }
 }
 
-/// The pill and transcript text for a finished fire. The rule name wins; otherwise the
+/// The pill and transcript text for a finished fire. The label wins, then the name; otherwise the
 /// primary shell script; otherwise the builtin sink name. Every run of whitespace collapses
 /// to one space before the label text is capped at 40 graphemes.
 /// Never stdout or field text.
 func firedLabel(trigger: Trigger, rule: Rule) -> String {
     let raw: String
-    if let name = rule.name {
-        raw = name
+    if let label = rule.label ?? rule.name {
+        raw = label
     } else {
         switch rule.output.primary {
         case .shell(let shell): raw = shell.script
@@ -214,9 +214,22 @@ struct Engine {
 
     @discardableResult
     mutating func fire(_ trigger: Trigger) -> FireResult {
+        let matching = config.rules.indices.filter { config.rules[$0].trigger == trigger }
+        return fire(trigger, candidates: matching, input: nil)
+    }
+
+    /// `--rule`: only this rule, through the same gates, with the caller's input whatever its focus.
+    @discardableResult
+    mutating func fire(rule index: Int, input: String) -> FireResult {
+        fire(config.rules[index].trigger, candidates: [index], input: input)
+    }
+
+    private mutating func fire(_ trigger: Trigger, candidates: [Int], input: String?)
+        -> FireResult
+    {
         let snapshot = desktop.snapshot()
         // Gates, before any rule and before any field read.
-        var candidates = config.rules.indices.filter { config.rules[$0].trigger == trigger }
+        var candidates = candidates
         if snapshot.focus == .terminal {
             // Why: a terminal's AX field is the whole pane. A text trigger there belongs to the
             // zsh widget; only a hotkey rule that reads no field may still run (empty input).
@@ -311,7 +324,8 @@ struct Engine {
         // Why: a transform can take seconds with no visible change; the field is read before
         // the erase so the spinner sits where the trigger was typed.
         desktop.showBusy(near: snapshot.field)
-        let result = runAfterBusy(rule: rule, index: index, trigger: trigger, snapshot: snapshot)
+        let result = runAfterBusy(
+            rule: rule, index: index, trigger: trigger, snapshot: snapshot, suppliedInput: input)
         desktop.hideBusy()
         showFiredIfNeeded(result, trigger: trigger, rule: rule)
         return result
@@ -319,22 +333,22 @@ struct Engine {
 
     /// Everything after the spinner is up: erase, input, background spawn or the sync stages.
     /// The caller hides the spinner and decides the pill, so every path here leaves both to it.
-    private func runAfterBusy(rule: Rule, index: Int, trigger: Trigger, snapshot: Snapshot)
-        -> FireResult
-    {
+    private func runAfterBusy(
+        rule: Rule, index: Int, trigger: Trigger, snapshot: Snapshot, suppliedInput: String?
+    ) -> FireResult {
         let input: String
         switch (trigger, rule.when.focus) {
         case (.text(let text), .textField):
             guard let field = snapshot.field,
                 let erased = performErase(field, trigger: text, desktop, emit: emit)
             else { return .noInput(rule: index) }
-            input = erased
+            input = suppliedInput ?? erased
         case (.hotkey, .textField):
             emit("keypipe erase 0")
             guard let field = snapshot.field, let current = desktop.text(field) else {
                 return .noInput(rule: index)
             }
-            input = current
+            input = suppliedInput ?? current
         case (.text(let text), .any):
             let count = snapshot.focus == .text ? text.count : 0
             if count > 0, let field = snapshot.field {
@@ -342,10 +356,10 @@ struct Engine {
                 desktop.backspace(count)
             }
             emit("keypipe erase \(count)")
-            input = ""
+            input = suppliedInput ?? ""
         case (.hotkey, .any):
             emit("keypipe erase 0")
-            input = ""
+            input = suppliedInput ?? ""
         }
         let environment = ["KEYPIPE_APP": snapshot.app ?? ""]
         if rule.output.primary.isBackground {

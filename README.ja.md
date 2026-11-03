@@ -114,7 +114,7 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   許可を一度だけ求めます）。URL は、ルールの安い条件（`app`、`focus`）が満たされた
   ときだけ、1 回の発火につき最大 1 回読みます。ブラウザが前面なのに URL を読めない
   とき（許可が無い、1 秒の期限切れ）は、同じトリガーの次のルールへ進まず、通知して
-  止まります。ブラウザ以外のアプリと `--line` の経路（zsh、音声）では、`url` は単に
+  止まります。ブラウザ以外のアプリと `--line` の経路（zsh、音声）と `--rule` の経路では、`url` は単に
   一致しません。URL を読むあいだに前面アプリが変わったら、何も消さず何も走らせません
   （`keypipe front-changed`）。
 - 事実の条件（`app`、`url`）はどれもグロブの一覧です（`fnmatch`。`*` は `/` も
@@ -125,7 +125,7 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   ルールも欄の読み取りも行う前に止まります（`keypipe deny`）。`url` を書く項目には
   `app` も要ります。別のアプリが前面のときに、キー入力のトリガーがブラウザへ問い
   合わせないためです。`deny` の `url` が読めないときも止まります。`--line` の経路
-  （zsh、音声）では事実をその場で読まないので、`url` を書いた `deny` の項目は一致せず、
+  （zsh、音声）と `--rule` の経路では事実をその場で読まないので、`url` を書いた `deny` の項目は一致せず、
   その発火を止めません。
 - パスワード欄（`AXSecureTextField`）では何もしません（`keypipe secure`）。消さず、
   読まず、シェルも走らせません。
@@ -141,7 +141,7 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   理由を通知します。
 - `output` は `"replaceInput"`（同じ欄に結果を書き戻す。`focus: textField` が必要）、
   `"typeText"`（キャレットの位置に結果をキーイベントで打つ。keypipe 自身の tap は
-  このイベントを無視する。`--line` にはキャレットが無いので `unsupported` で失敗。変換のあいだに前面の
+  このイベントを無視する。`--line` と `--rule` にはキャレットが無いので `unsupported` で失敗。変換のあいだに前面の
   アプリ・フォーカス・欄が変わったら何も打たず `gone` で失敗）、
   `"notify"`、`"none"`（既定）、または `{ "shell": "..." }`（変換と同じ経路で結果を
   受ける）。クリップボードは `{ "shell": "pbcopy" }`、webhook は `curl` で書きます。
@@ -160,19 +160,22 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   `onFail` が無いときは、`replaceInput` の失敗は結果を通知して文字を失わず、
   `output.shell` の失敗は記録だけです。同じコマンドの言い換えはシェルの `||` で
   書き、別の行き先へ逃がすときやシェルから見えない失敗を拾うときに `onFail` を使います。
-- `name` と `icon` は任意のルール文字列です。`name` は発火したピルの表示名です
-  （スクリプトや送り先名より優先）。無いときは主の `output.shell` のスクリプトか、
-  組み込みの送り先名を出します。`icon` は `.app` のパス（そのアプリの
+- `name`、`label`、`icon` は任意のルール文字列です。`name` は `--rule NAME` で呼ぶ
+  一意な識別子です。`label` は表示専用で、名前による選択には使いません。
+  以前のように表示名として同じ `name` を複数のルールに付けた設定は、読み込み時に
+  拒否されます（`duplicate name`）。その文字列は `label` に移してください。
+  ピルは `label`、`name`、主の `output.shell` のスクリプト、組み込みの送り先名の
+  順に表示します。`icon` は `.app` のパス（そのアプリの
   アイコン）、画像のパス、絵文字などの短い文字です。省略時は状態の記号だけに
   なります。表示文は `<trigger> → <label>` で、空白の連続は 1 つにまとめます。
-  その後、`name` を含めて矢印の後の文字列を最大 40 文字（書記素）に制限し、
+  その後、`label` と `name` を含めて矢印の後の文字列を最大 40 文字（書記素）に制限し、
   末尾の空白を除きます。
   変換の stdout や欄の文字は決して載りません。どちらも `keypipe hud` の記録行に
   JSON で載ります。
 - `hud`（最上位、真偽値、既定 true、`KeypipeConfig.hud`）。発火が終わるとデーモンは
   スピナーを消し、`Desktop.showFired` で 1 つの `FiredEvent` としてピルを出し、
   `keypipe hud <trigger> <status>` を表示名とアイコン付きで記録します。成功と裏起動は
-  1.5 秒、失敗は 3 秒です。`hud: false` でピルも記録行も出しません。`--line`、
+  1.5 秒、失敗は 3 秒です。`hud: false` でピルも記録行も出しません。`--line`、`--rule`、
   `--job`、Linux ではピルを出しません（記録行は stderr やログに載ります）。
   見えるピルは画面上部中央の非アクティブなパネルです。位置・表示時間・アイコンの
   描画は Mac の実機確認までは MAC_UNVERIFIED です。
@@ -184,7 +187,7 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   `focus`、`focus: textField` の無い `replaceInput`、`transform` の無い
   `onFail.transform`、失敗しない送り先（`none`、`notify`）への `onFail.output`、
   代替への `background`、`replaceInput` へ逃がす裏の送り先、空または空白だけの
-  `name` や `icon`（`empty name` / `empty icon`）、真偽値でない `hud` や
+  `name`、`label`、`icon`（`empty <key>`）、重複するルール名（`duplicate name <名前>`）、真偽値でない `hud` や
   `background`（数値の 0 と 1 も含めて `<key> must be a boolean`）、正でない `shellTimeout`
   や `backgroundTimeout` は読み込み時に `invalid config: <理由>` で拒否し、
   終了コード 1 です。
@@ -212,8 +215,14 @@ source ~/repos/keypipe/shell/keypipe.zsh   # 任意: KEYPIPE_APP=<bundle id>
 deny・front-changed、事実を読めなかった）と引数の不正（空のトリガーを含む）は 2
 （ウィジェットはトリガーを残す）、設定不正 1 です。記録は stderr に出ます。
 
-`--report` を付けると、新しい行の代わりに、発火の結果を JSON 1 行で出します（終了
-コードは書けたら 0、設定不正なら 1、引数の不正なら 2）。`outcome` は `replaced`・`delivered`・
+`keypipe --config C --rule <name> [--app <bundle id>]` は、`name` がその名前のルール
+だけを、`trigger` と `hotkey` のどちらでも同じゲートを通して走らせます。stdin は
+`focus` にかかわらずそのまま入力になります。その名前のルールが無ければ、設定を
+読んだ後に終了コード 2 で、何も走らせません。
+
+`--line` か `--rule` に `--report` を付けると、新しい行の代わりに、発火の結果を
+JSON 1 行で出します（終了コードは書けたら 0、設定不正なら 1、引数の不正か名前の
+無いルールなら 2）。ブロックや不一致も報告を書いて 0 です。`outcome` は `replaced`・`delivered`・
 `started`・`failed`・`nomatch`・`blocked`・`unreadable`・`noinput` のどれかです。
 voice-switch の `keypipe` 配送はこれを読み、`replaced` のときだけ結果を貼ります。
 全種類の例は `Tests/keypipeTests/Fixtures/report-v1.jsonl` にあります。
@@ -233,26 +242,48 @@ less、REPL）でも動きません。他のシェルで使うには、同じ `-
 
 ## 音声（voice-switch）
 
-同じ `--line` を使って、[voice-switch](https://github.com/nekowasabi/voice-switch) から
-音声入力の内容をルールに流せます。ひとつのルールがキーボードとマイクの両方に効きます。
-voice-switch の `command` アクションは、書き起こした文章を標準入力（末尾の改行なし）で、
-入力の宛先だったアプリの bundle id を `VOICE_SWITCH_APP` で渡してシェルコマンドを動かします。
+ルールに `name` を付けると、[voice-switch](https://github.com/nekowasabi/voice-switch) から
+`keypipe --rule NAME` でそのルールを呼べます。シェルは keypipe 側に一度だけ書き、
+キーボードとマイクの両方で使います。
+
+たとえば次のルールは、クリップボードの内容を Webhook に送ります。ホットキーで押すと
+クリップボードだけを送ります。音声で呼ぶと、口述した文が `KEYPIPE_INPUT` に入り、
+注釈として先頭に付きます。
+
+```json
+{ "name": "annotate", "label": "注釈", "hotkey": "ctrl+cmd+g",
+  "output": { "shell": "t=$(pbpaste); [ -z \"$KEYPIPE_INPUT\" ] || t=$(printf '%s\\n\\n%s' \"$KEYPIPE_INPUT\" \"$t\"); curl -fsS -m 25 https://example.com/hook --form-string \"text=$t\"", "background": true } }
+```
+
+voice-switch のアクションには、ルールの名前を書くだけです。`command` アクションは、
+書き起こした文章を標準入力（末尾の改行なし）で、入力の宛先だったアプリの bundle id を
+`VOICE_SWITCH_APP` で渡してシェルコマンドを動かします。
 
 ```json
 {
-  "name": "keypipe",
-  "wakeWords": ["キーパイプ"],
-  "command": "/usr/local/bin/keypipe --config ~/.config/keypipe/config.json --line @@@ ${VOICE_SWITCH_APP:+--app \"$VOICE_SWITCH_APP\"}",
+  "name": "annotate",
+  "wakeWords": ["注釈"],
+  "command": "/usr/local/bin/keypipe --rule annotate ${VOICE_SWITCH_APP:+--app \"$VOICE_SWITCH_APP\"}",
   "superwhisperMode": "voice_switch"
 }
 ```
 
-keypipe は zsh ウィジェットのときと同じく、その文章をそのアプリのフォーカスされた
-テキスト欄の行として扱います。キーボードと違う点は次のとおりです。
+keypipe は絶対パスで書きます。voice-switch アプリの launchd の `PATH` では `keypipe` が
+見つかりません。設定ファイルが既定の場所にあれば `--config` は省けます。
 
-- 動くのは `trigger` ルールだけで、`hotkey` ルールは動きません。
-- 文章を受け取るルールには `"when": {"focus": "textField"}` が要ります。既定の
-  `focus: any` のままだと、ルールは空の入力で動きます。
+キーボードと違う点は次のとおりです。
+
+- `--rule NAME` は `trigger` と `hotkey` のどちらでも、その `name` のルールだけを
+  選びます。`label` では選ばず、別ルールへの繰り下がりもありません。
+- `focus: textField` と `focus: any` のどちらも、空を含む標準入力をそのまま
+  変換シェルの標準入力、`$1`、`KEYPIPE_INPUT` に渡します。変換が無ければ出力シェルに
+  そのまま渡し、変換があればその結果を渡します。裏のジョブにも同じ入力が届きます。
+  `--line` の `focus: any` は従来どおり空の入力です。
+- deny と `when` の判定は通常どおり適用します。`--app` と `--report` は `--line` か
+  `--rule` と併用できます。モードの併用や空の名前は設定読み込み前に終了コード 2。
+  名前が無ければ読み込み後に終了コード 2 で、`--report` 付きでも標準出力は空です。
+  不正な設定は終了コード 1 が優先します。`--report` 無しなら一致は 0、ブロックや不一致は 2。
+  `--report` 付きならブロックや不一致も JSON を 1 行出し、終了コード 0 です。
 - `command` のアクションでは、`replaceInput` は何も起こしません。書き換えた行は
   stdout に出ますが、voice-switch が捨てます。代わりに `output.shell`、`notify`、
   `background` を使うか、下の `keypipe` 配送を使ってください。
@@ -298,7 +329,7 @@ cmd のどれかが押されていればホットキー、それ以外は文字�
 - `Package.swift`: Swift パッケージ `keypipe`、実行ターゲット `keypipe`、
   テストターゲット `keypipeTests`。
 - `Sources/keypipe/main.swift`: エントリーポイント、`--config`、`--context`、
-  `--smoke-feed`、`--feed-stdin`、`--probe`、`--triggers`、`--line`、macOS の
+  `--smoke-feed`、`--feed-stdin`、`--probe`、`--triggers`、`--line`、`--rule`、macOS の
   デーモンループ。`--help` は使い方を出します。知らない引数や、2 つのモードの
   同時指定（`--triggers --feed-stdin`）は使い方を出して終了コード 2 で止まり、
   デーモンの起動も片方だけの実行もしません。

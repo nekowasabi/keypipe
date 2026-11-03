@@ -15,6 +15,7 @@ private func emit(_ line: String) {
 let usage = """
     usage: keypipe [--config FILE]                          run the daemon (macOS)
            keypipe [--config FILE] --line TRIGGER [--app BUNDLE_ID] [--report] < line
+           keypipe [--config FILE] --rule NAME [--app BUNDLE_ID] [--report] < input
            keypipe [--config FILE] --triggers
            keypipe [--config FILE] [--context FILE] --smoke-feed KEYS [--smoke-hotkey CHORD]
            keypipe [--config FILE] [--context FILE] --feed-stdin
@@ -26,7 +27,7 @@ let usage = """
 let (flags, values): (Set<String>, [String: String]) = {
     let args = CommandLine.arguments
     let takesValue: Set = [
-        "--config", "--context", "--line", "--app", "--smoke-feed", "--smoke-hotkey",
+        "--config", "--context", "--line", "--rule", "--app", "--smoke-feed", "--smoke-hotkey",
     ]
     let alone: Set = ["--job", "--probe", "--triggers", "--report", "--feed-stdin"]
     func refuse(_ why: String) -> Never {
@@ -57,17 +58,19 @@ let (flags, values): (Set<String>, [String: String]) = {
     }
     // A modifier without its mode would fall through to the daemon as well.
     for modifier in ["--report", "--app"]
-    where flags.contains(modifier) && !flags.contains("--line") {
-        refuse("\(modifier) needs --line")
+    where flags.contains(modifier) && !flags.contains("--line") && !flags.contains("--rule") {
+        refuse("\(modifier) needs --line or --rule")
     }
     // Before the config is read, like every other bad argument (exit 2, not the config's 1).
     if values["--line"]?.isEmpty == true { refuse("--line needs a trigger") }
+    if values["--rule"]?.isEmpty == true { refuse("--rule needs a name") }
     // Why: the branches below run the first mode they find, so a second mode was silently
     // dropped. --smoke-feed and --smoke-hotkey are one mode (they run together).
-    let modes = ["--job", "--probe", "--triggers", "--line", "--smoke-feed", "--feed-stdin"]
-        .filter {
-            flags.contains($0) || ($0 == "--smoke-feed" && flags.contains("--smoke-hotkey"))
-        }
+    let modes = [
+        "--job", "--probe", "--triggers", "--line", "--rule", "--smoke-feed", "--feed-stdin",
+    ].filter {
+        flags.contains($0) || ($0 == "--smoke-feed" && flags.contains("--smoke-hotkey"))
+    }
     if modes.count > 1 { refuse("pick one mode, got \(modes.joined(separator: " "))") }
     return (flags, values)
 }()
@@ -136,14 +139,29 @@ if flags.contains("--triggers") {
     exit(0)
 }
 
-// The zsh widget's bridge: stdin is the line without the trigger, stdout the new line.
-if let trigger = values["--line"] {
+// The zsh widget's bridge (--line) and voice-switch's call by name (--rule): stdin is the line
+// without the trigger, stdout the new line.
+if flags.contains("--line") || flags.contains("--rule") {
+    let trigger: Trigger
+    var named: Int?
+    if let name = values["--rule"] {
+        guard let index = loaded.rules.firstIndex(where: { $0.name == name }) else {
+            fputs("keypipe: no rule named \(name)\n", stderr)
+            exit(2)
+        }
+        named = index
+        trigger = loaded.rules[index].trigger
+    } else {
+        trigger = .text(values["--line"] ?? "")
+    }
     var app = values["--app"]
     #if os(macOS)
         if app == nil { app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
     #endif
     let input = String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self)
-    let desktop = LineDesktop(app: app, line: input + trigger)
+    let suffix: String
+    if case .text(let text) = trigger { suffix = text } else { suffix = "" }
+    let desktop = LineDesktop(app: app, line: input + suffix)
     // Why: stdout carries only the line, so the transcript goes to stderr.
     let toStderr: (String) -> Void = { fputs($0 + "\n", stderr) }
     var engine = Engine(
@@ -151,7 +169,7 @@ if let trigger = values["--line"] {
         background: {
             startJob($0, configPath: configFile, configBytes: configBytes, emit: toStderr)
         })
-    let result = engine.fire(.text(trigger))
+    let result = named.map { engine.fire(rule: $0, input: input) } ?? engine.fire(trigger)
     // Why: --report is for callers that act on the outcome (voice-switch). Plain --line keeps
     // the zsh widget's contract byte for byte: the line on stdout, exit 0 on a hit, 2 otherwise.
     if flags.contains("--report") {
