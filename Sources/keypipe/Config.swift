@@ -63,6 +63,41 @@ func readConfigData(path: String) throws -> Data {
     }
 }
 
+/// The daemon's config file, read again before each key so an edit applies on the next
+/// keystroke without a rebuild or restart. `bytes` is what the running rules came from, and
+/// what a background job must be handed.
+struct LiveConfig {
+    let path: String
+    private(set) var bytes: Data
+    private var rejected: Data?
+
+    init(path: String, bytes: Data) {
+        self.path = path
+        self.bytes = bytes
+    }
+
+    /// The new config when the file changed and parses. nil when it is unchanged or unreadable
+    /// (an editor's save can briefly remove it), and nil when it is invalid, which `report`
+    /// hears once per bad content while the running rules stay.
+    // ponytail: reads the whole file per key; a few KB costs microseconds. Watch the file
+    // with a DispatchSource if configs ever grow large.
+    mutating func poll(report: (String) -> Void) -> KeypipeConfig? {
+        guard let data = try? readConfigData(path: path), data != bytes, data != rejected else {
+            return nil
+        }
+        do {
+            let config = try loadConfig(data: data)
+            bytes = data
+            rejected = nil
+            return config
+        } catch {
+            rejected = data
+            report("\(error)")
+            return nil
+        }
+    }
+}
+
 /// The parse itself. A background job parses the bytes its parent loaded, so the rule index
 /// it carries always points into the rules the parent matched, even after the file changed.
 func loadConfig(data: Data) throws -> KeypipeConfig {

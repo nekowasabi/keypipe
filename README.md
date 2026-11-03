@@ -44,6 +44,11 @@ and `make verify` run the unit tests and the verification skill
 
 On start the daemon prints `keypipe started` with the rule count and the
 config path. It stays alive until SIGINT (Ctrl-C) or SIGTERM (`kill -TERM`).
+The daemon reads the config file again before each key, so a saved edit applies
+on the next keystroke with no rebuild or restart; the log says
+`keypipe reloaded` with the new rule count. An edit that does not parse is
+logged once as `keypipe reload-failed` with the reason, shown as a
+notification, and the previous rules keep running until the file is fixed.
 
 Without the key tap, typed input and the desktop state arrive explicitly.
 `--context` points at a JSON snapshot of a fake desktop; typed keys append to

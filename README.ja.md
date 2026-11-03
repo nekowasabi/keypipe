@@ -42,6 +42,11 @@ stderr を `~/.local/state/keypipe/keypipe.log`（`LOG=` で変更可）に書�
 
 起動時にデーモンはルール数と設定パスとともに `keypipe started` を出力します。
 SIGINT（Ctrl-C）または SIGTERM（`kill -TERM`）まで動作し続けます。
+デーモンはキーを受け取るたびに設定ファイルを読み直すので、保存した変更は
+ビルドも再起動もせずに次の打鍵から効きます。ログには新しいルール数とともに
+`keypipe reloaded` が出ます。読み込めない変更は、理由とともに
+`keypipe reload-failed` としてログに 1 回出て通知もされ、ファイルを直すまでは
+前のルールのまま動きます。
 
 キー取得が無い環境では、打鍵とデスクトップの状態を明示的に渡します。
 `--context` に偽デスクトップの JSON を指定し、打ったキーはその `fieldText` の
