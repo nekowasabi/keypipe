@@ -156,10 +156,12 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   `output.shell` の失敗は記録だけです。同じコマンドの言い換えはシェルの `||` で
   書き、別の行き先へ逃がすときやシェルから見えない失敗を拾うときに `onFail` を使います。
 - `name` と `icon` は任意のルール文字列です。`name` は発火したピルの表示名です
-  （スクリプトや送り先名より優先）。無いときは主の `output.shell` の最初の
-  40 文字か、組み込みの送り先名を出します。`icon` は `.app` のパス（そのアプリの
+  （スクリプトや送り先名より優先）。無いときは主の `output.shell` のスクリプトか、
+  組み込みの送り先名を出します。`icon` は `.app` のパス（そのアプリの
   アイコン）、画像のパス、絵文字などの短い文字です。省略時は状態の記号だけに
   なります。表示文は `<trigger> → <label>` で、空白の連続は 1 つにまとめます。
+  その後、`name` を含めて矢印の後の文字列を最大 40 文字（書記素）に制限し、
+  末尾の空白を除きます。
   変換の stdout や欄の文字は決して載りません。どちらも `keypipe hud` の記録行に
   JSON で載ります。
 - `hud`（最上位、真偽値、既定 true、`KeypipeConfig.hud`）。発火が終わるとデーモンは
@@ -176,8 +178,9 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
 - 未知のキー、空の `trigger` / `transform` / `output.shell`、未知の `output` や
   `focus`、`focus: textField` の無い `replaceInput`、`transform` の無い
   `onFail.transform`、失敗しない送り先（`none`、`notify`）への `onFail.output`、
-  代替への `background`、`replaceInput` へ逃がす裏の送り先、空の `name` や `icon`、
-  真偽値でない `hud`、正でない `shellTimeout`
+  代替への `background`、`replaceInput` へ逃がす裏の送り先、空または空白だけの
+  `name` や `icon`（`empty name` / `empty icon`）、真偽値でない `hud` や
+  `background`（数値の 0 と 1 も含めて `<key> must be a boolean`）、正でない `shellTimeout`
   や `backgroundTimeout` は読み込み時に `invalid config: <理由>` で拒否し、
   終了コード 1 です。
 

@@ -174,12 +174,14 @@ out of scope). Path is passed with `--config` and defaults to
   is for a different destination or for failures the shell cannot see.
 - `name` and `icon` are optional rule strings. `name` labels the fired pill
   (`Rule.name` wins over the script or sink name); without it the pill shows
-  the primary `output.shell` script truncated to its first 40 characters, or
-  the builtin sink name. `icon` (`Rule.icon`) is a `.app` path (that app's
+  the primary `output.shell` script or the builtin sink name.
+  `icon` (`Rule.icon`) is a `.app` path (that app's
   icon), an image path, or short text such as an emoji; omitted draws the
   status glyph only. The label is `<trigger> → <label>` with every run of
-  whitespace collapsed to one space; transform stdout and field text never
-  reach it. Both ride the `keypipe hud` transcript line as JSON.
+  whitespace collapsed to one space. Then the text after the arrow is capped
+  at 40 characters (graphemes), including `name`, with trailing whitespace
+  removed. Transform stdout and field text never reach it. Both ride the
+  `keypipe hud` transcript line as JSON.
 - `hud` (top level, boolean, default true, `KeypipeConfig.hud`). After a
   finished fire the daemon hides the spinner, draws the pill through
   `Desktop.showFired` as one `FiredEvent`, and emits
@@ -197,9 +199,10 @@ out of scope). Path is passed with `--config` and defaults to
   unknown `output` or `focus`, `replaceInput` without `focus: textField`,
   `onFail.transform` without `transform`, `onFail.output` on an output that
   cannot fail (`none`, `notify`), `background` on a fallback, a background
-  output falling back to `replaceInput`, an empty `name` or `icon`, a
-  non-boolean `hud`, and a non-positive `shellTimeout` or
-  `backgroundTimeout` are
+  output falling back to `replaceInput`, an empty or whitespace-only `name`
+  or `icon` (`empty name` / `empty icon`), a non-boolean `hud` or `background`
+  (`<key> must be a boolean`, including numbers 0 and 1), and a non-positive
+  `shellTimeout` or `backgroundTimeout` are
   rejected at load with `invalid config: <reason>` and exit 1.
 
 ## Terminals (zsh)

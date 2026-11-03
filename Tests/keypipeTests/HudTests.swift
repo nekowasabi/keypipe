@@ -258,4 +258,58 @@ final class HudTests: XCTestCase {
             }
         }
     }
+
+    /// Darwin's JSONSerialization hands 0 and 1 back as NSNumber, which `as? Bool` accepts;
+    /// on Linux they come back as Int, so this test fails only on a Mac until the fix.
+    func testNumericFlagsAreNotBooleans() {
+        for (json, reason) in [
+            (#"{"hud":1,"rules":[]}"#, "hud must be a boolean"),
+            (#"{"hud":0,"rules":[]}"#, "hud must be a boolean"),
+            (
+                #"{"rules":[{"trigger":"@@@","output":{"shell":"cat","background":1}}]}"#,
+                "background must be a boolean"
+            ),
+        ] {
+            XCTAssertThrowsError(try loadConfig(data: Data(json.utf8)), json) {
+                XCTAssertEqual(
+                    String(describing: $0), "keypipe: invalid config: \(reason)", json)
+            }
+        }
+    }
+
+    /// The label text is capped at 40 graphemes whatever its source, so a long name cannot
+    /// push the pill off screen; whitespace collapses first, so hidden script text shows.
+    func testLabelTextIsCappedAt40AfterCollapsingWhitespace() {
+        let longName = String(repeating: "very long rule name ", count: 40)
+        let named = Rule(
+            trigger: "@@@", output: Guarded(primary: .builtin(.notify)), name: longName)
+        XCTAssertEqual(
+            firedLabel(trigger: "@@@", rule: named),
+            "@@@ → " + String(longName.prefix(40)).trimmingCharacters(in: .whitespaces))
+        let padded = "true" + String(repeating: " ", count: 40) + "; echo hidden"
+        let script = Rule(
+            trigger: "@@@", output: Guarded(primary: .shell(ShellOutput(script: padded))))
+        XCTAssertEqual(firedLabel(trigger: "@@@", rule: script), "@@@ → true ; echo hidden")
+        let family = "👨‍👩‍👧"
+        let emoji = Rule(
+            trigger: "@@@", output: Guarded(primary: .builtin(.notify)),
+            name: String(repeating: family, count: 41))
+        XCTAssertEqual(
+            firedLabel(trigger: "@@@", rule: emoji),
+            "@@@ → " + String(repeating: family, count: 40),
+            "an emoji of several scalars counts as one grapheme")
+    }
+
+    /// A blank name would draw the pill "@@@ → " and a blank icon an empty glyph.
+    func testWhitespaceOnlyNameAndIconAreRejected() {
+        for (json, reason) in [
+            (#"{"rules":[{"trigger":"@@@","name":"   "}]}"#, "empty name"),
+            (#"{"rules":[{"trigger":"@@@","icon":" \n "}]}"#, "empty icon"),
+        ] {
+            XCTAssertThrowsError(try loadConfig(data: Data(json.utf8)), json) {
+                XCTAssertEqual(
+                    String(describing: $0), "keypipe: invalid config: \(reason)", json)
+            }
+        }
+    }
 }

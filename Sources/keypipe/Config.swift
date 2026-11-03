@@ -82,6 +82,28 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
         guard !string.isEmpty else { throw ConfigError.invalid("empty \(name)") }
         return string
     }
+    func nonblank(_ value: Any, name: String) throws -> String {
+        let string = try nonempty(value, name: name)
+        guard !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ConfigError.invalid("empty \(name)")
+        }
+        return string
+    }
+    func boolean(_ value: Any, name: String) throws -> Bool {
+        #if canImport(Darwin)
+            // Why: Darwin's JSONSerialization returns 0 and 1 as NSNumber, which `as? Bool`
+            // accepts; only a CFBoolean is a JSON true or false.
+            guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID()
+            else { throw ConfigError.invalid("\(name) must be a boolean") }
+            return number.boolValue
+        #else
+            // Why: swift-corelibs returns JSON numbers as Int or Double, never Bool.
+            guard let flag = value as? Bool else {
+                throw ConfigError.invalid("\(name) must be a boolean")
+            }
+            return flag
+        #endif
+    }
     let json: Any
     do { json = try JSONSerialization.jsonObject(with: data) } catch {
         throw ConfigError.invalid("JSON decoding failed: \(error.localizedDescription)")
@@ -99,10 +121,7 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
             let sink = try object(value, keys: primary ? ["shell", "background"] : ["shell"])
             var background = false
             if let value = sink["background"] {
-                guard let flag = value as? Bool else {
-                    throw ConfigError.invalid("background must be a boolean")
-                }
-                background = flag
+                background = try boolean(value, name: "background")
             }
             output = .shell(
                 ShellOutput(
@@ -159,10 +178,7 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
     let backgroundTimeout = try seconds("backgroundTimeout", default: 300)
     var hud = true
     if let value = root["hud"] {
-        guard let flag = value as? Bool else {
-            throw ConfigError.invalid("hud must be a boolean")
-        }
-        hud = flag
+        hud = try boolean(value, name: "hud")
     }
     guard let values = root["rules"] as? [Any] else {
         throw ConfigError.invalid("rules must be an array")
@@ -226,9 +242,9 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
             }
         }
         var name: String? = nil
-        if let value = entry["name"] { name = try nonempty(value, name: "name") }
+        if let value = entry["name"] { name = try nonblank(value, name: "name") }
         var icon: String? = nil
-        if let value = entry["icon"] { icon = try nonempty(value, name: "icon") }
+        if let value = entry["icon"] { icon = try nonblank(value, name: "icon") }
         return Rule(
             trigger: trigger, when: when, transform: transform, output: output, name: name,
             icon: icon)

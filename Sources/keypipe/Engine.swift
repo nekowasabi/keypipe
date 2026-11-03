@@ -89,8 +89,8 @@ func performWrite(_ field: Field, _ text: String, _ desktop: Desktop) -> WriteOu
 }
 
 /// The pill and transcript text for a finished fire. The rule name wins; otherwise the
-/// primary shell script truncated to its first 40 graphemes; otherwise the builtin sink name.
-/// Every run of whitespace collapses to one space, so a multiline name stays on one pill line.
+/// primary shell script; otherwise the builtin sink name. Every run of whitespace collapses
+/// to one space before the label text is capped at 40 graphemes.
 /// Never stdout or field text.
 func firedLabel(trigger: Trigger, rule: Rule) -> String {
     let raw: String
@@ -98,11 +98,12 @@ func firedLabel(trigger: Trigger, rule: Rule) -> String {
         raw = name
     } else {
         switch rule.output.primary {
-        case .shell(let shell): raw = String(shell.script.prefix(40))
+        case .shell(let shell): raw = shell.script
         case .builtin(let sink): raw = sink.rawValue
         }
     }
-    return "\(trigger) → \(raw.split(whereSeparator: \.isWhitespace).joined(separator: " "))"
+    let text = String(raw.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(40))
+    return "\(trigger) → \(text.trimmingCharacters(in: .whitespaces))"
 }
 
 /// A background fire handed to a detached job: the rule by config index, the read input,

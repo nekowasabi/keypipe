@@ -110,6 +110,33 @@ silence on blocked paths, and `ConfigTests` for `name` / `icon` /
   1.5 s failed 3 s measured, a second fire replaces the first pill, and
   each icon kind (.app, image, emoji, omitted) renders. Until then every
   claim about the visible pill is MAC_UNVERIFIED.
+- H11-H14 come from the PR #5 interrogation (2026-11-03). Each one was
+  reproduced on a Mac against origin/feat/fired-hud and fails until fixed:
+  - H11. `"hud": 0` / `1` and `"background": 1` are rejected with
+    `<key> must be a boolean`. Fix in one shared bool helper in
+    Config.swift (both call sites use `as? Bool`, which takes NSNumber 0/1
+    on Darwin). Proof: `HudTests.testNumericFlagsAreNotBooleans` (fails on
+    a Mac only; Linux JSONSerialization already yields Int).
+  - H12. A whitespace-only `name` or `icon` is rejected as `empty name` /
+    `empty icon`. Trim only for these two keys; the shared non-empty check
+    also guards trigger, transform and output.shell. Proof:
+    `HudTests.testWhitespaceOnlyNameAndIconAreRejected`.
+  - H13. The label text after the arrow is at most 40 graphemes whatever
+    its source (`name`, script, sink). Whitespace collapses first, then the
+    cut. Decided 2026-11-03: 40 characters is the cap, so the pill stays a
+    few hundred points wide and needs no screen-width layout logic. Today a
+    800-character `name` drew a 5020 pt pill on a 3008 pt screen. Proof:
+    `HudTests.testLabelTextIsCappedAt40AfterCollapsingWhitespace`; update
+    README.md / README.ja.md, which say only the script is cut.
+  - H14. The icon is meant to be an emoji or an icon (.app or image path).
+    An emoji is drawn whole: the text-glyph view is at least as wide as its
+    `sizeToFit` width. Today a rocket emoji needs 28 pt in a fixed 20 pt
+    box and is clipped. Longer text is out of scope (may be clipped). Mac
+    proof: copy FiredHUD with `private` removed and compare the glyph
+    frame to its fitting width (the original probe is kept in the session
+    scratchpad `hudprobe/`, case I4).
+  - Changing a rejection message (H11, H12) changes README.md and
+    README.ja.md in the same commit (CLAUDE.md rule table).
 - Fake feeds are independent processes and can run in parallel. H10
   needs a Mac with Accessibility granted; never script clicks at the
   pill (inactive panel, no buttons).

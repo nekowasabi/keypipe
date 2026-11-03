@@ -335,8 +335,9 @@ func frontTabURLScript(_ bundleID: String) -> String? {
             label.textColor = .white
             label.sizeToFit()
             let icon = makeIcon(event.icon, status: event.status)
+            let iconWidth = max(iconSize, icon.frame.width)
             let width =
-                padX + iconSize + spacing + label.frame.width + padX
+                padX + iconWidth + spacing + label.frame.width + padX
             let height = max(label.frame.height, iconSize) + padY * 2
             let content = NSRect(
                 x: 0, y: 0, width: ceil(width), height: ceil(height))
@@ -360,9 +361,9 @@ func frontTabURLScript(_ bundleID: String) -> String? {
             effect.layer?.cornerRadius = 10
             panel.contentView = effect
             icon.frame = NSRect(
-                x: padX, y: (content.height - iconSize) / 2, width: iconSize, height: iconSize)
+                x: padX, y: (content.height - iconSize) / 2, width: iconWidth, height: iconSize)
             label.frame = NSRect(
-                x: padX + iconSize + spacing,
+                x: padX + iconWidth + spacing,
                 y: (content.height - label.frame.height) / 2,
                 width: label.frame.width, height: label.frame.height)
             effect.addSubview(icon)
@@ -408,6 +409,7 @@ func frontTabURLScript(_ bundleID: String) -> String? {
             field.font = .systemFont(ofSize: 14)
             field.textColor = .white
             field.alignment = .center
+            field.sizeToFit()
             return field
         }
 
