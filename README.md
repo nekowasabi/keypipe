@@ -121,7 +121,7 @@ out of scope). Path is passed with `--config` and defaults to
   fire. When a browser is in front but the URL cannot be read (permission
   denied, a 1 s timeout), the fire stops with a notification instead of
   falling through to the next rule of the same trigger. In a non-browser
-  app, and on the `--line` path (zsh, voice), `url` simply does not match.
+  app, and on the `--line` path (zsh, voice) and the `--rule` path, `url` simply does not match.
   If the front app changes while the URL is read, nothing is erased or run
   (`keypipe front-changed`).
 - Every fact condition (`app`, `url`) is a list of globs (`fnmatch`, `*`
@@ -133,7 +133,7 @@ out of scope). Path is passed with `--config` and defaults to
   before any rule and before reading the field (`keypipe deny`). An entry with
   `url` must also have `app`, so no keystroke trigger asks a browser while
   another app is in front. An unreadable `url` in `deny` also stops the fire.
-  On the `--line` path (zsh, voice) there is no live read, so a `deny` entry
+  On the `--line` path (zsh, voice) and the `--rule` path there is no live read, so a `deny` entry
   with `url` never matches there and does not stop those fires.
 - keypipe never acts in a password field (`AXSecureTextField`): `keypipe
   secure`, no erase, no read, no shell.
@@ -151,7 +151,7 @@ out of scope). Path is passed with `--config` and defaults to
   notification says why.
 - `output` is `"replaceInput"` (writes the result back into the same field;
   requires `focus: textField`), `"typeText"` (types the result at the caret
-  with key events keypipe's own tap ignores; through `--line` there is no
+  with key events keypipe's own tap ignores; through `--line` and `--rule` there is no
   caret, so it fails with `unsupported`; if the front app, focus or field changed
   while the transform ran, nothing is typed and it fails with `gone`), `"notify"`, `"none"` (default), or
   `{ "shell": "..." }`, which receives the result the same way a transform
@@ -177,14 +177,17 @@ out of scope). Path is passed with `--config` and defaults to
   is not lost, and a failed `output.shell` is only logged. A plain retry of
   the same command belongs in the shell (`claude ... || curl ...`); `onFail`
   is for a different destination or for failures the shell cannot see.
-- `name` and `icon` are optional rule strings. `name` labels the fired pill
-  (`Rule.name` wins over the script or sink name); without it the pill shows
-  the primary `output.shell` script or the builtin sink name.
+- `name`, `label` and `icon` are optional rule strings. `name` is a unique
+  identifier used by `--rule NAME`. `label` is display text, never a selector.
+  A config that gave several rules the same `name` as display text is now
+  rejected (`duplicate name`); move that text to `label`.
+  The fired pill uses `label`, then `name`, then the primary `output.shell`
+  script, then the builtin sink name.
   `icon` (`Rule.icon`) is a `.app` path (that app's
   icon), an image path, or short text such as an emoji; omitted draws the
   status glyph only. The label is `<trigger> → <label>` with every run of
   whitespace collapsed to one space. Then the text after the arrow is capped
-  at 40 characters (graphemes), including `name`, with trailing whitespace
+  at 40 characters (graphemes), including `label` and `name`, with trailing whitespace
   removed. Transform stdout and field text never reach it. Both ride the
   `keypipe hud` transcript line as JSON.
 - `hud` (top level, boolean, default true, `KeypipeConfig.hud`). After a
@@ -192,7 +195,7 @@ out of scope). Path is passed with `--config` and defaults to
   `Desktop.showFired` as one `FiredEvent`, and emits
   `keypipe hud <trigger> <status>` with the label and icon: 1.5 s on success
   or background start, 3 s on failure. `hud: false` disables the pill and its
-  line entirely. `--line`, `--job`, and Linux never draw the pill, though the
+  line entirely. `--line`, `--rule`, `--job`, and Linux never draw the pill, though the
   line still reaches their stderr and logs. The visible pill is an inactive
   panel at the top-center of the screen; placement, durations, and icon
   rendering are MAC_UNVERIFIED until a Mac run proves them.
@@ -204,8 +207,9 @@ out of scope). Path is passed with `--config` and defaults to
   unknown `output` or `focus`, `replaceInput` without `focus: textField`,
   `onFail.transform` without `transform`, `onFail.output` on an output that
   cannot fail (`none`, `notify`), `background` on a fallback, a background
-  output falling back to `replaceInput`, an empty or whitespace-only `name`
-  or `icon` (`empty name` / `empty icon`), a non-boolean `hud` or `background`
+  output falling back to `replaceInput`, duplicate rule names (`duplicate name <name>`),
+  an empty or whitespace-only `name`, `label` or `icon` (`empty <key>`),
+  a non-boolean `hud` or `background`
   (`<key> must be a boolean`, including numbers 0 and 1), and a non-positive
   `shellTimeout` or `backgroundTimeout` are
   rejected at load with `invalid config: <reason>` and exit 1.
@@ -250,30 +254,51 @@ is unreadable or invalid, sourcing the widget does nothing and says nothing;
 
 ## Voice (voice-switch)
 
-The same `--line` flag lets [voice-switch](https://github.com/nekowasabi/voice-switch)
-feed a dictation into the rules, so one rule serves both the keyboard and the
-microphone. A voice-switch `command` action runs a shell command with the
-dictated text on stdin (no trailing newline) and the bundle id of the app the
-dictation was aimed at in `VOICE_SWITCH_APP`:
+Give a rule a `name`, and [voice-switch](https://github.com/nekowasabi/voice-switch)
+can run it by that name with `keypipe --rule NAME`. The shell is written once,
+in keypipe, and serves both the keyboard and the microphone.
+
+For example, one rule sends the clipboard to a webhook. Pressed as a hotkey, it
+sends the clipboard alone. Called by voice, the dictation arrives as
+`KEYPIPE_INPUT` and goes in front as a note:
+
+```json
+{ "name": "annotate", "label": "Annotate", "hotkey": "ctrl+cmd+g",
+  "output": { "shell": "t=$(pbpaste); [ -z \"$KEYPIPE_INPUT\" ] || t=$(printf '%s\\n\\n%s' \"$KEYPIPE_INPUT\" \"$t\"); curl -fsS -m 25 https://example.com/hook --form-string \"text=$t\"", "background": true } }
+```
+
+The voice-switch action only names the rule. Its `command` runs a shell command
+with the dictated text on stdin (no trailing newline) and the bundle id of the
+app the dictation was aimed at in `VOICE_SWITCH_APP`:
 
 ```json
 {
-  "name": "keypipe",
-  "wakeWords": ["キーパイプ"],
-  "command": "/usr/local/bin/keypipe --config ~/.config/keypipe/config.json --line @@@ ${VOICE_SWITCH_APP:+--app \"$VOICE_SWITCH_APP\"}",
+  "name": "annotate",
+  "wakeWords": ["注釈"],
+  "command": "/usr/local/bin/keypipe --rule annotate ${VOICE_SWITCH_APP:+--app \"$VOICE_SWITCH_APP\"}",
   "superwhisperMode": "voice_switch"
 }
 ```
 
-keypipe sees the text as the line of a focused text field in that app, as it
-does for the zsh widget. What differs from the keyboard:
+Use an absolute path: the voice-switch app's launchd `PATH` does not find
+`keypipe`. `--config` can be left out when the config is at the default path.
 
-- Only `trigger` rules fire; `hotkey` rules do not.
-- A rule needs `"when": {"focus": "textField"}` to receive the text. With the
-  default `focus: any`, the rule runs with empty input.
+What differs from the keyboard:
+
+- `--rule NAME` selects only that exact `name`, for either a `trigger` or a
+  `hotkey` rule. It never selects by `label` or falls through to another rule.
+- Both `focus: textField` and `focus: any` receive stdin unchanged, including
+  empty input, through stdin, `$1` and `KEYPIPE_INPUT` of the transform, or
+  output shell when there is no transform. Background jobs receive the same
+  input. With `--line`, `focus: any` still receives empty input.
+- Deny and `when` gates still apply. `--app` and `--report` accept either
+  `--line` or `--rule`. Combining modes or using an empty rule name exits 2
+  before loading the config. An unknown name exits 2 after loading, with empty
+  stdout even under `--report`; an invalid config takes precedence with exit 1.
+  Without `--report`, a hit exits 0 and a blocked or nonmatching fire exits 2.
 - With a `command` action, `replaceInput` has no visible effect: the rewritten
-  line goes to stdout, which voice-switch discards. voice-switch's `keypipe`
-  action runs `--line --report` instead and pastes a `replaced` result.
+  line goes to stdout, which voice-switch discards. Use `output.shell`,
+  `notify` or `background` instead.
 - `--app` is left out when `VOICE_SWITCH_APP` is empty, because `--app ""` is
   the app name `""`, not the front app.
 
@@ -292,9 +317,11 @@ auto-paste off, see voice-switch's README, keypipe delivery):
 
 ### `--report`: what the fire did
 
-`keypipe --config C --line <trigger> --report [--app <bundle id>]` runs the
+`keypipe --config C --line <trigger> --report [--app <bundle id>]` or
+`keypipe --config C --rule <name> --report [--app <bundle id>]` runs the
 same fire and prints one JSON line instead of the new line, exit 0 whenever a
-report was written (1 for a bad config, 2 for a bad argument; stderr only). voice-switch's
+report was written (1 for a bad config, 2 for a bad argument or unknown rule name;
+stderr only). Blocked and nonmatching fires also produce a report and exit 0. voice-switch's
 `keypipe` delivery uses it to paste only a `replaced` result and never the
 original text on failure.
 
@@ -341,7 +368,7 @@ TextEdit and System Events.
 - `Package.swift`: Swift package `keypipe`, executable target `keypipe`,
   test target `keypipeTests`.
 - `Sources/keypipe/main.swift`: entrypoint, `--config`, `--context`,
-  `--smoke-feed`, `--feed-stdin`, `--probe`, `--triggers`, `--line`, and the
+  `--smoke-feed`, `--feed-stdin`, `--probe`, `--triggers`, `--line`, `--rule`, and the
   macOS daemon loop. `--help` prints the usage; an unknown argument, or two
   modes at once (`--triggers --feed-stdin`), prints it and exits 2 instead of
   starting the daemon or running only one of them.

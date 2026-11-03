@@ -22,8 +22,9 @@ struct Rule: Equatable {
     var when: When = When()
     var transform: Guarded<String>? = nil
     var output: Guarded<Output> = Guarded(primary: .builtin(.none))
-    /// Pill and transcript label override. nil falls back to the output script or sink name.
+    /// Unique identifier for calls by name; also the display fallback when label is absent.
     var name: String? = nil
+    var label: String? = nil
     /// Pill icon: a .app path, an image path, or short text such as an emoji. nil is status-only.
     var icon: String? = nil
 }
@@ -221,7 +222,10 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
     let rules = try values.map { value -> Rule in
         let entry = try object(
             value,
-            keys: ["trigger", "hotkey", "when", "transform", "output", "onFail", "name", "icon"])
+            keys: [
+                "trigger", "hotkey", "when", "transform", "output", "onFail", "name", "label",
+                "icon",
+            ])
         let trigger: Trigger
         switch (entry["trigger"], entry["hotkey"]) {
         case (nil, nil): throw ConfigError.invalid("rule needs trigger or hotkey")
@@ -276,13 +280,15 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
                 }
             }
         }
-        var name: String? = nil
-        if let value = entry["name"] { name = try nonblank(value, name: "name") }
-        var icon: String? = nil
-        if let value = entry["icon"] { icon = try nonblank(value, name: "icon") }
         return Rule(
-            trigger: trigger, when: when, transform: transform, output: output, name: name,
-            icon: icon)
+            trigger: trigger, when: when, transform: transform, output: output,
+            name: try entry["name"].map { try nonblank($0, name: "name") },
+            label: try entry["label"].map { try nonblank($0, name: "label") },
+            icon: try entry["icon"].map { try nonblank($0, name: "icon") })
+    }
+    var names = Set<String>()
+    for name in rules.compactMap(\.name) where !names.insert(name).inserted {
+        throw ConfigError.invalid("duplicate name \(name)")
     }
     return KeypipeConfig(
         rules: rules, deny: deny, shellTimeout: shellTimeout, backgroundTimeout: backgroundTimeout,

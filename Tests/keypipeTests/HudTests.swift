@@ -147,10 +147,24 @@ final class HudTests: XCTestCase {
         XCTAssertEqual(hudLines(goneLines), [])
     }
 
-    func testLabelPrefersNameThenScriptThenSinkAndCollapsesWhitespace() {
+    func testLabelPrefersLabelThenNameThenScriptThenSinkAndCollapsesWhitespace() {
         func label(_ rule: Rule) -> String {
             firedLabel(trigger: "@@@", rule: rule)
         }
+        XCTAssertEqual(
+            label(
+                Rule(
+                    trigger: "@@@",
+                    output: Guarded(primary: .shell(ShellOutput(script: "grok"))),
+                    name: "grokbot", label: "Grok に送る")),
+            "@@@ → Grok に送る", "the label wins over the name")
+        XCTAssertEqual(
+            label(
+                Rule(
+                    trigger: "@@@",
+                    output: Guarded(primary: .shell(ShellOutput(script: "grok"))),
+                    label: "Grok に送る")),
+            "@@@ → Grok に送る", "the label wins over the script")
         XCTAssertEqual(
             label(
                 Rule(
@@ -231,17 +245,38 @@ final class HudTests: XCTestCase {
         XCTAssertEqual(hudLines(lines), [])
     }
 
-    func testNameIconAndHudParseWithDefaults() throws {
+    func testNameLabelIconAndHudParseWithDefaults() throws {
         let config = try loadConfig(
             data: Data(
-                #"{"hud":false,"rules":[{"trigger":"@@@","name":"My Rule","icon":"🚀"}]}"#.utf8))
+                #"{"hud":false,"rules":[{"trigger":"@@@","name":"my-rule","label":"My Rule","icon":"🚀"}]}"#
+                    .utf8))
         XCTAssertFalse(config.hud)
-        XCTAssertEqual(config.rules.first?.name, "My Rule")
+        XCTAssertEqual(config.rules.first?.name, "my-rule")
+        XCTAssertEqual(config.rules.first?.label, "My Rule")
         XCTAssertEqual(config.rules.first?.icon, "🚀")
         XCTAssertTrue(try loadConfig(data: Data(#"{"rules":[{"trigger":"@@@"}]}"#.utf8)).hud)
         let plain = try loadConfig(data: Data(#"{"rules":[{"trigger":"@@@"}]}"#.utf8))
         XCTAssertNil(plain.rules.first?.name)
+        XCTAssertNil(plain.rules.first?.label)
         XCTAssertNil(plain.rules.first?.icon)
+    }
+
+    /// Only names identify a rule: a label equal to another rule's name, or two equal labels,
+    /// are display text and load fine.
+    func testLabelsMayRepeatAndShareANameButNamesMayNot() throws {
+        let shared = try loadConfig(
+            data: Data(
+                #"{"rules":[{"trigger":"@@@","name":"a"},{"hotkey":"ctrl+cmd+g","label":"a"},{"trigger":"@@@","label":"a"}]}"#
+                    .utf8))
+        XCTAssertEqual(shared.rules.map(\.name), ["a", nil, nil])
+        XCTAssertThrowsError(
+            try loadConfig(
+                data: Data(
+                    #"{"rules":[{"trigger":"@@@","name":"a"},{"hotkey":"ctrl+cmd+g","name":"a"}]}"#
+                        .utf8))
+        ) {
+            XCTAssertEqual(String(describing: $0), "keypipe: invalid config: duplicate name a")
+        }
     }
 
     func testUnknownKeysAndShapesStillRejected() {
@@ -250,6 +285,7 @@ final class HudTests: XCTestCase {
             (#"{"frobnicate":true,"rules":[]}"#, "unknown key frobnicate"),
             (#"{"hud":"yes","rules":[]}"#, "hud must be a boolean"),
             (#"{"rules":[{"trigger":"@@@","name":""}]}"#, "empty name"),
+            (#"{"rules":[{"trigger":"@@@","label":""}]}"#, "empty label"),
             (#"{"rules":[{"trigger":"@@@","icon":""}]}"#, "empty icon"),
         ] {
             XCTAssertThrowsError(try loadConfig(data: Data(json.utf8))) {
@@ -280,12 +316,12 @@ final class HudTests: XCTestCase {
     /// The label text is capped at 40 graphemes whatever its source, so a long name cannot
     /// push the pill off screen; whitespace collapses first, so hidden script text shows.
     func testLabelTextIsCappedAt40AfterCollapsingWhitespace() {
-        let longName = String(repeating: "very long rule name ", count: 40)
-        let named = Rule(
-            trigger: "@@@", output: Guarded(primary: .builtin(.notify)), name: longName)
+        let longLabel = String(repeating: "very long rule label ", count: 40)
+        let labelled = Rule(
+            trigger: "@@@", output: Guarded(primary: .builtin(.notify)), label: longLabel)
         XCTAssertEqual(
-            firedLabel(trigger: "@@@", rule: named),
-            "@@@ → " + String(longName.prefix(40)).trimmingCharacters(in: .whitespaces))
+            firedLabel(trigger: "@@@", rule: labelled),
+            "@@@ → " + String(longLabel.prefix(40)).trimmingCharacters(in: .whitespaces))
         let padded = "true" + String(repeating: " ", count: 40) + "; echo hidden"
         let script = Rule(
             trigger: "@@@", output: Guarded(primary: .shell(ShellOutput(script: padded))))
@@ -293,17 +329,18 @@ final class HudTests: XCTestCase {
         let family = "👨‍👩‍👧"
         let emoji = Rule(
             trigger: "@@@", output: Guarded(primary: .builtin(.notify)),
-            name: String(repeating: family, count: 41))
+            label: String(repeating: family, count: 41))
         XCTAssertEqual(
             firedLabel(trigger: "@@@", rule: emoji),
             "@@@ → " + String(repeating: family, count: 40),
             "an emoji of several scalars counts as one grapheme")
     }
 
-    /// A blank name would draw the pill "@@@ → " and a blank icon an empty glyph.
-    func testWhitespaceOnlyNameAndIconAreRejected() {
+    /// A blank name or label would draw the pill "@@@ → " and a blank icon an empty glyph.
+    func testWhitespaceOnlyNameLabelAndIconAreRejected() {
         for (json, reason) in [
             (#"{"rules":[{"trigger":"@@@","name":"   "}]}"#, "empty name"),
+            (#"{"rules":[{"trigger":"@@@","label":"\t"}]}"#, "empty label"),
             (#"{"rules":[{"trigger":"@@@","icon":" \n "}]}"#, "empty icon"),
         ] {
             XCTAssertThrowsError(try loadConfig(data: Data(json.utf8)), json) {
