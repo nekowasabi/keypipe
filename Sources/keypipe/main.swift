@@ -204,13 +204,29 @@ if flags.contains("--feed-stdin") {
             stderr)
         exit(1)
     }
-    var engine = Engine(
-        config: loaded, desktop: MacDesktop(), shell: runShell, emit: emit, background: spawnJob)
+    let desktop = MacDesktop()
+    var live = LiveConfig(path: configFile, bytes: configBytes)
+    func daemonEngine(_ config: KeypipeConfig) -> Engine {
+        Engine(
+            config: config, desktop: desktop, shell: runShell, emit: emit,
+            background: {
+                startJob($0, configPath: configFile, configBytes: live.bytes, emit: emit)
+            })
+    }
+    var engine = daemonEngine(loaded)
     // Why: Engine.key blocks on shells and erase readback; the tap callback must not.
     let queue = DispatchQueue(label: "keypipe.engine")
     guard
         let tap = MacKeyTap(onInput: { input in
             queue.async {
+                let reloaded = live.poll { reason in
+                    emit("keypipe reload-failed \(jsonString(reason))")
+                    notifyUser("keypipe: config not reloaded, keeping the old rules: \(reason)")
+                }
+                if let reloaded {
+                    engine = daemonEngine(reloaded)
+                    emit("keypipe reloaded \(reloaded.rules.count) rule(s) from \(configFile)")
+                }
                 switch input {
                 case .char(let character): engine.key(character)
                 case .hotkey(let hotkey): engine.hotkey(hotkey)
