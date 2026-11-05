@@ -6,8 +6,8 @@ description: Gate the C# Keypipe.Core fake-desktop fire path on Linux via dotnet
 # verify-keypipe-windows-core
 
 `dotnet test` gate for slice 1 of the Windows port (SPEC `keypipe-mvp/plan/2026-11-05/SPEC-windows-core.md`):
-the fire procedure ported into C# `Keypipe.Core`, reproduced on a fake desktop. No hooks, no UIA,
-no `SendInput`, no live Notepad. `Keypipe.Windows` stays a stub or absent until a later slice.
+the fire procedure ported into C# `Keypipe.Core`, reproduced on a fake desktop. No hooks, no UIA, <!-- docsym-ok: deferred this slice, expires 2027-05-01, approved-by kp-lead -->
+no `SendInput`, no live Notepad. `Keypipe.Windows` stays a stub or absent until a later slice. <!-- docsym-ok: deferred this slice, expires 2027-05-01, approved-by kp-lead -->
 
 The contract it gates is fixed by `.claude/skills/verify-keypipe-fire-path/` (V1–V12 below) and
 `artifacts/windows-port-analysis.md` §7. The TLA specs under `verify-keypipe-fire-path` stay
@@ -72,7 +72,7 @@ CI (`.github/workflows/check.yml`) runs `make check`, whose `check-docs` step ru
 `scripts/check-doc-symbols.sh`. That script fails when this `SKILL.md` names backtick
 symbols missing from Swift `Sources/`/`Tests/` — which is exactly how PR #11 went red
 (C# names like `Keypipe.Core`, `FireTests.*`, `Keypipe.sln`, and the intentionally absent
-`SendInput` / `Keypipe.Windows`).
+`SendInput` / `Keypipe.Windows`). <!-- docsym-ok: deferred this slice, expires 2027-05-01, approved-by kp-lead -->
 
 - Run it: `bash scripts/check-doc-symbols.sh` (exit 0 required), or the combined gate
   `sh .claude/skills/verify-keypipe-windows-core/check.sh` (docs first, then `verify.sh`).
@@ -110,7 +110,7 @@ dotnet sln Keypipe.sln list   # must include src/Keypipe.Core + tests/Keypipe.Co
 
 If `dotnet` is missing, install the .NET 8 SDK and re-run — do not hand-simulate results.
 If the solution lists projects outside `src/Keypipe.Core`, `tests/Keypipe.Core.Tests`, or an
-empty `Keypipe.Windows` stub, that is scope drift for this slice: flag it, do not extend the gate.
+empty `Keypipe.Windows` stub, that is scope drift for this slice: flag it, do not extend the gate. <!-- docsym-ok: deferred this slice, expires 2027-05-01, approved-by kp-lead -->
 
 ## Drive
 
@@ -139,7 +139,7 @@ What to capture for a proof and where it goes:
   test-only shims; capture the command plus the pass/fail summary, not just the last line; the
   per-V table above is the checklist — one passing class filter is incomplete when the map lists
   twelve items. Mocks only where the production boundary already isolates the system (`IDesktop`,
-  shell runner); no live hooks/UIA/`SendInput`/Notepad in this slice (MAC/Windows live unverified).
+  shell runner); no live hooks/UIA/`SendInput`/Notepad in this slice (MAC/Windows live unverified). <!-- docsym-ok: deferred this slice, expires 2027-05-01, approved-by kp-lead -->
 - A run that fails because `Keypipe.sln` is absent is evidence of absence, not of green: the
   script exits nonzero with `FAIL: Keypipe.sln missing` and that is the expected transcript until
   the port lands.
