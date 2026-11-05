@@ -55,10 +55,32 @@ sh .claude/skills/verify-keypipe-windows-core/verify.sh
 sh .claude/skills/verify-keypipe-windows-core/verify.sh --filter "FullyQualifiedName~LongestMatchWins"
 ```
 
+Full PR gate (docs + C#; CI `make check` runs the docs half on macos-latest):
+
+```sh
+sh .claude/skills/verify-keypipe-windows-core/check.sh
+```
+
 `verify.sh` requires `dotnet` on `PATH` (`$HOME/.dotnet` is added inside the script, so no manual
 `export PATH` is needed) and FAILs clearly when `Keypipe.sln` is absent. It never runs TLC; to
 re-confirm the model separately: `sh .claude/skills/verify-keypipe-fire-path/check.sh`
 (TLC 1.7.4; expected FireGates 83 / FireStages 439 / EraseReadback 10 / TriggerMatch 345 states).
+
+## Docs gate (CI check-docs)
+
+CI (`.github/workflows/check.yml`) runs `make check`, whose `check-docs` step runs
+`scripts/check-doc-symbols.sh`. That script fails when this `SKILL.md` names backtick
+symbols missing from Swift `Sources/`/`Tests/` — which is exactly how PR #11 went red
+(C# names like `Keypipe.Core`, `FireTests.*`, `Keypipe.sln`, and the intentionally absent
+`SendInput` / `Keypipe.Windows`).
+
+- Run it: `bash scripts/check-doc-symbols.sh` (exit 0 required), or the combined gate
+  `sh .claude/skills/verify-keypipe-windows-core/check.sh` (docs first, then `verify.sh`).
+- Drive details and suppression rules (`docsym-ok` must sit on the SAME line) live in
+  `features/check-docs.md`.
+- This skill never deletes Windows coverage to satisfy docs: C# symbols resolve via the
+  script's `.cs` index, repo-root files resolve when present, deferred names use a marked
+  `docsym-ok` line. Swift-only strictness is unchanged.
 
 ## Launch
 
@@ -131,8 +153,11 @@ still exists at the named location.
 
 ## Helpers
 
-- `verify.sh` — the gate. Executable; invocation is shown under How to run. It adds
+- `verify.sh` — the C# gate. Executable; invocation is shown under How to run. It adds
   `$HOME/.dotnet` to `PATH` itself, errors clearly when `dotnet` or `Keypipe.sln` is missing,
   forwards extra args to `dotnet test`, and never invokes TLC/mutants.
+- `check.sh` — the PR gate (docs + C#). Runs `bash scripts/check-doc-symbols.sh` first
+  (short-circuits on docs failure, mirroring CI `make check`), then `verify.sh` with any
+  extra args forwarded. Exit 0 only when both pass.
 - `features/` — the feature map (index + one file per slice capability). Proof drives one entry
   point per run; the map lists the rest so later runs cover them.

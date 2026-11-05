@@ -8,6 +8,7 @@ point of view: what the capability is, how to reach it, how to drive it, and wha
 - [fake-desktop.md](fake-desktop.md) — fake-desktop capabilities (the port of `FakeDesktop`).
 - [erase-transform-apply.md](erase-transform-apply.md) — erase readback, transform/`onFail`, apply.
 - [trigger-matching.md](trigger-matching.md) — longest-suffix match and buffer reset.
+- [check-docs.md](check-docs.md) — the CI docs gate (`scripts/check-doc-symbols.sh`).
 
 Out of scope for this slice (do not gate here): hooks/LL keyboard, UIA read/write, IME
 measurement, terminal-class table, URL facts, HUD rendering, background Job Object, `herdr`,
