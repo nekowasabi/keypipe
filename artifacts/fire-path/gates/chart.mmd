@@ -1,0 +1,55 @@
+---
+title: "keypipe の1回の発火: ゲートとルール選択"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: 進行中
+    lg1: 一致
+    lg2: 止まった
+  }
+  class lg0 blue
+  class lg1 teal
+  class lg2 orange
+  s0: トリガーが届いた
+  s1: 止めた: 端末
+  s2: 端末を通過: ホットキー
+  s3: 止めた: 変換中
+  s4: 止めた: パスワード
+  s5: 止めた: 除外
+  s6: 止めた: 事実が読めない
+  s7: ルールを選んでいる
+  s8: 一致しなかった
+  s9: 一致した: 前面を見直す
+  s10: 止めた: 前面が変わった
+  s11: 一致: 欄を使わない
+  s12: 一致: 欄を使う
+  [*] --> s0
+  s0 --> s1: 止める [端末に欄を使わないホットキーが無い] or 止める [端末で文字トリガー]
+  s0 --> s2: 通す [端末に欄を使わないホットキーがある]
+  s0 --> s3: 止める [変換中]
+  s0 --> s4: 止める [パスワード欄]
+  s0 --> s5: 止める [除外リストに当たった]
+  s0 --> s6: 止める [除外の事実が読めない]
+  s0 --> s7: 除外に当たらない
+  s2 --> s5: 止める [除外リストに当たった]
+  s2 --> s6: 止める [除外の事実が読めない]
+  s2 --> s7: 除外に当たらない
+  s7 --> s8: どのルールも条件を満たさない
+  s7 --> s6: 事実が読めないので次のルールへは落ちない
+  s7 --> s9: 欄を使わないルールが一致 or 欄を使うルールが一致
+  s9 --> s10: 前面が変わったので消さずに止める
+  s9 --> s11: 前面はそのまま [欄を使わない]
+  s9 --> s12: 前面はそのまま [欄を使う]
+  class s0 blue
+  class s1 orange
+  class s2 blue
+  class s3 orange
+  class s4 orange
+  class s5 orange
+  class s6 orange
+  class s7 blue
+  class s8 orange
+  class s9 blue
+  class s10 orange
+  class s11 teal
+  class s12 teal
