@@ -1,6 +1,6 @@
 ---
 name: verify-keypipe-herdr-claude
-description: Verify the keypipe rule that sends the selected text to Claude Code in a new Herdr tab, from a hotkey (selection only) and from voice-switch (`keypipe --rule herdr-claude`, dictation plus selection), implemented by shell/herdr-claude.sh. Covers the prompt shape, byte-exact delivery through `herdr agent prompt`, clipboard restore, empty input, Herdr failing, no login PATH, and the live hotkey and voice runs on a Mac. Use after touching shell/herdr-claude.sh or the herdr-claude rule, or before claiming the selection or the voice reaches Claude Code in Herdr.
+description: Verify the keypipe rule that sends the selected text to Claude Code in a new Herdr tab, from a hotkey (selection only) and from voice-switch (`keypipe --rule herdr-claude`, dictation plus selection), implemented by shell/herdr-claude.sh. Covers the prompt shape, byte-exact delivery through `herdr-app do tab.new --task`, clipboard restore, empty input, Herdr failing, no login PATH, and the live hotkey and voice runs on a Mac. Use after touching shell/herdr-claude.sh or the herdr-claude rule, or before claiming the selection or the voice reaches Claude Code in Herdr.
 ---
 
 # verify-keypipe-herdr-claude
@@ -16,7 +16,7 @@ keypipe rule (`~/.config/keypipe/config.json`):
 ```json
 { "name": "herdr-claude", "label": "Claude Code (Herdr)", "hotkey": "ctrl+alt+cmd+j", "when": { "focus": "any" },
   "icon": "/Applications/Claude.app",
-  "output": { "shell": "HERDR_BIN=$HOME/.local/bin/herdr $HOME/repos/keypipe/shell/herdr-claude.sh", "background": true } }
+  "output": { "shell": "HERDR_BIN=$HOME/.local/bin/herdr-app $HOME/repos/keypipe/shell/herdr-claude.sh", "background": true } }
 ```
 
 voice-switch action (`~/.config/voice-switch/config.json`, `macOS.actions`):
@@ -35,20 +35,20 @@ fail on the real keyboard. Pick the chord from what Karabiner sends, then check 
 stays the same after it.
 
 `HERDR_CLAUDE_CWD` in the rule's shell sets the new tab's directory. Left out, the tab opens in
-the focused Herdr workspace's directory.
+the focused terminal's directory.
 
-## Herdr surface (observed 2026-11-03)
+## Herdr surface (observed 2026-11-06, herdr-core 0.1.18)
 
-- `herdr tab create --focus --label L [--cwd P]` prints JSON with `.result.root_pane.pane_id`.
-- The new pane's shell takes a moment to start. Until then `agent start` fails with
-  `agent_pane_busy`, so the script retries for up to 10 s.
-- `herdr agent start NAME --kind claude --pane ID` returns once Claude Code is ready. NAME allows
-  only `[a-z0-9_-]`, up to 32 characters. In a folder Claude Code does not trust yet, Claude stops at
-  its trust prompt and `agent start` fails with `agent_not_ready`. The home directory was such a
-  folder, so the script does not default to it.
-- `herdr agent prompt ID TEXT` submits TEXT as one argument, with no shell in between.
-- `herdr pane run ID CMD` types into the shell, so a selection with newlines would run line by line.
-  The script never uses it.
+- On 2026-11-05 Herdr moved to Herdr.app plus herdr-core. `~/.local/bin/herdr` went away, and the
+  old `herdr` 0.9.5 (Homebrew) answers `server_not_running`. Its `tab create`, `agent start` and
+  `agent prompt` no longer reach the window the user sees.
+- `herdr-app do tab.new --name N --argv '["claude"]' --task TEXT [--folder P]` opens and shows one
+  tab, starts Claude Code there and sends TEXT as its first message, as one argument with no shell
+  in between. It prints `{"space","tab","terminal"}`, or `{"error"}` and exits 1.
+- `hc read <terminal>` shows what Claude Code received; `herdr-app do tab.close --id TAB --confirmed true`
+  closes the tab.
+- In a folder Claude Code does not trust yet, Claude stops at its trust prompt before the first
+  message. The home directory was such a folder, so the script does not default to it.
 
 ## Data shape
 
@@ -77,10 +77,10 @@ config, which was already in daily use.
 ## Verification items (動作検証項目)
 
 - V1 ルールの設定が読める（S1）。
-- V2 `keypipe --rule herdr-claude --report` が `started` を返し、ジョブが herdr に `tab create`、`agent start`、`agent prompt` の順で頼む。実機では新しいタブがちょうど 1 つ増える（S2・S8）。
-- V3 改行・引用符・`$HOME`・バッククォート・`$(...)`・日本語・約 2 KB の選択が、`agent prompt` の TEXT 引数にバイト一致で届き、`pane run` は呼ばれない。終わったあとクリップボードが元に戻る（S3）。
+- V2 `keypipe --rule herdr-claude --report` が `started` を返し、ジョブが herdr-app に `do tab.new` を 1 回だけ頼む。実機では新しいタブがちょうど 1 つ増える（S2・S8）。
+- V3 改行・引用符・`$HOME`・バッククォート・`$(...)`・日本語・約 2 KB の選択が、`tab.new` の `--task` 引数にバイト一致で届き、herdr-app の呼び出しは 1 回だけ。終わったあとクリップボードが元に戻る（S3）。
 - V4 選択も音声も空なら、herdr を呼ばず exit 3、クリップボードはそのまま（S5）。
-- V5 `tab create` が失敗すると exit 1 で、プロンプト全体がクリップボードに残る（S6）。
+- V5 `tab.new` が失敗すると exit 1 で、プロンプト全体がクリップボードに残る（S6）。
 - V6 `env -i` でログインシェルの `PATH` を外しても V2 が通る。スクリプトに `/Users/` が無い（S7）。
 - V7 実機で、新しいタブの Claude Code が起動して入力を受け付ける（`LIVE=1`）。
 - V8 実機。TextEdit や CotEditor で文字を選び、実物のキーボードで ctrl+j を押す（Karabiner により ctrl+alt+cmd+j になる）。押した直後も前面のアプリが変わらず、Herdr に新しいタブが開き、Claude Code がその文字を受け取って動き出す。
@@ -104,7 +104,15 @@ also be driven with System Events: make a TextEdit document, select all, then
 
 ## Results
 
-2026-11-03, working tree on main (uncommitted):
+2026-11-06, branch fix/herdr-app (herdr-core 0.1.18):
+
+- Cause of the voice-switch failure: `HERDR_BIN=$HOME/.local/bin/herdr` no longer existed, so the
+  first herdr step failed, exit 1. Background jobs drop stderr, so jobs.log showed only `exit 1`.
+- check.sh with `LIVE=1`: ALL PASS.
+- `herdr-app do tab.new --argv '["claude"]' --task 'KEYPIPE-CHECK とだけ返して'`: `hc read` showed the
+  prompt and Claude Code's reply `KEYPIPE-CHECK`.
+
+2026-11-03, working tree on main (uncommitted), old `herdr` CLI:
 
 - check.sh with `LIVE=1`: ALL PASS.
 - Swapping dictation and selection in the script fails V5, V9 and V6. Checked, then reverted.
