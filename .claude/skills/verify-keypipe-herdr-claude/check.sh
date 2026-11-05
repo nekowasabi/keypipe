@@ -13,14 +13,17 @@ pass() { echo "PASS $1"; }
 fail() { echo "FAIL $1: $2"; fails=$((fails + 1)); }
 
 mkdir -p "$work/bin"
-cat >"$work/bin/herdr" <<'EOF'
+cat >"$work/bin/herdr-app" <<'EOF'
 #!/bin/sh
 echo "$1 $2" >>"$STUB_CALLS"
-case "$1 $2" in
-  "tab create") [ -z "${STUB_FAIL:-}" ] || exit 1
-    echo '{"result":{"root_pane":{"pane_id":"w9:pZ","cwd":"/x"}}}' ;;
-  "agent prompt") [ "$3" = w9:pZ ] || exit 1; printf '%s' "$4" >"$STUB_PROMPT" ;;
-esac
+[ "$1 $2" = "do tab.new" ] && [ -z "${STUB_FAIL:-}" ] || { echo '{"error":"stub"}'; exit 1; }
+argv=
+while [ $# -gt 0 ]; do
+  case $1 in --argv) argv=$2 ;; --task) printf '%s' "$2" >"$STUB_PROMPT" ;; esac
+  shift
+done
+[ "$argv" = '["claude"]' ] || { rm -f "$STUB_PROMPT"; exit 1; }
+echo '{"pane":"p1","terminal":"t1"}'
 EOF
 printf '#!/bin/sh\ncat "$STUB_CLIP"\n' >"$work/bin/pbpaste"
 printf '#!/bin/sh\ncat >"$STUB_CLIP"\n' >"$work/bin/pbcopy"
@@ -36,20 +39,20 @@ reset() {
 }
 calls() { tr '\n' ',' <"$STUB_CALLS" 2>/dev/null; }
 clip_is() { printf '%s' "$1" >"$work/want"; cmp -s "$work/want" "$STUB_CLIP"; }
-# Passes when the TEXT agent prompt received equals $1 byte for byte.
+# Passes when the --task tab.new received equals $1 byte for byte.
 prompt_is() { printf '%s' "$1" >"$work/want"; cmp -s "$work/want" "$STUB_PROMPT"; }
 
 # Runs the script with dictation $1 and selection $2.
 run() {
   reset "$2"
-  printf '%s' "$1" | PATH=$work/bin:/usr/bin:/bin HERDR_BIN=$work/bin/herdr "$script" 2>"$work/err"
+  printf '%s' "$1" | PATH=$work/bin:/usr/bin:/bin HERDR_BIN=$work/bin/herdr-app "$script" 2>"$work/err"
   code=$?
 }
 
 tricky=$(printf "line1 'q' \"dq\" \$HOME \`x\` \$(echo hi)\nline2 日本語\n%02000d" 0)
 run "" "$tricky"
-if [ "$code" = 0 ] && prompt_is "$tricky" && ! grep -q 'pane run' "$STUB_CALLS"; then
-  pass "V3 the selection reaches agent prompt as one argument, byte for byte, with no pane run"
+if [ "$code" = 0 ] && prompt_is "$tricky" && [ "$(calls)" = "do tab.new," ]; then
+  pass "V3 the selection reaches tab.new --task as one argument, byte for byte, in one call"
 else fail V3 "exit $code, calls: $(calls) $(cat "$work/err")"; fi
 if clip_is OLD; then pass "V3 the clipboard is restored after the copy"
 else fail V3 "clipboard left as: $(cat "$STUB_CLIP")"; fi
@@ -61,7 +64,7 @@ else fail V4 "exit $code, calls: $(calls)"; fi
 
 STUB_FAIL=1 run "要約して" "body"
 if [ "$code" = 1 ] && clip_is "$(printf '要約して\n\nbody')"; then
-  pass "V5 a failing tab create leaves the whole prompt on the clipboard"
+  pass "V5 a failing tab.new leaves the whole prompt on the clipboard"
 else fail V5 "exit $code, clipboard: $(cat "$STUB_CLIP")"; fi
 
 run "要約して" "body"
@@ -74,7 +77,7 @@ else fail V10 "exit $code, prompt: $(cat "$STUB_PROMPT" 2>/dev/null)"; fi
 
 reset body
 printf '要約して' | VOICE_SWITCH_APP=com.apple.TextEdit PATH=$work/bin:/usr/bin:/bin \
-  HERDR_BIN=$work/bin/herdr "$script" 2>/dev/null
+  HERDR_BIN=$work/bin/herdr-app "$script" 2>/dev/null
 if [ "$(head -1 "$STUB_CALLS")" = "open -b com.apple.TextEdit" ]; then
   pass "V11 VOICE_SWITCH_APP is brought forward before the copy"
 else fail V11 "calls: $(calls)"; fi
@@ -82,7 +85,7 @@ else fail V11 "calls: $(calls)"; fi
 cfg=$work/config.json
 cat >"$cfg" <<EOF
 { "rules": [ { "name": "herdr-claude", "hotkey": "ctrl+alt+cmd+j", "when": { "focus": "any" },
-  "output": { "shell": "PATH=$work/bin:/usr/bin:/bin HERDR_BIN=$work/bin/herdr $script", "background": true } } ] }
+  "output": { "shell": "PATH=$work/bin:/usr/bin:/bin HERDR_BIN=$work/bin/herdr-app $script", "background": true } } ] }
 EOF
 if "$keypipe" --config "$cfg" --triggers >/dev/null 2>&1; then pass "V1 the rule's config loads"
 else fail V1 "config rejected"; fi
@@ -103,8 +106,8 @@ if grep -q '/Users/' "$script"; then fail V6 "a user path is written into the re
 else pass "V6 no user path in the repo files"; fi
 
 if [ -n "${LIVE:-}" ]; then
-  tabs() { herdr tab list | grep -o '"tab_id":"[^"]*"' | sed 's/.*:"\(.*\)"/\1/' | sort; }
-  real=$(command -v herdr)
+  real=${HERDR_APP:-$HOME/.local/bin/herdr-app}
+  tabs() { "$real" ls | grep -o '"id": *"tb[^"]*"' | sed 's/.*"\(tb[^"]*\)"/\1/' | sort; }
   before=$(tabs)
   reset ""
   printf 'OK とだけ返して' | PATH=$work/bin:$PATH HERDR_BIN=$real HERDR_CLAUDE_CWD=$root "$script"
@@ -113,7 +116,7 @@ if [ -n "${LIVE:-}" ]; then
   if [ "$code" = 0 ] && [ "$(echo "$new" | grep -c .)" = 1 ]; then
     pass "V2/V7 live: one new Herdr tab with Claude Code in $root"
   else fail V2 "live exit $code, new tabs: $new"; fi
-  for t in $new; do herdr tab close "$t" >/dev/null; done
+  for t in $new; do "$real" do tab.close --id "$t" --confirmed true >/dev/null; done
 fi
 
 [ "$fails" = 0 ] && echo "ALL PASS" || echo "$fails FAIL"
