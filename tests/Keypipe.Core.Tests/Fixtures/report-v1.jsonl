@@ -1,0 +1,12 @@
+{"outcome":"blocked","reason":"terminal","v":1}
+{"outcome":"nomatch","v":1}
+{"fact":"url","outcome":"unreadable","reason":"timeout","v":1}
+{"outcome":"noinput","rule":0,"v":1}
+{"outcome":"replaced","rule":1,"text":"お世話になっております。\n\"引用\" $(x) `y`","v":1}
+{"fallback":true,"outcome":"replaced","rule":0,"text":"HELLO","v":1}
+{"outcome":"delivered","rule":2,"v":1}
+{"fallback":true,"outcome":"delivered","rule":0,"v":1}
+{"outcome":"started","rule":3,"v":1}
+{"failure":"exit 1","outcome":"failed","rule":0,"stage":"transform","v":1}
+{"failure":"unsupported","outcome":"failed","rule":0,"stage":"output","v":1}
+{"failure":"spawn","outcome":"failed","rule":4,"stage":"spawn","v":1}

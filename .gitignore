@@ -8,3 +8,5 @@ DerivedData/
 *.d
 .verify-evidence/
 .ooda/
+[Bb]in/
+[Oo]bj/
