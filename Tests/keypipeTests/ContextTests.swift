@@ -18,8 +18,11 @@ final class ContextTests: XCTestCase {
         XCTAssertNil(select([app, text], Snapshot(focus: .nothing)))
         XCTAssertNil(select([any], Snapshot(focus: .composing)))
         XCTAssertNil(
-            select([app, text, any], Snapshot(app: "terminal", focus: .terminal)),
+            select([text], Snapshot(app: "terminal", focus: .terminal)),
             "a terminal pane is never a field")
+        XCTAssertEqual(
+            select([text, app, any], Snapshot(app: "terminal", focus: .terminal)), app,
+            "a rule that reads no field is judged by its conditions")
     }
 
     func testFirstSatisfiedRuleWins() {

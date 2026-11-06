@@ -33,6 +33,13 @@ enum Failure: Error, Hashable {
     }
 }
 
+/// A shell stage, named as the transcript names it.
+enum ShellStage: String, CustomStringConvertible {
+    case transform
+    case outputShell = "output-shell"
+    var description: String { rawValue }
+}
+
 /// Field text once the trigger has landed, or the latest text after 100 ms.
 /// Why: the tap sees the last trigger key before the app has appended it;
 /// erasing then would remove text typed before the trigger.
@@ -123,7 +130,7 @@ struct Job: Codable, Equatable {
 }
 
 /// What one fire did. The single source for --line's exit code, --smoke-feed's hit count,
-/// --report's JSON and the voice-switch decision.
+/// --report's JSON and the pill.
 enum FireResult: Equatable {
     /// A gate stopped the fire before anything was erased or run. The word is the transcript
     /// token: terminal, composing, secure, deny (before any rule is looked at), front-changed (the
@@ -273,12 +280,7 @@ struct Engine {
         }
         var chosen: Int?
         for candidate in candidates {
-            // In a terminal the filter above already kept only focus-any rules; evaluate() itself
-            // treats a terminal as matching nothing, which is right for every other caller.
-            let when = config.rules[candidate].when
-            let verdict =
-                snapshot.focus == .terminal
-                ? when.conditions.evaluate(sheet) : evaluate(when, sheet)
+            let verdict = evaluate(config.rules[candidate].when, sheet)
             if verdict == .noMatch { continue }
             if case .unreadable(let fact, let reason) = verdict {
                 // Why: a rule meant for one site must not turn into the next rule of the trigger.
@@ -299,15 +301,9 @@ struct Engine {
         // same browser), or a field that no longer ends with the trigger (the user typed on)
         // means nothing is erased or run.
         if sheet.readSlow {
-            let now = desktop.snapshot()
-            var moved = now.app != snapshot.app || now.focus != snapshot.focus || now.secure
-            // Another field of the same app: the old one still ends with the trigger, but the
-            // Backspaces would land in the new one.
-            if !moved, let before = snapshot.field, let after = now.field,
-                !desktop.sameField(before, after)
-            {
-                moved = true
-            }
+            // Another field of the same app counts as moved: the old one still ends with the
+            // trigger, but the Backspaces would land in the new one.
+            var moved = !snapshot.isStillFront(desktop.snapshot(), desktop)
             // Why waitForTrigger and not one read: a trigger key the tap saw may still be on its way
             // into the field, exactly as on the fast path (R4e).
             if !moved, case .text(let text) = trigger, snapshot.focus == .text,
@@ -315,12 +311,7 @@ struct Engine {
             {
                 moved = !(waitForTrigger(field, text, desktop)?.hasSuffix(text) ?? false)
                 // The wait can take 0.1 s more: look at the focus once more after it.
-                if !moved {
-                    let after = desktop.snapshot()
-                    moved =
-                        after.app != snapshot.app || after.focus != snapshot.focus || after.secure
-                        || !(after.field.map { desktop.sameField(field, $0) } ?? false)
-                }
+                if !moved { moved = !snapshot.isStillFront(desktop.snapshot(), desktop) }
             }
             if moved {
                 emit("keypipe front-changed \(trigger)")
@@ -345,29 +336,33 @@ struct Engine {
         rule: Rule, index: Int, trigger: Trigger, snapshot: Snapshot, suppliedInput: String?
     ) -> FireResult {
         let input: String
-        switch (trigger, rule.when.focus) {
-        case (.text(let text), .textField):
+        switch (trigger, rule.when.focus, suppliedInput) {
+        case (_, _, .some(let supplied)):
+            // Why: a rule called by name was never typed, so there is nothing to erase.
+            emit("keypipe erase 0")
+            input = supplied
+        case (.text(let text), .textField, nil):
             guard let field = snapshot.field,
                 let erased = performErase(field, trigger: text, desktop, emit: emit)
             else { return .noInput(rule: index) }
-            input = suppliedInput ?? erased
-        case (.hotkey, .textField):
+            input = erased
+        case (.hotkey, .textField, nil):
             emit("keypipe erase 0")
             guard let field = snapshot.field, let current = desktop.text(field) else {
                 return .noInput(rule: index)
             }
-            input = suppliedInput ?? current
-        case (.text(let text), .any):
+            input = current
+        case (.text(let text), .any, nil):
             let count = snapshot.focus == .text ? text.count : 0
             if count > 0, let field = snapshot.field {
                 _ = waitForTrigger(field, text, desktop)
                 desktop.backspace(count)
             }
             emit("keypipe erase \(count)")
-            input = suppliedInput ?? ""
-        case (.hotkey, .any):
+            input = ""
+        case (.hotkey, .any, nil):
             emit("keypipe erase 0")
-            input = suppliedInput ?? ""
+            input = ""
         }
         let environment = ["KEYPIPE_APP": snapshot.app ?? ""]
         if rule.output.primary.isBackground {
@@ -417,13 +412,14 @@ struct Engine {
         _ rule: Rule, _ index: Int, _ input: String, _ environment: [String: String],
         _ origin: Snapshot?
     ) -> FireResult {
-        let trigger = rule.trigger
+        // Why: a rule called by name from voice-switch was never typed, so its trigger means nothing to the user.
+        let title = rule.label ?? rule.name ?? "\(rule.trigger)"
         var result = input
         if let transform = rule.transform {
             switch runTransform(transform, input, environment) {
             case .success(let output): result = output
             case .failure(let failure):
-                notify("\(trigger) transform failed: \(failure.message)")
+                notify("\(title) transform failed: \(failure.message)")
                 return .failed(rule: index, stage: .transform, failure: failure.token)
             }
         }
@@ -442,14 +438,14 @@ struct Engine {
             if case .builtin = rule.output.primary {
                 notify(result)
             } else if rule.output.primary.isBackground {
-                notify("\(trigger) output failed: \(failure.message)")
+                notify("\(title) output failed: \(failure.message)")
             }
             return .failed(rule: index, stage: .output, failure: failure.token)
         }
         var environment2 = environment
         environment2["KEYPIPE_FAILURE"] = failure.token
         if let second = apply(fallback, result, environment2, origin, prefix: "fallback ") {
-            notify("\(trigger) output failed: \(second.message)")
+            notify("\(title) output failed: \(second.message)")
             return .failed(rule: index, stage: .output, failure: second.token)
         }
         return success(fallback, viaFallback: true)
@@ -461,18 +457,19 @@ struct Engine {
     )
         -> Result<String, Failure>
     {
-        switch shellStage(transform.primary, input, env, prefix: "", stage: "transform") {
+        switch shellStage(transform.primary, input, env, prefix: "", stage: .transform) {
         case .success(let output): return .success(output)
         case .failure(let failure):
             guard let fallback = transform.onFail else { return .failure(failure) }
             var env = env
             env["KEYPIPE_FAILURE"] = failure.token
-            return shellStage(fallback, input, env, prefix: "fallback ", stage: "transform")
+            return shellStage(fallback, input, env, prefix: "fallback ", stage: .transform)
         }
     }
 
     private func shellStage(
-        _ script: String, _ input: String, _ env: [String: String], prefix: String, stage: String
+        _ script: String, _ input: String, _ env: [String: String], prefix: String,
+        stage: ShellStage
     )
         -> Result<String, Failure>
     {
@@ -489,7 +486,7 @@ struct Engine {
                 }
                 return .failure(.exit(status, reason: reason))
             }
-            if stage == "transform" && output.isEmpty {
+            if stage == .transform && output.isEmpty {
                 // Why: an empty result would wipe the field through replaceInput.
                 emit("keypipe \(prefix)\(stage) empty")
                 return .failure(.empty)
@@ -518,7 +515,7 @@ struct Engine {
             return nil
         case .shell(let shell):
             if case .failure(let failure) = shellStage(
-                shell.script, result, env, prefix: prefix, stage: "output-shell")
+                shell.script, result, env, prefix: prefix, stage: .outputShell)
             {
                 return failure
             }

@@ -40,16 +40,17 @@ enum BuiltinSink: String, CaseIterable {
         case .typeText:
             // Why: a transform can take seconds, and the keys go to whatever is in front then. deny,
             // the terminal gate and the password gate held only for the front at the fire.
-            guard let origin, stillAt(origin, desktop) else { return .gone }
+            guard let origin, origin.isStillFront(desktop.snapshot(), desktop) else { return .gone }
             return desktop.typeText(text) ? nil : .unsupported
         }
     }
+}
 
-    /// The same app, kind of focus and field as `origin`, and no password field.
-    private func stillAt(_ origin: Snapshot, _ desktop: Desktop) -> Bool {
-        let now = desktop.snapshot()
-        guard now.app == origin.app, now.focus == origin.focus, !now.secure else { return false }
-        switch (origin.field, now.field) {
+extension Snapshot {
+    /// `now` has the same app, kind of focus and field as this one, and no password field.
+    func isStillFront(_ now: Snapshot, _ desktop: Desktop) -> Bool {
+        guard now.app == app, now.focus == focus, !now.secure else { return false }
+        switch (field, now.field) {
         case (nil, nil): return true
         case (let before?, let after?): return desktop.sameField(before, after)
         default: return false

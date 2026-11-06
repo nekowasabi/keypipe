@@ -133,7 +133,14 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
             else { throw ConfigError.invalid("\(name) must be a boolean") }
             return number.boolValue
         #else
-            // Why: swift-corelibs returns JSON numbers as Int or Double, never Bool.
+            // Why: swift-corelibs can hand 0 and 1 back as NSNumber, which `as? Bool` accepts;
+            // a JSON true or false is the NSNumber whose type code is a C bool.
+            if let number = value as? NSNumber {
+                guard ["c", "B"].contains(String(cString: number.objCType)) else {
+                    throw ConfigError.invalid("\(name) must be a boolean")
+                }
+                return number.boolValue
+            }
             guard let flag = value as? Bool else {
                 throw ConfigError.invalid("\(name) must be a boolean")
             }
