@@ -16,13 +16,15 @@ mkdir -p "$work/bin"
 cat >"$work/bin/herdr-app" <<'EOF'
 #!/bin/sh
 echo "$1 $2" >>"$STUB_CALLS"
-[ "$1 $2" = "do tab.new" ] && [ -z "${STUB_FAIL:-}" ] || { echo '{"error":"stub"}'; exit 1; }
-argv=
-while [ $# -gt 0 ]; do
-  case $1 in --argv) argv=$2 ;; --task) printf '%s' "$2" >"$STUB_PROMPT" ;; esac
-  shift
-done
-[ "$argv" = '["claude"]' ] || { rm -f "$STUB_PROMPT"; exit 1; }
+[ "$#" = 3 ] && [ "$1 $2" = "do tab.new" ] && [ -z "${STUB_FAIL:-}" ] || { echo '{"error":"stub"}'; exit 1; }
+fields=$(/usr/bin/osascript -l JavaScript -e 'function run(a) {
+  var o = JSON.parse(a[0].slice(1));
+  return JSON.stringify(o.argv) + "\n" + o.task;
+}' "x$3") || exit 1
+[ "${fields%%
+*}" = '["claude","--"]' ] || exit 1
+printf '%s' "${fields#*
+}" >"$STUB_PROMPT"
 echo '{"pane":"p1","terminal":"t1"}'
 EOF
 printf '#!/bin/sh\ncat "$STUB_CLIP"\n' >"$work/bin/pbpaste"
@@ -52,7 +54,7 @@ run() {
 tricky=$(printf "line1 'q' \"dq\" \$HOME \`x\` \$(echo hi)\nline2 日本語\n%02000d" 0)
 run "" "$tricky"
 if [ "$code" = 0 ] && prompt_is "$tricky" && [ "$(calls)" = "do tab.new," ]; then
-  pass "V3 the selection reaches tab.new --task as one argument, byte for byte, in one call"
+  pass "V3 the selection reaches tab.new as the JSON task string, byte for byte, in one call"
 else fail V3 "exit $code, calls: $(calls) $(cat "$work/err")"; fi
 if clip_is OLD; then pass "V3 the clipboard is restored after the copy"
 else fail V3 "clipboard left as: $(cat "$STUB_CLIP")"; fi

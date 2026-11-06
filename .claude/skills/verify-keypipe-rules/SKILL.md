@@ -52,7 +52,7 @@ Transcript lines the binary prints, in both harnesses.
 | `keypipe apply-failed replaceInput ignored` / `gone` | the AXValue write did not stick / the field handle died; `onFail.output` runs if present, else the result is notified |
 | `keypipe output-shell exit <status>` / `keypipe output-shell timeout <seconds>` | output.shell finished / killed at the deadline; nonzero or timeout runs `onFail.output` if present |
 | `keypipe [fallback ]<stage> stderr <json-string>` | after a nonzero exit, the last nonempty stderr line of that shell; the failure notification ends with `: <that line>`, while the token and `KEYPIPE_FAILURE` stay `exit <n>` |
-| `keypipe fallback output-shell exit <n>` / `keypipe fallback apply ...` | result of `onFail.output`; if it fails too, `apply notify "<trigger> output failed: <reason>"` |
+| `keypipe fallback output-shell exit <n>` / `keypipe fallback apply ...` | result of `onFail.output`; if it fails too, `apply notify "<label, else name, else trigger> output failed: <reason>"` |
 | `keypipe erase-failed trigger-absent` / `rewrite-ignored` | the field did not end with the trigger / the rewrite did not stick; the fire continues with the field as read |
 | `keypipe field <json-string>` | FakeDesktop only, final field text |
 | `keypipe hud <trigger> <status> ...` | one line per fire that reaches the pill: status ok, failed, or started, then the label and the icon (H1-H8); draws only on macOS |

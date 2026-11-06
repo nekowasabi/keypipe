@@ -1,6 +1,6 @@
 ---
 name: verify-keypipe-herdr-claude
-description: Verify the keypipe rule that sends the selected text to Claude Code in a new Herdr tab, from a hotkey (selection only) and from voice-switch (`keypipe --rule herdr-claude`, dictation plus selection), implemented by shell/herdr-claude.sh. Covers the prompt shape, byte-exact delivery through `herdr-app do tab.new --task`, clipboard restore, empty input, Herdr failing, no login PATH, and the live hotkey and voice runs on a Mac. Use after touching shell/herdr-claude.sh or the herdr-claude rule, or before claiming the selection or the voice reaches Claude Code in Herdr.
+description: Verify the keypipe rule that sends the selected text to Claude Code in a new Herdr tab, from a hotkey (selection only) and from voice-switch (`keypipe --rule herdr-claude`, dictation plus selection), implemented by shell/herdr-claude.sh. Covers the prompt shape, byte-exact delivery as the task of one JSON object to `herdr-app do tab.new`, clipboard restore, empty input, Herdr failing, no login PATH, and the live hotkey and voice runs on a Mac. Use after touching shell/herdr-claude.sh or the herdr-claude rule, or before claiming the selection or the voice reaches Claude Code in Herdr.
 ---
 
 # verify-keypipe-herdr-claude
@@ -42,9 +42,16 @@ the focused terminal's directory.
 - On 2026-11-05 Herdr moved to Herdr.app plus herdr-core. `~/.local/bin/herdr` went away, and the
   old `herdr` 0.9.5 (Homebrew) answers `server_not_running`. Its `tab create`, `agent start` and
   `agent prompt` no longer reach the window the user sees.
-- `herdr-app do tab.new --name N --argv '["claude"]' --task TEXT [--folder P]` opens and shows one
-  tab, starts Claude Code there and sends TEXT as its first message, as one argument with no shell
-  in between. It prints `{"space","tab","terminal"}`, or `{"error"}` and exits 1.
+- `herdr-app do tab.new '<json>'` with one JSON object `{name, argv, task, folder?}` opens and shows
+  one tab and runs `argv` there with `task` appended as its last argument, so `claude` starts with
+  the task as its first message, with no shell in between. It prints `{"space","tab","terminal"}`,
+  or `{"error"}` and exits 1.
+- Do not pass the task as `--task TEXT`: a TEXT that parses as JSON (`42`, `null`, `[1, 2]`,
+  `{"a":1}`) is read as JSON and dropped, and Claude starts empty. And keep `--` in `argv`: a task
+  starting with `-` (a selected bullet list) is otherwise an option to `claude`, which stops at
+  `error: unknown option`. In both cases herdr-app still exits 0, so nothing reports it. The script
+  builds the JSON with `/usr/bin/osascript -l JavaScript` (`JSON.stringify`).
+- `hc get <terminal> --json` shows the argv the task ended up in (`"claude","--","<task>"`).
 - `hc read <terminal>` shows what Claude Code received; `herdr-app do tab.close --id TAB --confirmed true`
   closes the tab.
 - In a folder Claude Code does not trust yet, Claude stops at its trust prompt before the first
@@ -58,8 +65,8 @@ the focused terminal's directory.
 | dictation | empty (`focus: any` gets empty input) | stdin, so `KEYPIPE_INPUT` |
 
 prompt = dictation empty ? selection : selection empty ? dictation : dictation + "\n\n" + selection.
-Both empty means no tab. This is the same capture and order as the `grokbot` rule in the operator's
-config, which was already in daily use.
+Both empty means no tab. `shell/selection-prompt.sh` builds it (lock, copy, restore, join), and the
+`grokbot` rule in the operator's config calls the same script.
 
 ## Spec
 
@@ -78,7 +85,7 @@ config, which was already in daily use.
 
 - V1 ルールの設定が読める（S1）。
 - V2 `keypipe --rule herdr-claude --report` が `started` を返し、ジョブが herdr-app に `do tab.new` を 1 回だけ頼む。実機では新しいタブがちょうど 1 つ増える（S2・S8）。
-- V3 改行・引用符・`$HOME`・バッククォート・`$(...)`・日本語・約 2 KB の選択が、`tab.new` の `--task` 引数にバイト一致で届き、herdr-app の呼び出しは 1 回だけ。終わったあとクリップボードが元に戻る（S3）。
+- V3 改行・引用符・`$HOME`・バッククォート・`$(...)`・日本語・約 2 KB の選択が、`tab.new` に渡す JSON の `task` にバイト一致で届き、`argv` は `["claude","--"]`、herdr-app の呼び出しは 1 回だけ。終わったあとクリップボードが元に戻る（S3）。
 - V4 選択も音声も空なら、herdr を呼ばず exit 3、クリップボードはそのまま（S5）。
 - V5 `tab.new` が失敗すると exit 1 で、プロンプト全体がクリップボードに残る（S6）。
 - V6 `env -i` でログインシェルの `PATH` を外しても V2 が通る。スクリプトに `/Users/` が無い（S7）。
