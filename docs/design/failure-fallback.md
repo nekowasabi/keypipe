@@ -1,6 +1,6 @@
 # keypipe 設計案: 処理ごとのフォールバックと、構造を先に直す順序
 
-[`context-rules.md`](context-rules.md)（改訂 3）への追加。2026-10-31 の設計 arena（候補 2 本、[`arena-2026-10-31/fallback-candidate-1.md`](arena-2026-10-31/fallback-candidate-1.md) と [`fallback-candidate-2.md`](arena-2026-10-31/fallback-candidate-2.md)）の統合。実装前。
+[`context-rules.md`](context-rules.md)（改訂 3）への追加。2026-10-31 の設計 arena（候補 2 本。git 履歴の `docs/design/arena-2026-10-31/`）の統合。実装前。
 
 ## Problem
 

@@ -30,11 +30,6 @@ func startJob(_ job: Job, configPath: String, configBytes: Data, emit: (String) 
     return true
 }
 
-/// The config a job runs: the parent's bytes, never the file (it may have been edited since).
-func jobConfig(_ request: JobRequest) throws -> KeypipeConfig {
-    try loadConfig(data: request.configBytes)
-}
-
 /// ${XDG_STATE_HOME:-~/.local/state}/keypipe/jobs.log
 func jobsLogPath() -> String {
     let base =
@@ -79,7 +74,7 @@ func runJobProcess() -> Never {
     let config: KeypipeConfig
     do {
         request = try JSONDecoder().decode(JobRequest.self, from: data)
-        config = try jobConfig(request)
+        config = try loadConfig(data: request.configBytes)
     } catch {
         emit("keypipe job-failed \(jsonString("\(error)"))")
         notifyUser("keypipe: background job failed: \(error)")

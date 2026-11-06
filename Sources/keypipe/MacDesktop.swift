@@ -260,24 +260,29 @@ func frontTabURLScript(_ bundleID: String) -> String? {
 }
 
 #if os(macOS)
+    /// Why: non-activating and mouse-transparent, so the field keeps focus, the replaceInput
+    /// write still lands in it, and clicks pass through to whatever is underneath.
+    func hudPanel(_ rect: NSRect, shadow: Bool) -> NSPanel {
+        let panel = NSPanel(
+            contentRect: rect, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered,
+            defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = shadow
+        panel.ignoresMouseEvents = true
+        panel.hidesOnDeactivate = false
+        panel.level = .statusBar
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        return panel
+    }
+
     /// A small spinning indicator beside the caret while a fire runs. Main thread only.
     final class BusySpinner {
         static let shared = BusySpinner()
         private let size: CGFloat = 22
         private let arc = CAShapeLayer()
         private lazy var panel: NSPanel = {
-            let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: size, height: size),
-                styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-            // Why: non-activating and mouse-transparent, so the field keeps focus and the
-            // replaceInput write still lands in it.
-            panel.isOpaque = false
-            panel.backgroundColor = .clear
-            panel.hasShadow = false
-            panel.ignoresMouseEvents = true
-            panel.hidesOnDeactivate = false
-            panel.level = .statusBar
-            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+            let panel = hudPanel(NSRect(x: 0, y: 0, width: size, height: size), shadow: false)
             // Why: an NSProgressIndicator in this never-activated panel put a window on screen
             // but drew nothing; a Core Animation layer is drawn by the window server itself.
             let view = panel.contentView!
@@ -341,18 +346,7 @@ func frontTabURLScript(_ bundleID: String) -> String? {
             let height = max(label.frame.height, iconSize) + padY * 2
             let content = NSRect(
                 x: 0, y: 0, width: ceil(width), height: ceil(height))
-            let panel = NSPanel(
-                contentRect: content,
-                styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-            // Why: non-activating and mouse-transparent, like the spinner, so the field
-            // keeps focus and clicks pass through to whatever is under the pill.
-            panel.isOpaque = false
-            panel.backgroundColor = .clear
-            panel.hasShadow = true
-            panel.ignoresMouseEvents = true
-            panel.hidesOnDeactivate = false
-            panel.level = .statusBar
-            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+            let panel = hudPanel(content, shadow: true)
             let effect = NSVisualEffectView(frame: content)
             effect.material = .hudWindow
             effect.blendingMode = .behindWindow

@@ -380,7 +380,7 @@ It always exits 0 and prints nothing when there is nothing to add.
   macOS daemon loop. `--help` prints the usage; an unknown argument, or two
   modes at once (`--triggers --feed-stdin`), prints it and exits 2 instead of
   starting the daemon or running only one of them.
-- `Sources/keypipe/Config.swift`: the only JSON boundary, `loadConfig(path:)`
+- `Sources/keypipe/Config.swift`: the only JSON boundary, `loadConfig(data:)`
   with reason-specific rejections.
 - `Sources/keypipe/Context.swift`: `Focus`, `Field`, `Snapshot`, and the
   rule check (`evaluate`: focus, then the fact conditions in cost order; a slow

@@ -41,8 +41,27 @@ final class ReportTests: XCTestCase {
     }
 
     func testEveryKindOfOutcomeHasAGoldenLine() {
-        // Why: a new FireResult case needs a new Kind (FireResult.kind is an exhaustive switch),
+        // Why: a new FireResult case needs a new Kind (kind is an exhaustive switch),
         // and then this fails until the golden file and voice-switch's copy carry it.
-        XCTAssertEqual(Set(Self.golden.map(\.0.kind)), Set(FireResult.Kind.allCases))
+        XCTAssertEqual(Set(Self.golden.map(\.0.kind)), Set(Kind.allCases))
+    }
+}
+
+private enum Kind: CaseIterable {
+    case blocked, noMatch, unreadable, noInput, replaced, delivered, started, failed
+}
+
+extension FireResult {
+    fileprivate var kind: Kind {
+        switch self {
+        case .blocked: return .blocked
+        case .noMatch: return .noMatch
+        case .unreadable: return .unreadable
+        case .noInput: return .noInput
+        case .replaced: return .replaced
+        case .delivered: return .delivered
+        case .started: return .started
+        case .failed: return .failed
+        }
     }
 }

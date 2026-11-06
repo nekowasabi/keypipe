@@ -3,7 +3,7 @@ import Foundation
 /// Buffer capacity for TriggerMatcher, in characters.
 /// Triggers longer than this are rejected by loadConfig so no configured
 /// rule can silently never match. feed trims the buffer to this size.
-public let triggerMaxBuffer = 64
+let triggerMaxBuffer = 64
 
 /// Canonical order in a hotkey's description. Shift is not a modifier: it is
 /// folded into the key character, so ctrl+shift+a is written ctrl+A.
@@ -68,7 +68,7 @@ enum Input {
     case hotkey(Hotkey)
 }
 
-public struct TriggerMatcher {
+struct TriggerMatcher {
     private let triggers: [String]
     private let maxBuffer: Int
     private var chars: [Character] = []
@@ -76,7 +76,7 @@ public struct TriggerMatcher {
     /// Longest trigger wins when several rules match the same buffer.
     /// Ties keep config order. Streaming note: a shorter trigger fires as
     /// soon as its suffix matches, before a longer sibling can complete.
-    public init(triggers: [String], maxBuffer: Int = triggerMaxBuffer) {
+    init(triggers: [String], maxBuffer: Int = triggerMaxBuffer) {
         self.triggers = triggers.enumerated()
             .sorted {
                 if $0.element.count != $1.element.count {
@@ -88,14 +88,14 @@ public struct TriggerMatcher {
         self.maxBuffer = maxBuffer
     }
 
-    public var buffer: String { String(chars) }
+    var buffer: String { String(chars) }
 
-    public mutating func reset() {
+    mutating func reset() {
         chars.removeAll(keepingCapacity: true)
     }
 
     @discardableResult
-    public mutating func feed(_ character: Character) -> String? {
+    mutating func feed(_ character: Character) -> String? {
         chars.append(character)
         if chars.count > maxBuffer {
             chars.removeFirst(chars.count - maxBuffer)

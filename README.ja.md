@@ -342,7 +342,7 @@ cmd のどれかが押されていればホットキー、それ以外は文字�
   同時指定（`--triggers --feed-stdin`）は使い方を出して終了コード 2 で止まり、
   デーモンの起動も片方だけの実行もしません。
 - `Sources/keypipe/Config.swift`: 唯一の JSON 境界。理由付きで拒否する
-  `loadConfig(path:)`。
+  `loadConfig(data:)`。
 - `Sources/keypipe/Context.swift`: `Focus`、`Field`、`Snapshot` とルールの判定
   （`evaluate`: フォーカス、次に事実の条件を安い順に。遅い事実は、安い条件が
   満たされたときだけデスクトップから読む）。
