@@ -4,17 +4,15 @@ import XCTest
 
 final class ConfigTests: XCTestCase {
     private func load(_ text: String) throws -> KeypipeConfig {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try text.write(to: url, atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: url) }
-        return try loadConfig(path: url.path)
+        try loadConfig(data: Data(text.utf8))
     }
 
     func testLoadsExampleAndDefaults() throws {
         let example = URL(fileURLWithPath: #file).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(
                 "config.example.json")
-        XCTAssertEqual(try loadConfig(path: example.path).rules.first?.trigger, "@@@")
+        XCTAssertEqual(
+            try loadConfig(data: readConfigData(path: example.path)).rules.first?.trigger, "@@@")
         XCTAssertEqual(try load(#"{"rules":[{"trigger":"@@@"}]}"#).rules, [Rule(trigger: "@@@")])
         XCTAssertEqual(try load(#"{"rules":[]}"#).shellTimeout, 30)
         let guarded = try load(
@@ -137,6 +135,6 @@ final class ConfigTests: XCTestCase {
         ] {
             XCTAssertThrowsError(try load(json))
         }
-        XCTAssertThrowsError(try loadConfig(path: "/nonexistent/keypipe.json"))
+        XCTAssertThrowsError(try readConfigData(path: "/nonexistent/keypipe.json"))
     }
 }

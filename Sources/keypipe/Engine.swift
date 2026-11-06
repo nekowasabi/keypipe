@@ -152,24 +152,6 @@ enum FireResult: Equatable {
 
     enum Stage: String { case transform, output, spawn }
 
-    /// One per case, so a test can demand a golden --report line for every kind of outcome.
-    enum Kind: CaseIterable {
-        case blocked, noMatch, unreadable, noInput, replaced, delivered, started, failed
-    }
-
-    var kind: Kind {
-        switch self {
-        case .blocked: return .blocked
-        case .noMatch: return .noMatch
-        case .unreadable: return .unreadable
-        case .noInput: return .noInput
-        case .replaced: return .replaced
-        case .delivered: return .delivered
-        case .started: return .started
-        case .failed: return .failed
-        }
-    }
-
     /// "A rule matched", as --line's exit 0 and --smoke-feed's hits have always meant.
     var isHit: Bool {
         switch self {
@@ -498,7 +480,7 @@ struct Engine {
         }
     }
 
-    /// nil on success. A sink that cannot fail (spec.failures empty) always returns nil.
+    /// nil on success. A sink that cannot fail (!spec.canFail) always returns nil.
     private func apply(
         _ output: Output, _ result: String, _ env: [String: String], _ origin: Snapshot?,
         prefix: String

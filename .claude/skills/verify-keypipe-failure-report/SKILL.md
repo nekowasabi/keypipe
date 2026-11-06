@@ -113,7 +113,7 @@ Last confirmed that this check describes the code at commit `471df00` plus the c
 
 | Check | Covers |
 |-------|--------|
-| P1 | `Failure` (token, message), `ShellStage`, `shellStage`, the notify calls in `run(_:_:_:_:_:)`, `runTransform` in `Sources/keypipe/Engine.swift`; `runShell` stderr return and `notifyUser` in `Sources/keypipe/Shell.swift`; `runJobProcess` and `jobConfig` in `Sources/keypipe/Job.swift`; `--rule` and `--report` in `Sources/keypipe/main.swift` |
+| P1 | `Failure` (token, message), `ShellStage`, `shellStage`, the notify calls in `run(_:_:_:_:_:)`, `runTransform` in `Sources/keypipe/Engine.swift`; `runShell` stderr return and `notifyUser` in `Sources/keypipe/Shell.swift`; `runJobProcess` in `Sources/keypipe/Job.swift`; `--rule` and `--report` in `Sources/keypipe/main.swift` |
 | P2, P4, P5, P6 | all of `shell/herdr-claude.sh` and `shell/selection-prompt.sh` (P2-P5 set `KEYPIPE_BIN=false` and P6 a stub, so the real pasteboard is never read) |
 | P3 | the two above joined, as configured in `~/.config/keypipe/config.json` (rule `herdr-claude`) |
 

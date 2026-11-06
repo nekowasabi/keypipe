@@ -1,6 +1,6 @@
 # 拡張点の設計（条件・出力・voice-switch 境界）
 
-状態: 実装済み（keypipe `feat/extension-architecture`、voice-switch `feat/keypipe-delivery`）。スケッチは設計時の記録として残す。実装との差分は末尾の「実装メモ」。型とシグネチャは `docs/design/extension-sketch/` にある。`Sources/` の外に置いているので、ビルドには入らない。2026-11-01、/architect で3案を比較して1案にまとめ、ateam review（Claude・Codex・Grok の3名、相互検証つき）の指摘を受けて折衷案に改めた。
+状態: 実装済み（keypipe `feat/extension-architecture`、voice-switch `feat/keypipe-delivery`）。スケッチは設計時の記録として残す。実装との差分は末尾の「実装メモ」。型とシグネチャの正は `Sources/` にある（設計時のスケッチは git 履歴に残る）。2026-11-01、/architect で3案を比較して1案にまとめ、ateam review（Claude・Codex・Grok の3名、相互検証つき）の指摘を受けて折衷案に改めた。
 
 ## Problem
 
@@ -200,7 +200,7 @@ Context.swift 残す（V4a が照合する Snapshot と matches はここ）
 - deny の事実が読めないとき黙って止まっていた（P2）。理由を通知し `unreadable` を返す。
 - typeText: 修飾キーを押したままだと Ctrl/Cmd 付きで打たれる（P2）。合成イベントのフラグを空にした。Mac とフェイクで「打てる場所」をそろえた（テキスト欄と端末だけ）。
 - URL 取得: ウィンドウが無いとき「Automation を許可して」と誤った通知が出た（P3）。Automation 拒否（-1743）だけを unreadable にした。
-- golden 行の網羅が自己採点だった（P2）。`FireResult.Kind` で全種類をそろえることを強制し、voice-switch 側は keypipe の golden ファイルと突き合わせる。
+- golden 行の網羅が自己採点だった（P2）。テスト側の `Kind`（`ReportTests`）で全種類をそろえることを強制し、voice-switch 側は keypipe の golden ファイルと突き合わせる。
 
 残した点（判断して残した、または未確認）:
 

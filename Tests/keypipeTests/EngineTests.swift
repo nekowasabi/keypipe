@@ -87,13 +87,13 @@ final class EngineTests: XCTestCase {
             trigger: "@@@", when: When(focus: .textField), transform: Guarded(primary: "exit 3"),
             output: Guarded(primary: .builtin(.replaceInput)))
         _ = run(rules: [rule], desktop: desktop) { _, _, _, _ in
-            XCTAssertEqual(desktop.busy, [true], "shown while the transform runs")
+            XCTAssertEqual(desktop.windows, ["spin"], "shown while the transform runs")
             return .exited(3, stdout: "")
         }
-        XCTAssertEqual(desktop.busy, [true, false])
+        XCTAssertEqual(desktop.windows, ["spin", "unspin", "pill"])
         let quiet = FakeDesktop(focus: .text, fieldText: "hello")
         _ = run("@@x", rules: [rule], desktop: quiet)
-        XCTAssertEqual(quiet.busy, [], "no match, no spinner")
+        XCTAssertEqual(quiet.windows, [], "no match, no spinner")
     }
 
     func testFallbackFailureNotifiesWithoutRetrying() {
@@ -441,7 +441,8 @@ final class EngineTests: XCTestCase {
         let request = JobRequest(
             config: path, configBytes: parent, job: Job(rule: 0, input: "", environment: [:]))
         let decoded = try JSONDecoder().decode(JobRequest.self, from: JSONEncoder().encode(request))
-        XCTAssertEqual(try jobConfig(decoded).rules[0].output.primary, .shell("first"))
+        XCTAssertEqual(
+            try loadConfig(data: decoded.configBytes).rules[0].output.primary, .shell("first"))
     }
 
     func testFireReportsWhatHappened() {

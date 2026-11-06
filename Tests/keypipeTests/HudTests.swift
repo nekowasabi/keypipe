@@ -38,7 +38,7 @@ final class HudTests: XCTestCase {
             output: Guarded(primary: .builtin(.replaceInput)))
         let desktop = textField()
         let lines = drive("@@@", config: KeypipeConfig(rules: [replaced]), desktop: desktop)
-        XCTAssertEqual(desktop.busy, [true, false])
+        XCTAssertEqual(desktop.windows, ["spin", "unspin", "pill"])
         XCTAssertEqual(desktop.fired.count, 1)
         XCTAssertEqual(desktop.fired.first?.status, .ok)
         XCTAssertEqual(desktop.fired.first?.trigger, .text("@@@"))
@@ -64,7 +64,7 @@ final class HudTests: XCTestCase {
         let lines = drive(
             "@@@", config: KeypipeConfig(rules: [rule]), desktop: desktop
         ) { _, _, _, _ in .exited(3, stdout: "ignored") }
-        XCTAssertEqual(desktop.busy, [true, false])
+        XCTAssertEqual(desktop.windows, ["spin", "unspin", "pill"])
         XCTAssertEqual(desktop.fired.count, 1)
         XCTAssertEqual(desktop.fired.first?.status, .failed)
         XCTAssertEqual(desktop.fired.first?.stage, "transform")
@@ -83,7 +83,7 @@ final class HudTests: XCTestCase {
         let lines = drive(
             "&&&", config: KeypipeConfig(rules: [rule]), desktop: desktop,
             background: { _ in false })
-        XCTAssertEqual(desktop.busy, [true, false])
+        XCTAssertEqual(desktop.windows, ["spin", "unspin", "pill"])
         XCTAssertEqual(desktop.fired.count, 1)
         XCTAssertEqual(desktop.fired.first?.status, .failed)
         XCTAssertEqual(desktop.fired.first?.stage, "spawn")
@@ -120,13 +120,13 @@ final class HudTests: XCTestCase {
         for desktop in blocked {
             let lines = drive("@@@", config: config, desktop: desktop)
             XCTAssertEqual(desktop.fired, [], "no pill off the busy path")
-            XCTAssertEqual(desktop.busy, [], "no spinner either")
+            XCTAssertEqual(desktop.windows, [], "no spinner either")
             XCTAssertEqual(hudLines(lines), [])
         }
         let denied = FakeDesktop(app: "com.example.app", focus: .text, fieldText: "hello")
         let denyLines = drive("@@@", config: denyAll, desktop: denied)
         XCTAssertEqual(denied.fired, [])
-        XCTAssertEqual(denied.busy, [])
+        XCTAssertEqual(denied.windows, [])
         XCTAssertEqual(hudLines(denyLines), [])
         let unreadable = FakeDesktop(
             focus: .text, fieldText: "hello", facts: [.url: .unreadable("timeout")])
@@ -142,7 +142,7 @@ final class HudTests: XCTestCase {
         let gone = FakeDesktop(
             focus: .text, fieldText: "hello", ignoresBackspace: true, goneAfterErase: true)
         let goneLines = drive("@@@", config: config, desktop: gone)
-        XCTAssertEqual(gone.busy, [true, false], "the spinner still hides")
+        XCTAssertEqual(gone.windows, ["spin", "unspin"], "the spinner still hides")
         XCTAssertEqual(gone.fired, [], "a vanished field reports no pill")
         XCTAssertEqual(hudLines(goneLines), [])
     }
@@ -227,7 +227,7 @@ final class HudTests: XCTestCase {
         let desktop = textField()
         let lines = drive("@@@", config: KeypipeConfig(rules: [rule], hud: false), desktop: desktop)
         XCTAssertTrue(lines.contains("keypipe matched @@@ rule 0"))
-        XCTAssertEqual(desktop.busy, [true, false], "the spinner is untouched by the flag")
+        XCTAssertEqual(desktop.windows, ["spin", "unspin"], "the spinner is untouched by the flag")
         XCTAssertEqual(desktop.fired, [])
         XCTAssertEqual(hudLines(lines), [])
         XCTAssertEqual(desktop.fieldText, "HELLO")

@@ -54,10 +54,6 @@ enum ConfigError: Error, CustomStringConvertible {
     }
 }
 
-func loadConfig(path: String) throws -> KeypipeConfig {
-    try loadConfig(data: readConfigData(path: path))
-}
-
 func readConfigData(path: String) throws -> Data {
     do { return try Data(contentsOf: URL(fileURLWithPath: path)) } catch {
         throw ConfigError.unreadable(error.localizedDescription)

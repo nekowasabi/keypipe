@@ -12,13 +12,11 @@ enum BuiltinSink: String, CaseIterable {
 
     var spec: SinkSpec {
         switch self {
-        case .none: return SinkSpec(failures: [])
-        case .notify: return SinkSpec(failures: [])
+        case .none, .notify: return SinkSpec(canFail: false)
         case .replaceInput:
             return SinkSpec(
-                failures: [.ignored, .gone], needsTextField: true, writesField: true,
-                detachable: false)
-        case .typeText: return SinkSpec(failures: [.gone, .unsupported], detachable: false)
+                canFail: true, needsTextField: true, writesField: true, detachable: false)
+        case .typeText: return SinkSpec(canFail: true, detachable: false)
         }
     }
 
@@ -60,16 +58,14 @@ extension Snapshot {
 
 /// What config validation and the engine need to know about a native output.
 struct SinkSpec {
-    /// The failures `perform` can return. Empty means it cannot fail, so `onFail.output` is refused.
-    var failures: Set<Failure>
+    /// `perform` can return a failure. false means `onFail.output` is refused.
+    var canFail: Bool
     /// Writes the field it read, so the rule needs `focus: textField`.
     var needsTextField = false
     /// Success is reported as `replaced` with the text, not `delivered`.
     var writesField = false
     /// May run as the fallback of a background output (a job has no field and no caret).
     var detachable = true
-
-    var canFail: Bool { !failures.isEmpty }
 }
 
 enum Output: Equatable {

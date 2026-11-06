@@ -27,9 +27,9 @@ enum FactName: String, CaseIterable {
     }
 }
 
-/// Evaluation order inside one condition list: structural < cheap < slow.
+/// Evaluation order inside one condition list: structural < slow.
 enum FactCost: Int, Comparable {
-    case structural, cheap, slow
+    case structural, slow
     static func < (a: FactCost, b: FactCost) -> Bool { a.rawValue < b.rawValue }
 }
 
