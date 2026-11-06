@@ -31,4 +31,5 @@ fail() {
 # Why: without --folder the tab opens in the focused terminal's folder, one Claude Code already
 # trusts; an untrusted one stops the first message at Claude's trust prompt.
 out=$("$herdr" do tab.new --name claude --argv '["claude"]' --task "$prompt" \
-  ${HERDR_CLAUDE_CWD:+--folder "$HERDR_CLAUDE_CWD"} 2>&1) || fail "tab.new failed: $out"
+  ${HERDR_CLAUDE_CWD:+--folder "$HERDR_CLAUDE_CWD"} 2>&1) ||
+  fail "tab.new failed: $(printf '%s' "$out" | tr -s '\n\t ' ' ')"

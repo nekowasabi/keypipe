@@ -129,11 +129,11 @@
                 // a process can be killed at the deadline. The first read asks macOS for
                 // Automation permission for keypipe; that fire ends unreadable and notifies.
                 switch runShell("osascript -e \"$1\"", input: script, env: [:], timeout: 1) {
-                case .exited(0, let stdout):
+                case .exited(0, let stdout, _):
                     // An empty answer is a browser with no window or tab: there is no URL.
                     let url = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
                     return url.isEmpty ? .absent : .value(url)
-                case .exited(let status, _):
+                case .exited(let status, _, _):
                     // The script returns "" only for a missing window or tab, so this is a real failure.
                     return .unreadable(
                         "osascript exit \(status): Automation not allowed, or the browser did not answer"

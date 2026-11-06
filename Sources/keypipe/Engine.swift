@@ -8,20 +8,28 @@ func jsonString(_ text: String) -> String {
 
 /// Why a stage failed. The token is both the transcript word and KEYPIPE_FAILURE.
 enum Failure: Error, Hashable {
-    case exit(Int32)
+    /// `reason` is the last stderr line, or "".
+    case exit(Int32, reason: String)
     case timeout, empty, ignored, gone
     /// The desktop cannot do it at all (typeText through --line: there is no caret).
     case unsupported
 
     var token: String {
         switch self {
-        case .exit(let status): return "exit \(status)"
+        case .exit(let status, _): return "exit \(status)"
         case .timeout: return "timeout"
         case .empty: return "empty"
         case .ignored: return "ignored"
         case .gone: return "gone"
         case .unsupported: return "unsupported"
         }
+    }
+
+    /// The token plus the shell's own reason, for the notification.
+    /// Why: a background job's stderr reaches no one else.
+    var message: String {
+        guard case .exit(_, let reason) = self, !reason.isEmpty else { return token }
+        return "\(token): \(reason.prefix(200))"
     }
 }
 
@@ -415,7 +423,7 @@ struct Engine {
             switch runTransform(transform, input, environment) {
             case .success(let output): result = output
             case .failure(let failure):
-                notify("\(trigger) transform failed: \(failure.token)")
+                notify("\(trigger) transform failed: \(failure.message)")
                 return .failed(rule: index, stage: .transform, failure: failure.token)
             }
         }
@@ -434,14 +442,14 @@ struct Engine {
             if case .builtin = rule.output.primary {
                 notify(result)
             } else if rule.output.primary.isBackground {
-                notify("\(trigger) output failed: \(failure.token)")
+                notify("\(trigger) output failed: \(failure.message)")
             }
             return .failed(rule: index, stage: .output, failure: failure.token)
         }
         var environment2 = environment
         environment2["KEYPIPE_FAILURE"] = failure.token
         if let second = apply(fallback, result, environment2, origin, prefix: "fallback ") {
-            notify("\(trigger) output failed: \(second.token)")
+            notify("\(trigger) output failed: \(second.message)")
             return .failed(rule: index, stage: .output, failure: second.token)
         }
         return success(fallback, viaFallback: true)
@@ -469,9 +477,18 @@ struct Engine {
         -> Result<String, Failure>
     {
         switch shell(script, input, env, config.shellTimeout) {
-        case .exited(let status, let output):
+        case .exited(let status, let output, let errors):
             emit("keypipe \(prefix)\(stage) exit \(status)")
-            guard status == 0 else { return .failure(.exit(status)) }
+            guard status == 0 else {
+                let reason =
+                    errors.split(whereSeparator: \.isNewline).last.map {
+                        $0.trimmingCharacters(in: .whitespaces)
+                    } ?? ""
+                if !reason.isEmpty {
+                    emit("keypipe \(prefix)\(stage) stderr \(jsonString(reason))")
+                }
+                return .failure(.exit(status, reason: reason))
+            }
             if stage == "transform" && output.isEmpty {
                 // Why: an empty result would wipe the field through replaceInput.
                 emit("keypipe \(prefix)\(stage) empty")
