@@ -20,6 +20,7 @@ let usage = """
            keypipe [--config FILE] [--context FILE] --smoke-feed KEYS [--smoke-hotkey CHORD]
            keypipe [--config FILE] [--context FILE] --feed-stdin
            keypipe --probe
+           keypipe --selection-context                    links and page of the copied selection
     """
 /// The parsed command line: flags present, and the value of each flag that takes one.
 /// Why one parse: an unknown argument (a typo, --help) used to fall through and start the daemon
@@ -29,7 +30,9 @@ let (flags, values): (Set<String>, [String: String]) = {
     let takesValue: Set = [
         "--config", "--context", "--line", "--rule", "--app", "--smoke-feed", "--smoke-hotkey",
     ]
-    let alone: Set = ["--job", "--probe", "--triggers", "--report", "--feed-stdin"]
+    let alone: Set = [
+        "--job", "--probe", "--triggers", "--report", "--feed-stdin", "--selection-context",
+    ]
     func refuse(_ why: String) -> Never {
         fputs("keypipe: \(why)\n\(usage)\n", stderr)
         exit(2)
@@ -68,6 +71,7 @@ let (flags, values): (Set<String>, [String: String]) = {
     // dropped. --smoke-feed and --smoke-hotkey are one mode (they run together).
     let modes = [
         "--job", "--probe", "--triggers", "--line", "--rule", "--smoke-feed", "--feed-stdin",
+        "--selection-context",
     ].filter {
         flags.contains($0) || ($0 == "--smoke-feed" && flags.contains("--smoke-hotkey"))
     }
@@ -94,6 +98,21 @@ if flags.contains("--probe") {
     let data = try! JSONSerialization.data(
         withJSONObject: probe, options: [.sortedKeys, .withoutEscapingSlashes])
     emit(String(decoding: data, as: UTF8.self))
+    exit(0)
+}
+
+// selection-prompt.sh calls this between its Cmd+C and putting the old clipboard back.
+// Why exit 0 with nothing printed on any failure: the context is extra, the selection still goes.
+if flags.contains("--selection-context") {
+    #if os(macOS)
+        let context = selectionContext(
+            readSelectionCopy(), axLinks: selectedLinkURLs,
+            tabURL: {
+                if case .value(let url) = MacDesktop().fact(.url) { return url }
+                return nil
+            })
+        if !context.isEmpty { emit(context) }
+    #endif
     exit(0)
 }
 
