@@ -2,8 +2,8 @@ import Foundation
 
 /// `keypipe --line <trigger> --report`: one JSON line describing what the fire did.
 /// The schema is versioned by "v". Additions keep v=1; a removed or renamed key bumps it.
-/// Tests/keypipeTests/Fixtures/report-v1.jsonl holds one line per outcome, and voice-switch
-/// decodes a copy of that file, so a drift on either side fails a test.
+/// Tests/keypipeTests/Fixtures/report-v1.jsonl holds one line per outcome. The verify skills'
+/// check.sh read it; voice-switch does not (it ignores the command's stdout).
 extension FireResult {
     var reportJSON: String {
         var object: [String: Any] = ["v": 1]

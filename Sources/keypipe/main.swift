@@ -159,8 +159,10 @@ if flags.contains("--line") || flags.contains("--rule") {
         if app == nil { app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
     #endif
     let input = String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self)
+    // Why: --line's stdin is the line before the trigger the user typed; a rule called by name
+    // was never typed, so its line is the input alone.
     let suffix: String
-    if case .text(let text) = trigger { suffix = text } else { suffix = "" }
+    if named == nil, case .text(let text) = trigger { suffix = text } else { suffix = "" }
     let desktop = LineDesktop(app: app, line: input + suffix)
     // Why: stdout carries only the line, so the transcript goes to stderr.
     let toStderr: (String) -> Void = { fputs($0 + "\n", stderr) }
@@ -170,7 +172,7 @@ if flags.contains("--line") || flags.contains("--rule") {
             startJob($0, configPath: configFile, configBytes: configBytes, emit: toStderr)
         })
     let result = named.map { engine.fire(rule: $0, input: input) } ?? engine.fire(trigger)
-    // Why: --report is for callers that act on the outcome (voice-switch). Plain --line keeps
+    // Why: --report is for callers that act on the outcome (the verify skills). Plain --line keeps
     // the zsh widget's contract byte for byte: the line on stdout, exit 0 on a hit, 2 otherwise.
     if flags.contains("--report") {
         FileHandle.standardOutput.write(Data((result.reportJSON + "\n").utf8))

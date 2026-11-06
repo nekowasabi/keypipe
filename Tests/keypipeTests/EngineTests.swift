@@ -260,9 +260,7 @@ final class EngineTests: XCTestCase {
     func testFireRuleRunsOnlyThatRuleWithTheCallersInputInEveryFocus() throws {
         for trigger in [Trigger.text("@@@"), .hotkey(try Hotkey.parse("ctrl+cmd+g"))] {
             for focus in [When.Focus.any, .textField] {
-                let suffix: String
-                if case .text(let text) = trigger { suffix = text } else { suffix = "" }
-                let desktop = LineDesktop(app: "editor", line: "note" + suffix)
+                let desktop = LineDesktop(app: "editor", line: "note")
                 let rules = [
                     Rule(trigger: trigger, output: Guarded(primary: .shell("first"))),
                     Rule(
@@ -444,10 +442,6 @@ final class EngineTests: XCTestCase {
             config: path, configBytes: parent, job: Job(rule: 0, input: "", environment: [:]))
         let decoded = try JSONDecoder().decode(JobRequest.self, from: JSONEncoder().encode(request))
         XCTAssertEqual(try jobConfig(decoded).rules[0].output.primary, .shell("first"))
-        let legacy = JobRequest(config: path, configBytes: nil, job: request.job)
-        XCTAssertEqual(
-            try jobConfig(legacy).rules[0].output.primary, .shell("second"),
-            "an older parent still works")
     }
 
     func testFireReportsWhatHappened() {
@@ -539,6 +533,32 @@ final class EngineTests: XCTestCase {
                     #"keypipe output-shell stderr "herdr-claude: tab.new failed; prompt copied""#),
                 !stderr.isEmpty, "jobs.log gets the reason")
         }
+    }
+
+    func testAFailedJobIsNamedByLabelThenNameThenTrigger() {
+        var rule = Rule(
+            trigger: "&&&",
+            output: Guarded(primary: .shell(ShellOutput(script: "send", background: true))))
+        var named: [String] = []
+        let pairs: [(String?, String?)] = [
+            ("Claude Code (Herdr)", "herdr-claude"), (nil, "herdr-claude"), (nil, nil),
+        ]
+        for (label, name) in pairs {
+            rule.label = label
+            rule.name = name
+            let desktop = FakeDesktop()
+            let engine = Engine(
+                config: KeypipeConfig(rules: [rule]), desktop: desktop,
+                shell: { _, _, _, _ in .exited(1, stdout: "") }, emit: { _ in })
+            engine.run(Job(rule: 0, input: "", environment: [:]))
+            named += desktop.notifications
+        }
+        XCTAssertEqual(
+            named,
+            [
+                "Claude Code (Herdr) output failed: exit 1", "herdr-claude output failed: exit 1",
+                "&&& output failed: exit 1",
+            ])
     }
 
     func testRunShellReturnsTheChildsStderr() {

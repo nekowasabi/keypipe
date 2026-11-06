@@ -13,11 +13,14 @@ struct Snapshot: Equatable {
     var secure = false
 }
 
-/// The rule's focus requirement, then its fact conditions in cost order.
+/// The rule's focus requirement, then its fact conditions in cost order. A terminal pane is never a
+/// field, so there only a rule that reads none (focus any) can match; which triggers may fire in a
+/// terminal at all is the engine's terminal gate.
 func evaluate(_ when: When, _ sheet: FactSheet) -> Conditions.Verdict {
-    guard sheet.snapshot.focus != .composing && sheet.snapshot.focus != .terminal else {
-        return .noMatch
+    switch sheet.snapshot.focus {
+    case .composing: return .noMatch
+    case .terminal, .nothing: guard when.focus == .any else { return .noMatch }
+    case .text: break
     }
-    guard when.focus == .any || sheet.snapshot.focus == .text else { return .noMatch }
     return when.conditions.evaluate(sheet)
 }

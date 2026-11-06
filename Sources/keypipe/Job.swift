@@ -7,10 +7,10 @@ import Foundation
 /// What a background fire sends to `keypipe --job` on stdin. The input never rides in argv.
 /// `config` is the path, kept for the jobs.log line. `configBytes` is what the parent parsed;
 /// the child parses those bytes, not the file, so `job.rule` indexes the rules the parent
-/// matched even if the file was edited since. nil only from an older parent binary.
+/// matched even if the file was edited since.
 struct JobRequest: Codable {
     var config: String
-    var configBytes: Data?
+    var configBytes: Data
     var job: Job
 }
 
@@ -32,7 +32,7 @@ func startJob(_ job: Job, configPath: String, configBytes: Data, emit: (String) 
 
 /// The config a job runs: the parent's bytes, never the file (it may have been edited since).
 func jobConfig(_ request: JobRequest) throws -> KeypipeConfig {
-    try request.configBytes.map { try loadConfig(data: $0) } ?? loadConfig(path: request.config)
+    try loadConfig(data: request.configBytes)
 }
 
 /// ${XDG_STATE_HOME:-~/.local/state}/keypipe/jobs.log
