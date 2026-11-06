@@ -65,6 +65,11 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
     }
     var environment = ProcessInfo.processInfo.environment.merging(env) { _, new in new }
     environment["KEYPIPE_INPUT"] = input
+    // Why: shell/selection-prompt.sh calls back into this binary, which need not be on PATH. A
+    // caller's own value wins, so a check can stub the call out.
+    if environment["KEYPIPE_BIN"] == nil {
+        environment["KEYPIPE_BIN"] = Bundle.main.executablePath ?? CommandLine.arguments[0]
+    }
     // Typed: with Glibc the literal is otherwise inferred as an array of C pointers and does not compile.
     let argv: [String] = ["/bin/sh", "-c", script, "keypipe", input]
     let arguments: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) } + [nil]

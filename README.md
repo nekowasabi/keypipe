@@ -363,12 +363,20 @@ and never prompts. What was measured on a real Mac is in
 `.claude/skills/verify-keypipe-rules/verify.sh` drive this path through
 TextEdit and System Events.
 
+`keypipe --selection-context`, run by `shell/selection-prompt.sh` right after its
+Cmd+C, prints the links hidden behind the copied text (`リンク: URL`) and, with a
+browser in front, the page (`ページ: URL`); the script appends them to the prompt.
+Links come from the copy's HTML, or through Accessibility when the copy is plain
+text (Slack in Chrome); the page from `org.chromium.source-url`, else the front tab.
+It always exits 0 and prints nothing when there is nothing to add.
+
 ## Layout
 
 - `Package.swift`: Swift package `keypipe`, executable target `keypipe`,
   test target `keypipeTests`.
 - `Sources/keypipe/main.swift`: entrypoint, `--config`, `--context`,
-  `--smoke-feed`, `--feed-stdin`, `--probe`, `--triggers`, `--line`, `--rule`, and the
+  `--smoke-feed`, `--feed-stdin`, `--probe`, `--selection-context`, `--triggers`, `--line`,
+  `--rule`, and the
   macOS daemon loop. `--help` prints the usage; an unknown argument, or two
   modes at once (`--triggers --feed-stdin`), prints it and exits 2 instead of
   starting the daemon or running only one of them.

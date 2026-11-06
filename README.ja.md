@@ -324,12 +324,20 @@ cmd のどれかが押されていればホットキー、それ以外は文字�
 に、この経路を TextEdit と System Events で動かす検証は
 `.claude/skills/verify-keypipe-rules/verify.sh` の M0〜M4 にあります。
 
+`keypipe --selection-context` は `shell/selection-prompt.sh` が Cmd+C の直後に呼びます。
+コピーした文字の裏にあるリンク（`リンク: URL`）と、ブラウザが前面ならそのページ
+（`ページ: URL`）を出し、スクリプトがプロンプトの末尾に足します。リンクはコピーの HTML
+から、コピーが文字列だけのとき（Chrome で開いた Slack）はアクセシビリティから取ります。
+ページは `org.chromium.source-url`、無ければ前面のタブから取ります。終了コードは常に 0 で、
+足すものが無ければ何も出しません。
+
 ## 構成
 
 - `Package.swift`: Swift パッケージ `keypipe`、実行ターゲット `keypipe`、
   テストターゲット `keypipeTests`。
 - `Sources/keypipe/main.swift`: エントリーポイント、`--config`、`--context`、
-  `--smoke-feed`、`--feed-stdin`、`--probe`、`--triggers`、`--line`、`--rule`、macOS の
+  `--smoke-feed`、`--feed-stdin`、`--probe`、`--selection-context`、`--triggers`、`--line`、
+  `--rule`、macOS の
   デーモンループ。`--help` は使い方を出します。知らない引数や、2 つのモードの
   同時指定（`--triggers --feed-stdin`）は使い方を出して終了コード 2 で止まり、
   デーモンの起動も片方だけの実行もしません。

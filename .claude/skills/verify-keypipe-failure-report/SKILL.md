@@ -18,6 +18,7 @@ skill checks both promises over every case inside the bounds below, against the 
 | P3 | Through `keypipe --rule herdr-claude` (no login PATH), a Herdr failure ends as a notification that starts its reason with `herdr-claude: prompt copied to the clipboard; tab.new failed`, with the prompt on the clipboard. | The two halves each pass but the user still sees nothing useful. |
 | P4 | Two sends 0.05 to 0.6 s apart each carry their own dictation and the selection, and the old clipboard comes back. | A double press sends the user's clipboard instead of the selection, or loses the clipboard. |
 | P5 | When the Cmd+C fails, the send stops with exit 1 and the reason `could not copy the selection`, without calling herdr-app; the dictation, if any, is left on the clipboard, else the old clipboard stays. | Without Accessibility, the dictation goes out alone as if nothing had been selected. |
+| P6 | After a Cmd+C that copied something, `$KEYPIPE_BIN --selection-context` runs once and its lines follow the selection after a blank line; it does not run for an empty or failed copy, and when it fails the prompt is the one without it. | The links and the page are lost, or a failing context call stops a send that had a selection. |
 
 The prompt is dictation, a blank line, then the selection, or whichever is not empty. Both are
 taken after `$(cat)` and `$(pbpaste)`, which drop trailing newlines; that is the intended shape.
@@ -35,7 +36,7 @@ the `keypipe apply notify` line in jobs.log is the observable), and herdr-app, `
 encoding and the stub's decoding run the real `/usr/bin/osascript -l JavaScript`. Works with
 macOS's `/bin/bash` 3.2.
 
-Output: `runs: P1 33, P2 240, P3 3, P4 6, P5 2`, then `ALL PASS` or `<n> FAIL`. Each `FAIL`
+Output: `runs: P1 33, P2 240, P3 3, P4 6, P5 2, P6 4`, then `ALL PASS` or `<n> FAIL`. Each `FAIL`
 line names the case (`P1 t=... o=... f=...`, `P2 d=... s=... old=... herdr=... app=...`,
 `P4 gap=...`, `P5 d=...`) and what differed.
 
@@ -113,7 +114,7 @@ Last confirmed that this check describes the code at commit `471df00` plus the c
 | Check | Covers |
 |-------|--------|
 | P1 | `Failure` (token, message), `ShellStage`, `shellStage`, the notify calls in `run(_:_:_:_:_:)`, `runTransform` in `Sources/keypipe/Engine.swift`; `runShell` stderr return and `notifyUser` in `Sources/keypipe/Shell.swift`; `runJobProcess` and `jobConfig` in `Sources/keypipe/Job.swift`; `--rule` and `--report` in `Sources/keypipe/main.swift` |
-| P2, P4, P5 | all of `shell/herdr-claude.sh` and `shell/selection-prompt.sh` |
+| P2, P4, P5, P6 | all of `shell/herdr-claude.sh` and `shell/selection-prompt.sh` (P2-P5 set `KEYPIPE_BIN=false` and P6 a stub, so the real pasteboard is never read) |
 | P3 | the two above joined, as configured in `~/.config/keypipe/config.json` (rule `herdr-claude`) |
 
 To see whether the covered code moved since then:

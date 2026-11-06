@@ -110,6 +110,15 @@ and redraws `selection-before.mmd` / `selection-after.mmd`; copy its report over
 
 ## When implementing
 
+Status (2026-11-06): I1-I4 and I6 are in the code. `keypipe --selection-context`
+(`selectionContext` in `Sources/keypipe/SelectionContext.swift`, the pasteboard and Accessibility
+reads in `Sources/keypipe/MacSelection.swift`) prints `リンク: URL` and `ページ: URL` lines, and
+`shell/selection-prompt.sh` appends them after the selection. `SelectionContextTests` checks the
+choice of route and page; P6 of verify-keypipe-failure-report checks the script's join; a real
+Chrome run of the script printed the test page's hidden link and page. I5 (restoring non-text
+clipboards) is still open, so `before` above still describes the restore. The steps below are what
+the next change (I5) follows.
+
 1. Put the typed read where the clipboard is read today (selection-prompt.sh, `old=` and
    `selection=`); it can be a `keypipe` mode or an `osascript -l JavaScript` helper. A new mode goes
    into `modes` in the single parse in `Sources/keypipe/main.swift` (CLAUDE.md rule table). The

@@ -174,7 +174,7 @@ p2_case() {
   printf '%s' "$old" >"$STUB_CLIP"
   local herdr=$bin/herdr-app
   [ "$mode" = missing ] && herdr=$bin/no-such-herdr-app
-  printf '%s' "$d" | env ${app:+VOICE_SWITCH_APP=$app} PATH="$bin:/usr/bin:/bin" HERDR_BIN="$herdr" \
+  printf '%s' "$d" | env ${app:+VOICE_SWITCH_APP=$app} KEYPIPE_BIN=false PATH="$bin:/usr/bin:/bin" HERDR_BIN="$herdr" \
     "$script" 2>"$c/err"
   local code=$? id="P2 d=$(json "$d") s=$(json "$s") old=$(json "$old") herdr=$mode app=${app:-unset}"
   p2_runs=$((p2_runs + 1))
@@ -235,7 +235,8 @@ for mode in failML missing ok; do
     "$bin" "$herdr" "$script" >"$c/config.json"
   printf 'body' >"$c/sel"
   printf 'OLD' >"$c/clip"
-  printf '要約して' | env -i HOME="$HOME" PATH=/nonexistent STUB_MODE=$mode STUB_CALLS=$c/calls \
+  # KEYPIPE_BIN=false: the real --selection-context would read the real pasteboard and front app.
+  printf '要約して' | env -i HOME="$HOME" PATH=/nonexistent KEYPIPE_BIN=false STUB_MODE=$mode STUB_CALLS=$c/calls \
     STUB_ARGS=$c/args STUB_ARGV=$c/argv STUB_TASK=$c/task STUB_CLIP=$c/clip STUB_SELECTION=$c/sel \
     XDG_STATE_HOME=$c/state "$keypipe" --config "$c/config.json" --rule herdr-claude --report >/dev/null 2>&1
   log=$c/state/keypipe/jobs.log
@@ -262,7 +263,7 @@ for gap in 0.05 0.1 0.2 0.3 0.4 0.6; do
   printf 'SEL' >"$c/sel"
   printf 'OLD' >"$c/clip"
   for who in A B; do
-    printf '%s' "$who" | env STUB_MODE=ok STUB_CALLS=$c/calls STUB_ARGS=$c/args STUB_ARGV=$c/argv.$who \
+    printf '%s' "$who" | env KEYPIPE_BIN=false STUB_MODE=ok STUB_CALLS=$c/calls STUB_ARGS=$c/args STUB_ARGV=$c/argv.$who \
       STUB_TASK=$c/task.$who STUB_CLIP=$c/clip STUB_SELECTION=$c/sel STUB_COPY_DELAY=0.3 \
       STUB_HERDR_DELAY=0.5 PATH="$bin:/usr/bin:/bin" HERDR_BIN="$bin/herdr-app" \
       SLEEP=real "$script" 2>/dev/null &
@@ -286,7 +287,7 @@ for d in "" "指示"; do
   rm -rf "$c"; mkdir -p "$c"
   printf 'SEL' >"$c/sel"
   printf 'OLD' >"$c/clip"
-  printf '%s' "$d" | env STUB_MODE=ok STUB_COPY=fail STUB_CALLS=$c/calls STUB_ARGS=$c/args \
+  printf '%s' "$d" | env KEYPIPE_BIN=false STUB_MODE=ok STUB_COPY=fail STUB_CALLS=$c/calls STUB_ARGS=$c/args \
     STUB_ARGV=$c/argv STUB_TASK=$c/task STUB_CLIP=$c/clip STUB_SELECTION=$c/sel \
     PATH="$bin:/usr/bin:/bin" HERDR_BIN="$bin/herdr-app" "$script" 2>"$c/err"
   code=$?
@@ -298,7 +299,41 @@ for d in "" "指示"; do
   [ "$(cat "$c/clip")" = "$want" ] || bad "$id" "clipboard '$(cat "$c/clip")', want '$want'"
 done
 
-echo "runs: P1 $p1_runs, P2 $p2_runs, P3 $p3_runs, P4 $p4_runs, P5 $p5_runs"
+# P6 ------------------------------------------------------------------------------------------
+# keypipe --selection-context (links, page) joins the selection after a blank line, runs only when
+# something was copied, and never stops the send when it fails.
+p6_runs=0
+printf '#!/bin/sh\necho ctx >>"$STUB_CALLS"\nprintf "リンク: https://x.test/\\n"\nexit "${STUB_CTX_EXIT:-0}"\n' \
+  >"$bin/keypipe-ctx"
+chmod +x "$bin/keypipe-ctx"
+for p6 in "SEL:0:ok" "SEL:1:ok" ":0:ok" "SEL:0:fail"; do
+  s=${p6%%:*} rest=${p6#*:}
+  ctx_exit=${rest%%:*} copy=${rest#*:}
+  c=$work/p6
+  rm -rf "$c"; mkdir -p "$c"
+  printf '%s' "$s" >"$c/sel"
+  printf 'OLD' >"$c/clip"
+  out=$(printf '指示' | env STUB_COPY=$copy STUB_CTX_EXIT=$ctx_exit STUB_CALLS=$c/calls \
+    STUB_CLIP=$c/clip STUB_SELECTION=$c/sel KEYPIPE_BIN="$bin/keypipe-ctx" \
+    PATH="$bin:/usr/bin:/bin" "$root/shell/selection-prompt.sh" 2>/dev/null)
+  code=$?
+  p6_runs=$((p6_runs + 1))
+  id="P6 s=$(json "$s") ctx_exit=$ctx_exit copy=$copy"
+  asked=$(grep -c '^ctx$' "$c/calls" 2>/dev/null)
+  case $s:$ctx_exit:$copy in
+    SEL:0:ok) want=$(printf '指示\n\nSEL\n\nリンク: https://x.test/') ;;
+    *) want=$([ "$copy" = ok ] && printf '指示%s' "${s:+$(printf '\n\n%s' "$s")}") ;;
+  esac
+  [ "$s:$copy" = SEL:ok ] && wantAsk=1 || wantAsk=0
+  [ "${asked:-0}" = "$wantAsk" ] || bad "$id" "--selection-context ran ${asked:-0} times, want $wantAsk"
+  if [ "$copy" = ok ]; then
+    [ "$code" = 0 ] && [ "$out" = "$want" ] || bad "$id" "exit $code, prompt $(json "$out"), want $(json "$want")"
+  fi
+  [ "$(cat "$c/clip")" = "$([ "$copy" = ok ] && echo OLD || echo 指示)" ] ||
+    bad "$id" "clipboard '$(cat "$c/clip")'"
+done
+
+echo "runs: P1 $p1_runs, P2 $p2_runs, P3 $p3_runs, P4 $p4_runs, P5 $p5_runs, P6 $p6_runs"
 for id in $KNOWN; do
   if grep -qx "$id" "$work/seen" 2>/dev/null; then echo "FINDING $id (known, see SKILL.md)"
   else echo "FIXED? $id no longer reproduces: remove it from KNOWN and the SKILL.md findings"; fi
