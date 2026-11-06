@@ -6,6 +6,7 @@
 - `before.cfg` / `after.cfg`: 検査する規則は同じ4つ（下表）。
 - `view.mjs`: 図の言葉。
 - `before.mmd` / `after.mmd`: 生成した図。`*-report.md` は規則ごとの結果と、破れた経路。
+- `SelectionCapture.tla` と `selection-*`: テキスト選択の取り込み（`shell/selection-prompt.sh`）の図。末尾の「テキスト選択時の流れ」を参照。
 
 ## 検査する規則（verify-keypipe-trigger の計画項目に対応）
 
@@ -271,3 +272,170 @@ stateDiagram-v2
   class s17 teal
   class s18 orange
 ```
+
+## テキスト選択時の流れ（selection-prompt.sh）
+
+ホットキー（herdr-claude・grokbot）や `keypipe --rule herdr-claude` で選択を送るとき、1回の取り込みを `SelectionCapture.tla` で追う。定数 `After` が FALSE なら今のスクリプト（`pbpaste` でテキストだけ読む）、TRUE なら計画中の設計（コピーの HTML と `org.chromium.source-url` も読み、HTML が無いときはアクセシビリティで選択範囲のリンクを問い合わせ、元のクリップボードを型ごと戻す）。Chrome で開いた Slack はコピーをテキストだけに差し替えるので（2026-11-06 に確認）、リンク先はアクセシビリティ経由でしか取れない。規則・実現可能性の確認結果・実行方法は `.claude/skills/verify-keypipe-selection-context/SKILL.md` にある。
+
+| 規則 | 読み手の言葉 | 項目 | 今 | 計画 |
+|---|---|---|---|---|
+| HrefNeverDropped | 文字の裏のリンク先を落とさない | I2 | 破れる | 成り立つ |
+| BrowserUrlAttached | ブラウザなら、どのページの文か添える | I3 | 破れる | 成り立つ |
+| PageUrlOnlyFromBrowser | ページ URL はブラウザのときだけ（Slack のアプリ URL は添えない） | I4 | 成り立つ | 成り立つ |
+| OldClipboardRestored | 元のクリップボードは画像なども含めて戻る | I5 | 破れる | 成り立つ |
+| FailedCopyNotSent | Cmd+C が失敗したら送らずに失敗を伝える | I6 | 成り立つ | 成り立つ |
+
+今のスクリプトで破れる経路（`selection-before-report.md` より）:
+
+- **リンク先を落とさない**（5ステップ）: ホットキー [Chrome] → 退避して空にする → Cmd+C（テキスト+HTML+source-url）→ コピーを読む（`pbpaste` はテキストだけ）→ 戻す → プロンプトを出した: リンク先を落とした。害: 「こちら」だけが送られ、リンク先が分からない。
+- **ページを添える**（5ステップ）: 同じ経路で、source-url がコピーにあるのに読まない。害: どのページの文か Claude に伝わらない。
+- **元のクリップボードを戻す**（4ステップ）: ホットキー → 退避（テキストだけ）→ Cmd+C 失敗 → 戻す [画像などが消えた] → exit 1。害: 送る前にコピーしていた画像が消える。
+
+図を作り直すときは `/statechart` スキルに `SelectionCapture.tla`、設定 `selection-before.cfg` か `selection-after.cfg`、図の言葉 `selection-view.mjs` を渡し、出力の `chart.mmd` と `report.md` を `selection-*.mmd` と `selection-*-report.md` に写す。省いたもの: ロック、2回の送信の競合、音声入力、送り先（`verify-keypipe-failure-report` が実コードで検査する）。図は Slack デスクトップ版と Safari が書く型、および Chrome 以外でのアクセシビリティの答えを未検証として、ありうる組み合わせをすべて描く。
+
+### 計画の図
+
+```mermaid
+---
+title: "テキスト選択の1回の取り込み: selection-prompt.sh"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: 進行中
+    lg1: 送った
+    lg2: 止まった
+  }
+  class lg0 blue
+  class lg1 teal
+  class lg2 orange
+  s0: ホットキーが届いた [Chrome]
+  s1: ホットキーが届いた [テキストだけのアプリ]
+  s2: ホットキーが届いた [Safari]
+  s3: ホットキーが届いた [Slack]
+  s4: 退避して空にした [Chrome]
+  s5: 退避して空にした [テキストだけのアプリ]
+  s6: 退避して空にした [Safari]
+  s7: 退避して空にした [Slack]
+  s8: Cmd+C が失敗した
+  s9: コピーされた: テキスト [ブラウザ]
+  s10: コピーされた: テキスト [テキストだけのアプリ]
+  s11: コピーされた: テキスト [Slack]
+  s12: コピーされた: テキスト+source-url [Slack]
+  s13: コピーされた: テキスト+HTML [ブラウザ]
+  s14: コピーされた: テキスト+HTML [Slack]
+  s15: コピーされた: テキスト+HTML+source-url [ブラウザ]
+  s16: コピーされた: テキスト+HTML+source-url [Slack]
+  s17: 読み取った: ページ URL なし
+  s18: 読み取った: リンク先あり#12539;ページ URL なし
+  s19: 読み取った: ページ URL#65288;source-url#65289;
+  s20: 読み取った: リンク先あり#12539;ページ URL#65288;source-url#65289;
+  s21: 読み取った: ページ URL#65288;タブ#65289;
+  s22: 読み取った: リンク先あり#12539;ページ URL#65288;タブ#65289;
+  s23: 元のクリップボードを戻した#65288;Cmd+C 失敗#65289;
+  s24: 失敗を報告した
+  s25: 戻した: ページ URL なし
+  s26: 戻した: リンク先あり#12539;ページ URL なし
+  s27: 戻した: ページ URL#65288;source-url#65289;
+  s28: 戻した: リンク先あり#12539;ページ URL#65288;source-url#65289;
+  s29: 戻した: ページ URL#65288;タブ#65289;
+  s30: 戻した: リンク先あり#12539;ページ URL#65288;タブ#65289;
+  s31: プロンプトを出した: ページ URL なし
+  s32: プロンプトを出した: リンク先あり#12539;ページ URL なし
+  s33: プロンプトを出した: ページ URL#65288;source-url#65289;
+  s34: プロンプトを出した: リンク先あり#12539;ページ URL#65288;source-url#65289;
+  s35: プロンプトを出した: ページ URL#65288;タブ#65289;
+  s36: プロンプトを出した: リンク先あり#12539;ページ URL#65288;タブ#65289;
+  [*] --> s0
+  [*] --> s1
+  [*] --> s2
+  [*] --> s3
+  s0 --> s4: ロックを取り#12289;退避して空にする
+  s1 --> s5: ロックを取り#12289;退避して空にする
+  s2 --> s6: ロックを取り#12289;退避して空にする
+  s3 --> s7: ロックを取り#12289;退避して空にする
+  s4 --> s8: Cmd+C [失敗]
+  s4 --> s9: Cmd+C
+  s4 --> s15: Cmd+C
+  s5 --> s8: Cmd+C [失敗]
+  s5 --> s10: Cmd+C
+  s6 --> s8: Cmd+C [失敗]
+  s6 --> s9: Cmd+C
+  s6 --> s13: Cmd+C
+  s7 --> s8: Cmd+C [失敗]
+  s7 --> s11: Cmd+C
+  s7 --> s12: Cmd+C
+  s7 --> s14: Cmd+C
+  s7 --> s16: Cmd+C
+  s8 --> s23: 元のクリップボードを戻す
+  s9 --> s17: コピーを読む or コピーを読む [タブ URL が読めない]
+  s9 --> s21: コピーを読む [タブ URL を読む]
+  s10 --> s17: コピーを読む
+  s11 --> s17: コピーを読む
+  s12 --> s17: コピーを読む
+  s13 --> s17: コピーを読む or コピーを読む [タブ URL が読めない]
+  s13 --> s21: コピーを読む [タブ URL を読む]
+  s13 --> s18: コピーを読む or コピーを読む [タブ URL が読めない]
+  s13 --> s22: コピーを読む [タブ URL を読む]
+  s14 --> s17: コピーを読む
+  s14 --> s18: コピーを読む
+  s15 --> s19: コピーを読む
+  s15 --> s20: コピーを読む
+  s16 --> s17: コピーを読む
+  s16 --> s18: コピーを読む
+  s9 --> s18: コピーを読む or コピーを読む [タブ URL が読めない]
+  s9 --> s22: コピーを読む [タブ URL を読む]
+  s11 --> s18: コピーを読む
+  s12 --> s18: コピーを読む
+  s17 --> s25: 元のクリップボードを戻す
+  s18 --> s26: 元のクリップボードを戻す
+  s19 --> s27: 元のクリップボードを戻す
+  s20 --> s28: 元のクリップボードを戻す
+  s21 --> s29: 元のクリップボードを戻す
+  s22 --> s30: 元のクリップボードを戻す
+  s23 --> s24: exit 1
+  s25 --> s31: プロンプトを出す
+  s26 --> s32: プロンプトを出す
+  s27 --> s33: プロンプトを出す
+  s28 --> s34: プロンプトを出す
+  s29 --> s35: プロンプトを出す
+  s30 --> s36: プロンプトを出す
+  class s0 blue
+  class s1 blue
+  class s2 blue
+  class s3 blue
+  class s4 blue
+  class s5 blue
+  class s6 blue
+  class s7 blue
+  class s8 blue
+  class s9 blue
+  class s10 blue
+  class s11 blue
+  class s12 blue
+  class s13 blue
+  class s14 blue
+  class s15 blue
+  class s16 blue
+  class s17 blue
+  class s18 blue
+  class s19 blue
+  class s20 blue
+  class s21 blue
+  class s22 blue
+  class s23 blue
+  class s24 orange
+  class s25 blue
+  class s26 blue
+  class s27 blue
+  class s28 blue
+  class s29 blue
+  class s30 blue
+  class s31 teal
+  class s32 teal
+  class s33 teal
+  class s34 teal
+  class s35 teal
+  class s36 teal
+```
+
+今のスクリプトの図は `selection-before.mmd`。

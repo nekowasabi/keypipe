@@ -1,0 +1,144 @@
+---
+title: "テキスト選択の1回の取り込み: selection-prompt.sh"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: 進行中
+    lg1: 送った
+    lg2: 止まった
+    lg3: Breaks BrowserUrlAttached or HrefNeverDropped or OldClipboardRestored
+    lg4: Breaks BrowserUrlAttached or HrefNeverDropped in some cases
+    lg5: Path to the BrowserUrlAttached or HrefNeverDropped or OldClipboardRestored bug
+  }
+  class lg0 blue
+  class lg1 teal
+  class lg2 orange
+  class lg3 breaks
+  class lg4 mayBreak
+  class lg5 bugPath
+  s0: ホットキーが届いた [Chrome]
+  s1: ホットキーが届いた [テキストだけのアプリ]
+  s2: ホットキーが届いた [Safari]
+  s3: ホットキーが届いた [Slack]
+  s4: 退避して空にした [Chrome]
+  s5: 退避して空にした [テキストだけのアプリ]
+  s6: 退避して空にした [Safari]
+  s7: 退避して空にした [Slack]
+  s8: Cmd+C が失敗した
+  s9: コピーされた: テキスト [ブラウザ]
+  s10: コピーされた: テキスト [テキストだけのアプリ]
+  s11: コピーされた: テキスト [Slack]
+  s12: コピーされた: テキスト+source-url [Slack]
+  s13: コピーされた: テキスト+HTML [ブラウザ]
+  s14: コピーされた: テキスト+HTML [Slack]
+  s15: コピーされた: テキスト+HTML+source-url [ブラウザ]
+  s16: コピーされた: テキスト+HTML+source-url [Slack]
+  s17: 読み取った: ページ URL なし
+  s18: 読み取った: リンク先を落とした#12539;ページ URL なし
+  s19: 元のクリップボードを戻した#65288;Cmd+C 失敗#65289;
+  s20: 元のクリップボードを戻した#65288;Cmd+C 失敗#65289; [画像などが消えた]
+  s21: 失敗を報告した
+  s22: 失敗を報告した [画像などが消えた]
+  s23: 戻した: ページ URL なし
+  s24: 戻した: ページ URL なし [画像などが消えた]
+  s25: 戻した: リンク先を落とした#12539;ページ URL なし
+  s26: 戻した: リンク先を落とした#12539;ページ URL なし [画像などが消えた]
+  s27: プロンプトを出した: ページ URL なし
+  s28: プロンプトを出した: ページ URL なし [画像などが消えた]
+  s29: プロンプトを出した: リンク先を落とした#12539;ページ URL なし
+  s30: プロンプトを出した: リンク先を落とした#12539;ページ URL なし [画像などが消えた]
+  [*] --> s0
+  [*] --> s1
+  [*] --> s2
+  [*] --> s3
+  s0 --> s4: ロックを取り#12289;退避して空にする
+  s1 --> s5: ロックを取り#12289;退避して空にする
+  s2 --> s6: ロックを取り#12289;退避して空にする
+  s3 --> s7: ロックを取り#12289;退避して空にする
+  s4 --> s8: Cmd+C [失敗]
+  s4 --> s9: Cmd+C
+  s4 --> s15: Cmd+C
+  s5 --> s8: Cmd+C [失敗]
+  s5 --> s10: Cmd+C
+  s6 --> s8: Cmd+C [失敗]
+  s6 --> s9: Cmd+C
+  s6 --> s13: Cmd+C
+  s7 --> s8: Cmd+C [失敗]
+  s7 --> s11: Cmd+C
+  s7 --> s12: Cmd+C
+  s7 --> s14: Cmd+C
+  s7 --> s16: Cmd+C
+  s8 --> s19: 元のクリップボードを戻す
+  s8 --> s20: 元のクリップボードを戻す
+  s9 --> s17: コピーを読む
+  s10 --> s17: コピーを読む
+  s11 --> s17: コピーを読む
+  s12 --> s17: コピーを読む
+  s13 --> s17: コピーを読む
+  s13 --> s18: コピーを読む
+  s14 --> s17: コピーを読む
+  s14 --> s18: コピーを読む
+  s15 --> s17: コピーを読む
+  s15 --> s18: コピーを読む
+  s16 --> s17: コピーを読む
+  s16 --> s18: コピーを読む
+  s17 --> s23: 元のクリップボードを戻す
+  s17 --> s24: 元のクリップボードを戻す
+  s18 --> s25: 元のクリップボードを戻す
+  s18 --> s26: 元のクリップボードを戻す
+  s19 --> s21: exit 1
+  s20 --> s22: exit 1
+  s23 --> s27: プロンプトを出す
+  s24 --> s28: プロンプトを出す
+  s25 --> s29: プロンプトを出す
+  s26 --> s30: プロンプトを出す
+  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
+  classDef mayBreak fill:#fff3e6,stroke:#e8730c,stroke-width:2.5px,color:#b85a06
+  class s0 blue
+  class s0 bugPath
+  class s1 blue
+  class s2 blue
+  class s3 blue
+  class s4 blue
+  class s4 bugPath
+  class s5 blue
+  class s6 blue
+  class s7 blue
+  class s8 blue
+  class s8 bugPath
+  class s9 blue
+  class s10 blue
+  class s11 blue
+  class s12 blue
+  class s13 blue
+  class s14 blue
+  class s15 blue
+  class s15 bugPath
+  class s16 blue
+  class s17 blue
+  class s17 bugPath
+  class s18 blue
+  class s18 bugPath
+  class s19 blue
+  class s20 blue
+  class s20 bugPath
+  class s21 orange
+  class s22 orange
+  class s22 breaks
+  class s22 bugPath
+  class s23 blue
+  class s23 bugPath
+  class s24 blue
+  class s25 blue
+  class s25 bugPath
+  class s26 blue
+  class s27 teal
+  class s27 mayBreak
+  class s27 bugPath
+  class s28 teal
+  class s28 breaks
+  class s29 teal
+  class s29 breaks
+  class s29 bugPath
+  class s30 teal
+  class s30 breaks
