@@ -9,7 +9,7 @@ import Foundation
 #endif
 
 enum ShellOutcome: Equatable {
-    case exited(Int32, stdout: String)
+    case exited(Int32, stdout: String, stderr: String = "")
     case timedOut(seconds: Int)
 }
 
@@ -160,7 +160,9 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
     if timedOut { return .timedOut(seconds: Int(timeout)) }
     if output.last == 10 { output.removeLast() }
     let code = status & 0x7f == 0 ? (status >> 8) & 0xff : 128 + (status & 0x7f)
-    return .exited(code, stdout: String(decoding: output, as: UTF8.self))
+    return .exited(
+        code, stdout: String(decoding: output, as: UTF8.self),
+        stderr: String(decoding: errors, as: UTF8.self))
 }
 
 /// A macOS notification, the one notifier the daemon, the bridge and background jobs share.

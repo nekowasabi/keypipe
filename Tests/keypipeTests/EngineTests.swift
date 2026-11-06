@@ -514,6 +514,39 @@ final class EngineTests: XCTestCase {
         }
     }
 
+    func testAFailedJobNotifiesWithTheLastStderrLineAndKeepsTheToken() {
+        let rule = Rule(
+            trigger: "&&&",
+            output: Guarded(primary: .shell(ShellOutput(script: "send", background: true))))
+        for (stderr, notified) in [
+            (
+                "warn\nherdr-claude: tab.new failed; prompt copied\n\n",
+                "&&& output failed: exit 1: herdr-claude: tab.new failed; prompt copied"
+            ),
+            ("", "&&& output failed: exit 1"),
+        ] {
+            let desktop = FakeDesktop()
+            var lines: [String] = []
+            let engine = Engine(
+                config: KeypipeConfig(rules: [rule]), desktop: desktop,
+                shell: { _, _, _, _ in .exited(1, stdout: "", stderr: stderr) },
+                emit: { lines.append($0) })
+            let result = engine.run(Job(rule: 0, input: "", environment: [:]))
+            XCTAssertEqual(result, .failed(rule: 0, stage: .output, failure: "exit 1"))
+            XCTAssertEqual(desktop.notifications, [notified])
+            XCTAssertEqual(
+                lines.contains(
+                    #"keypipe output-shell stderr "herdr-claude: tab.new failed; prompt copied""#),
+                !stderr.isEmpty, "jobs.log gets the reason")
+        }
+    }
+
+    func testRunShellReturnsTheChildsStderr() {
+        XCTAssertEqual(
+            runShell("echo out; echo oops >&2; exit 2", input: "", env: [:], timeout: 2),
+            .exited(2, stdout: "out", stderr: "oops\n"))
+    }
+
     func testBoundedShellReportsTheJobLimitWhenItCutsAStageShort() {
         var given: [TimeInterval] = []
         let shell = boundedShell(limit: 2) { _, _, _, timeout in
