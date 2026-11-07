@@ -9,10 +9,14 @@ description: Gate the C# Keypipe.Core fake-desktop fire path on Linux via dotnet
 the fire procedure ported into C# `Keypipe.Core`, reproduced on a fake desktop. No hooks, no UIA, <!-- docsym-ok: deferred this slice, expires 2027-05-01, approved-by kp-lead -->
 no `SendInput`, no live Notepad. `Keypipe.Windows` stays a stub or absent until a later slice. <!-- docsym-ok: deferred this slice, expires 2027-05-01, approved-by kp-lead -->
 
-The contract it gates is fixed by `.claude/skills/verify-keypipe-fire-path/` (V1–V12 below) and
+The contract it gates is fixed by `.claude/skills/verify-keypipe-fire-path/` and
 `artifacts/windows-port-analysis.md` §7. The TLA specs under `verify-keypipe-fire-path` stay
 authoritative for the model and must remain green if invoked — but this skill never runs TLC;
 C# green does not require TLC. Formal follow-up is a later `maintain-formal-verification` slice.
+
+Sync commit: e6c6b3bea93ca94b2d6dcd07145cd04f905928ce. The V1–V18 items below describe that
+tree, checked by the maintain run that landed it. This skill's own commit changes no covered
+code; before moving the sync commit forward, re-read the covered diff and rerun the full gate.
 
 ## Fire order (must match, SPEC §Fire order)
 
