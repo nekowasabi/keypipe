@@ -24,11 +24,14 @@ Composing and secure stop before deny, erase, and any shell. An unreadable fact 
 and never falls through to the next rule. A trigger whose `when` fails never substitutes a
 shorter trigger.
 
-## Verification items V1–V12 → C# tests
+## Verification items V1–V18 → C# tests
 
 `dotnet test` filters use xunit `FullyQualifiedName~<TestName>`. Class names are prescribed:
-fire/rule tests in `FireTests`, matcher tests in `TriggerMatcherTests`, sink edge tests in
-`SinksTests`, all under `tests/Keypipe.Core.Tests/`.
+fire/rule tests in `FireTests`, trigger/matcher tests in `TriggerMatcherTests`, sink edge
+tests in `SinksTests`, fact/glob tests in `FactsTests`, all under `tests/Keypipe.Core.Tests/`.
+V13–V18 are parity items added by the 2026-11-07 maintain run: each names a place where the
+port can silently diverge from the Swift original (glob semantics, hotkey parsing, character
+counting, label capping, load errors, write timing) rather than a fire-order step.
 
 | ID | Rule (harm when broken) | C# test (class.method) | `dotnet test` filter | Swift reference |
 | --- | --- | --- | --- | --- |
@@ -43,9 +46,15 @@ fire/rule tests in `FireTests`, matcher tests in `TriggerMatcherTests`, sink edg
 | V9 | Failed transform (nonzero, timeout, empty) delivers nothing; each `onFail` stage runs at most once (empty/failed output wipes the field; fallback loops) | `FireTests.EmptyTransformOutputNotifiesInsteadOfWipingField`, `FireTests.TransformFallbackRunsOnceWithSameInput`, `FireTests.OutputFallbackRunsOnce` | `FullyQualifiedName~EmptyTransformOutput`, `FullyQualifiedName~TransformFallbackRunsOnce`, `FullyQualifiedName~OutputFallbackRunsOnce` | `testEmptyTransformOutputNotifiesInsteadOfWipingField`, `testTransformFallbackRunsOnceWithSameInputAndFailureReason`, `testFallbackFailureNotifiesWithoutRetrying`, `testOutputFallbackReceivesResultAndReason` |
 | V10 | `started` is only a background spawn that did start; `typeText` on the supplied path never reports success (phantom delivery recorded; caller believes text was typed with no caret) | `FireTests.FailedSpawnIsReportedAsFailedNotStarted`, `SinksTests.TypeTextOnSuppliedPathIsUnsupported` | `FullyQualifiedName~FailedSpawnIsReported`, `FullyQualifiedName~TypeTextOnSuppliedPath` | `testFailedSpawnIsReportedAsFailedNotStarted`, `testTypeTextWithoutACaretFailsAsUnsupported` |
 | V11 | One keystroke returns the longest configured suffix; the firing keystroke clears the buffer (`ab`+`b` fires `b`; with `@@`+`@@@` the 2nd char fires `@@` and `@@@` never accumulates) | `TriggerMatcherTests.LongestMatchWins_AndBufferResetsOnFire` | `FullyQualifiedName~LongestMatchWins` | `testLongestMatchWinsInEitherOrder`, `testDetectsCompletionAndResets` |
-| V12 | Erase readback never hands a half-deleted trigger to the transform; within 5 reads of a 3-char trigger, one-backspace-per-read and ignores-backspace apps both yield the body | `FireTests.EraseWaitsForEveryBackspaceBeforeReading` | `FullyQualifiedName~EraseWaitsForEveryBackspace` | `testEraseWaitsForEveryBackspaceBeforeReading`, `testBackspaceAndRewriteRemoveOnlyOneTrigger`, `testEraseWaitsForTheTriggerToLandBeforeBackspacing` |
+| V12 | Erase readback never hands a half-deleted trigger to the transform; within 5 reads of a 3-char trigger, one-backspace-per-read and ignores-backspace apps both yield the body | `FireTests.EraseWaitsForEveryBackspaceBeforeReading`, `FireTests.EraseIgnoresBackspaceStillYieldsBody`, `FireTests.EraseReadbackStaysWithinFiveReads` | `FullyQualifiedName~EraseWaitsForEveryBackspace`, `FullyQualifiedName~EraseIgnoresBackspace`, `FullyQualifiedName~EraseReadbackStays` | `testEraseWaitsForEveryBackspaceBeforeReading`, `testBackspaceAndRewriteRemoveOnlyOneTrigger`, `testEraseWaitsForTheTriggerToLandBeforeBackspacing` |
+| V13 | Glob matching is fnmatch, not regex: a negated class excludes only its members, a backslash escapes, an invalid range never matches and never throws (a `when` glob that crashes or inverts takes the rule to the wrong app) | `FactsTests.GlobNegatedClassExcludesItsMembers`, `FactsTests.GlobCaretInClassIsLiteral`, `FactsTests.GlobBackslashEscapesTheNextCharacter`, `FactsTests.GlobInvalidRangeNeverMatchesAndNeverThrows`, `FactsTests.GlobOrdinaryPatternsStillMatch` | `FullyQualifiedName~Glob` | `testGlobsKeepExactIdsExact` |
+| V14 | A hotkey spec ending in a separator has an empty key and is rejected; only a doubled separator means the plus key (a spec accepted with the wrong key fires on a chord the author never configured) | `TriggerMatcherTests.HotkeyParseRejectsATrailingPlus`, `TriggerMatcherTests.HotkeyParseRejectsABareTrailingSeparator`, `TriggerMatcherTests.HotkeyParseKeepsThePlusKey` | `FullyQualifiedName~HotkeyParse` | `testRejectionReasons` |
+| V15 | Counts are characters, not UTF-16 units: the 64-character trigger limit, the erase Backspace count on both erase paths, and the matcher buffer (a non-BMP trigger is rejected at load, or erase deletes characters past the trigger) | `FireTests.EraseCountsCharactersNotUtf16Units`, `FireTests.AnyFocusEraseCountsCharactersNotUtf16Units`, `SinksTests.TriggerLengthLimitCountsCharactersNotUtf16Units` | `FullyQualifiedName~CountsCharacters`, `FullyQualifiedName~CountsUtf16`, `FullyQualifiedName~TriggerLengthLimit` | `testTriggerLengthBoundary` |
+| V16 | The fired label is capped at 40 graphemes after whitespace collapses and the ends trim, not before (a padded label shows one character less than the Mac pill) | `FireTests.FiredLabelCapsAfterCollapsingWhitespace` | `FullyQualifiedName~FiredLabelCaps` | `testLabelTextIsCappedAt40AfterCollapsingWhitespace` |
+| V17 | A malformed config fails `ConfigLoader.Load` with the same wrapped error as the file path, never a raw JSON exception (a caller catching config errors misses the failure and runs on a stale config) | `SinksTests.LoadFailureIsWrappedLikeLoadFile` | `FullyQualifiedName~LoadFailure` | `testMalformedShapesAndMissingFile` |
+| V18 | The fake desktop's write timing modes are driven, not just implemented: a late write counts as written, an ignored write is the ignored output failure, a field gone after erase is the gone output failure (an untested mode can hide a sink that reports success for text nobody received) | `SinksTests.ReplaceInputLandsOnLaterReadWithWritePerRead`, `SinksTests.ReplaceInputIgnoredWriteIsAnOutputFailure`, `FireTests.FieldGoneAfterEraseFailsOutputAsGone` | `FullyQualifiedName~WritePerRead`, `FullyQualifiedName~IgnoredWrite`, `FullyQualifiedName~FieldGoneAfterErase` | `testDelayedWriteCountsAsWrittenNotIgnored`, `testIgnoredWriteFallsBackAndGoneFieldNotifiesByDefault` |
 
-Full gate: `dotnet test` green for `Keypipe.Core.Tests` covering all of V1–V12. Single-item run:
+Full gate: `dotnet test` green for `Keypipe.Core.Tests` covering all of V1–V18. Single-item run:
 `dotnet test Keypipe.sln --filter "FullyQualifiedName~<TestName>"`.
 
 ## How to run

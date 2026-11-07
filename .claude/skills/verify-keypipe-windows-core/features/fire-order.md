@@ -4,8 +4,10 @@
 
 - Trigger feed → terminal filter → composing gate → secure gate → deny → candidate rules →
   front re-check → erase/read → background decision → transform → apply (SPEC fire order 1–11).
-- V1–V12 in `../SKILL.md` are the gate checklist; every item maps to a C# test name plus a
-  `dotnet test --filter "FullyQualifiedName~<Name>"` string.
+- V1–V18 in `../SKILL.md` are the gate checklist; every item maps to a C# test name plus a
+  `dotnet test --filter "FullyQualifiedName~<Name>"` string. V1–V12 gate the fire order;
+  V13–V18 are parity items (glob semantics, hotkey parsing, character counting, label
+  capping, load errors, write timing) added by the 2026-11-07 maintain run.
 
 ## How to get to it (user POV)
 

@@ -2,8 +2,10 @@
 
 ## Sub-features
 
-- Implements the Core `IDesktop` interface in-process: key appends, backspace removes,
-  `text`/`setText` round-trip, `notify` log, busy/fired event order, fact reads log.
+- Implements the Core `IDesktop` interface in-process: key appends, backspace removes
+  (a count of characters, as in Swift), `text`/`setText` round-trip, `notify` log,
+  busy/fired event order, fact reads log, and a text read count (`TextReads`) so the
+  erase readback bound is asserted, not assumed.
 - Focus lattice: `nothing`, `text`, `composing`, `terminal`, plus `secure` flag.
 - Timing modes: `ignoresBackspace`, `backspacePerRead` (one queued Backspace per read),
   `keysPerRead`, `ignoresWrite`, `writePerRead` (write lands on a later read),
@@ -28,7 +30,8 @@ dotnet test Keypipe.sln --filter "FullyQualifiedName~TerminalTextTriggerStops|Fu
 
 V3 asserts a terminal text trigger touches nothing (but a field-less hotkey still passes); V5
 asserts a front switch mid-slow-read erases nothing; V12 asserts both erase timing modes yield
-the body within 5 reads of a 3-char trigger.
+the body within 5 reads of a 3-char trigger; V18 drives the write timing modes
+(`writePerRead`, `ignoresWrite`, `fieldGoneAfter: erase`) to their three outcomes.
 
 ## Gotchas
 

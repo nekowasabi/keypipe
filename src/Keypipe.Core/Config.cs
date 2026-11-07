@@ -56,10 +56,16 @@ public static class ConfigLoader
 {
     public static KeypipeConfig Load(string json)
     {
-        using var doc = JsonDocument.Parse(json);
+        using var doc = ParseDocument(json);
         if (doc.RootElement.ValueKind != JsonValueKind.Object)
             throw new ConfigException("expected object");
         return LoadRoot(doc.RootElement);
+    }
+
+    private static JsonDocument ParseDocument(string json)
+    {
+        try { return JsonDocument.Parse(json); }
+        catch (JsonException ex) { throw new ConfigException($"JSON decoding failed: {ex.Message}"); }
     }
 
     public static KeypipeConfig LoadFile(string path)
@@ -120,7 +126,7 @@ public static class ConfigLoader
         if (hasTrigger)
         {
             var text = NonEmpty(triggerEl, "trigger");
-            if (text.Length > TriggerMatcher.MaxBuffer)
+            if (TextCount.Of(text) > TriggerMatcher.MaxBuffer)
                 throw new ConfigException(
                     $"rule trigger exceeds {TriggerMatcher.MaxBuffer} characters and can never match");
             trigger = new Trigger.Text(text);

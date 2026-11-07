@@ -234,7 +234,7 @@ public sealed class Engine
                 break;
             case (Trigger.Text text, WhenFocus.Any):
             {
-                int count = snapshot.Focus == Focus.Text ? text.Value.Length : 0;
+                int count = snapshot.Focus == Focus.Text ? TextCount.Of(text.Value) : 0;
                 if (count > 0 && snapshot.Field is not null)
                 {
                     WaitForTrigger(snapshot.Field, text.Value, _desktop);
@@ -415,8 +415,9 @@ public sealed class Engine
     {
         var before = WaitForTrigger(field, trigger, desktop);
         if (before is null) return null;
-        desktop.Backspace(trigger.Length);
-        emit($"keypipe erase {trigger.Length}");
+        var count = TextCount.Of(trigger);
+        desktop.Backspace(count);
+        emit($"keypipe erase {count}");
         if (!before.EndsWith(trigger, StringComparison.Ordinal))
         {
             emit("keypipe erase-failed trigger-absent");
@@ -460,7 +461,7 @@ public sealed class Engine
         string raw = rule.Label ?? rule.Name
             ?? (rule.Output.Primary is Output.Shell s ? s.Value.Script
                 : rule.Output.Primary is Output.Builtin b ? BuiltinSinks.Name(b.Sink) : "");
-        var collapsed = Regex.Replace(raw, @"\s+", " ");
+        var collapsed = Regex.Replace(raw, @"\s+", " ").Trim();
         var si = new StringInfo(collapsed);
         string capped = si.LengthInTextElements <= 40
             ? collapsed

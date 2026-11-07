@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Keypipe.Core;
 
 public enum FactName { App, Url }
@@ -34,29 +32,88 @@ public sealed record Term(FactName Fact, IReadOnlyList<string> Globs)
 {
     public bool Matches(string value) => Globs.Any(g => GlobMatch(g, value));
 
-    public static bool GlobMatch(string glob, string value)
+    // fnmatch(3) with flags 0, as Swift's Term.matches: "*" crosses "/",
+    // "?" takes one character, "[...]" is a class where only "!" negates,
+    // and "\" escapes the next character. A class with an invalid range
+    // (lo > hi) matches nothing for that range instead of throwing, and an
+    // unterminated "[" is a literal "[". Matching is per UTF-16 code unit,
+    // as in the rest of the port; bundle ids and URLs are ASCII in practice.
+    public static bool GlobMatch(string glob, string value) => Match(glob, 0, value, 0);
+
+    private static bool Match(string glob, int gi, string value, int vi)
     {
-        var sb = new System.Text.StringBuilder("^");
-        for (int i = 0; i < glob.Length; i++)
+        while (gi < glob.Length)
         {
-            char c = glob[i];
-            switch (c)
+            switch (glob[gi])
             {
-                case '*': sb.Append(".*"); break;
-                case '?': sb.Append('.'); break;
-                case '[':
-                    int j = glob.IndexOf(']', i + 1);
-                    if (j < 0) { sb.Append("\\["); break; }
-                    sb.Append(glob.Substring(i, j - i + 1));
-                    i = j;
+                case '*':
+                    while (gi < glob.Length && glob[gi] == '*') gi++;
+                    if (gi == glob.Length) return true;
+                    for (int k = vi; k <= value.Length; k++)
+                        if (Match(glob, gi, value, k)) return true;
+                    return false;
+                case '?':
+                    if (vi >= value.Length) return false;
+                    gi++; vi++;
                     break;
-                case '\\' or '.' or '(' or ')' or '+' or '|' or '^' or '$' or '{' or '}' or '-':
-                    sb.Append('\\').Append(c); break;
-                default: sb.Append(c); break;
+                case '[':
+                    if (vi >= value.Length) return false;
+                    if (!MatchClass(glob, ref gi, value[vi])) return false;
+                    vi++;
+                    break;
+                case '\\':
+                    gi++;
+                    if (gi >= glob.Length)
+                    {
+                        if (vi >= value.Length || value[vi] != '\\') return false;
+                        vi++;
+                        break;
+                    }
+                    if (vi >= value.Length || value[vi] != glob[gi]) return false;
+                    gi++; vi++;
+                    break;
+                default:
+                    if (vi >= value.Length || value[vi] != glob[gi]) return false;
+                    gi++; vi++;
+                    break;
             }
         }
-        sb.Append('$');
-        return Regex.IsMatch(value, sb.ToString());
+        return vi == value.Length;
+    }
+
+    private static bool MatchClass(string glob, ref int gi, char ch)
+    {
+        // glob[gi] == '['. Advances gi past the closing ']' on a real class.
+        int i = gi + 1;
+        bool negate = false;
+        if (i < glob.Length && glob[i] == '!') { negate = true; i++; }
+        int start = i;
+        if (start < glob.Length && glob[start] == ']') start++;
+        int end = start;
+        while (end < glob.Length && glob[end] != ']') end++;
+        if (end >= glob.Length)
+        {
+            gi += 1;
+            return ch == '[';
+        }
+        bool matched = false;
+        int p = i;
+        while (p < end)
+        {
+            char lo;
+            if (glob[p] == '\\' && p + 1 < end) { lo = glob[p + 1]; p += 2; }
+            else { lo = glob[p]; p += 1; }
+            if (p < end && glob[p] == '-' && p + 1 < end)
+            {
+                char hi;
+                if (glob[p + 1] == '\\' && p + 2 < end) { hi = glob[p + 2]; p += 3; }
+                else { hi = glob[p + 1]; p += 2; }
+                if (lo <= hi && ch >= lo && ch <= hi) matched = true;
+            }
+            else if (ch == lo) matched = true;
+        }
+        gi = end + 1;
+        return matched != negate;
     }
 }
 

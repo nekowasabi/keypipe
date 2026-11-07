@@ -370,4 +370,95 @@ public sealed class FireTests
         Assert.DoesNotContain("keypipe erase-rewrite", lines);
         Assert.Equal("HELLO", desktop.FieldText);
     }
+
+    // V12b: an app that ignores Backspace entirely still yields the body, via the
+    // setText rewrite (EraseReadback "ignores" behavior). Same harm as V12: the
+    // transform must never see a half-deleted or still-present trigger.
+    [Fact]
+    public void EraseIgnoresBackspaceStillYieldsBody()
+    {
+        var desktop = new FakeDesktop(focus: Focus.Text, fieldText: "hello", ignoresBackspace: true);
+        string? seenInput = null;
+        var (hits, lines) = Run("@@@",
+            new[] { TextRule("@@@", new When(WhenFocus.TextField),
+                new Guarded<string>("tr"),
+                new Guarded<Output>(new Output.Builtin(BuiltinSink.ReplaceInput))) },
+            desktop,
+            (s, i, e, t) => { seenInput = i; return new ShellOutcome.Exited(0, "HELLO"); });
+        Assert.Equal("hello", seenInput);
+        Assert.Contains("keypipe erase-rewrite", lines);
+        Assert.Equal("HELLO", desktop.FieldText);
+    }
+
+    // V12c: the EraseReadback bound at the code level. A 3-char trigger against
+    // one-Backspace-per-read takes the wait-for-trigger read plus at most 5
+    // readback polls (the model's MaxReads) before the body is handed over.
+    [Fact]
+    public void EraseReadbackStaysWithinFiveReads()
+    {
+        var desktop = new FakeDesktop(focus: Focus.Text, fieldText: "hello@@@", backspacePerRead: true);
+        var lines = new List<string>();
+        var body = Engine.PerformErase(new Field(0), "@@@", desktop, lines.Add);
+        Assert.Equal("hello", body);
+        Assert.True(desktop.TextReads <= 6,
+            $"expected <= 6 text reads (1 wait + 5 polls), got {desktop.TextReads}");
+        Assert.Equal("hello", desktop.FieldText);
+    }
+
+    // V15: Backspace counts characters (graphemes), as Swift's trigger.count,
+    // not UTF-16 units, or a non-BMP trigger erases characters past the trigger.
+    [Fact]
+    public void EraseCountsCharactersNotUtf16Units()
+    {
+        var desktop = new FakeDesktop(focus: Focus.Text, fieldText: "ab😀😀");
+        var lines = new List<string>();
+        var body = Engine.PerformErase(new Field(0), "😀😀", desktop, lines.Add);
+        Assert.Equal("ab", body);
+        Assert.Contains("keypipe erase 2", lines);
+        Assert.Equal("ab", desktop.FieldText);
+    }
+
+    // V15 (any focus): the same character count drives the erase on the any path.
+    [Fact]
+    public void AnyFocusEraseCountsCharactersNotUtf16Units()
+    {
+        var desktop = new FakeDesktop(focus: Focus.Text, fieldText: "ab");
+        var (hits, lines) = Run("😀😀",
+            new[] { TextRule("😀😀", output: new Guarded<Output>(new Output.Shell(new ShellOutput("send")))) },
+            desktop, (s, i, e, t) => new ShellOutcome.Exited(0, ""));
+        Assert.Contains("keypipe erase 2", lines);
+        Assert.Equal("ab", desktop.FieldText);
+    }
+
+    // V16: the fired label is capped at 40 graphemes after whitespace runs
+    // collapse and the ends are trimmed (Swift firedLabel), not before.
+    [Fact]
+    public void FiredLabelCapsAfterCollapsingWhitespace()
+    {
+        var padded = new Rule(new Trigger.Text("@@@"), new When(), null,
+            new Guarded<Output>(new Output.Builtin(BuiltinSink.Notify)),
+            Label: "  " + new string('a', 45));
+        Assert.Equal("@@@ → " + new string('a', 40),
+            Engine.FiredLabel(new Trigger.Text("@@@"), padded));
+        var spaced = new Rule(new Trigger.Text("@@@"), new When(), null,
+            new Guarded<Output>(new Output.Builtin(BuiltinSink.Notify)),
+            Label: "  foo   bar  ");
+        Assert.Equal("@@@ → foo bar",
+            Engine.FiredLabel(new Trigger.Text("@@@"), spaced));
+    }
+
+    // V18: a field that vanishes once erase starts turns a replaceInput apply
+    // into the "gone" output failure, never a silent delivery.
+    [Fact]
+    public void FieldGoneAfterEraseFailsOutputAsGone()
+    {
+        var desktop = new FakeDesktop(focus: Focus.Text, fieldText: "hello@@@", goneAfterErase: true);
+        var engine = new Engine(new KeypipeConfig(new[]
+        {
+            TextRule("@@@", new When(WhenFocus.TextField),
+                output: new Guarded<Output>(new Output.Builtin(BuiltinSink.ReplaceInput))),
+        }), desktop, Echo, _ => { });
+        Assert.Equal(new FireResult.Failed(0, "output", "gone"),
+            engine.Fire(new Trigger.Text("@@@")));
+    }
 }

@@ -22,6 +22,7 @@ public sealed class FakeDesktop : DesktopBase
     private readonly Queue<char> _pendingKeys = new();
 
     public string FieldText { get; private set; }
+    public int TextReads { get; private set; }
     public List<string> Notifications { get; } = new();
     public List<bool> Busy { get; } = new();
     public List<FiredEvent> Fired { get; } = new();
@@ -98,12 +99,24 @@ public sealed class FakeDesktop : DesktopBase
         }
         else
         {
-            FieldText = FieldText.Substring(0, Math.Max(0, FieldText.Length - count));
+            FieldText = RemoveLastTextElements(FieldText, count);
         }
+    }
+
+    // A Backspace count is a count of characters (text elements), matching
+    // Swift FakeDesktop.backspace's removeLast(count) on a String.
+    internal static string RemoveLastTextElements(string text, int count)
+    {
+        if (count <= 0 || text.Length == 0) return text;
+        var elements = System.Globalization.StringInfo.ParseCombiningCharacters(text);
+        if (elements.Length == 0) return text;
+        if (count >= elements.Length) return "";
+        return text.Substring(0, elements[elements.Length - count]);
     }
 
     public override string? GetText(Field field)
     {
+        TextReads += 1;
         if (field.Token != 0 || _focus != Focus.Text || _gone) return null;
         try
         {
@@ -111,7 +124,7 @@ public sealed class FakeDesktop : DesktopBase
             if (_pendingBackspaces > 0)
             {
                 _pendingBackspaces -= 1;
-                if (FieldText.Length > 0) FieldText = FieldText.Substring(0, FieldText.Length - 1);
+                if (FieldText.Length > 0) FieldText = RemoveLastTextElements(FieldText, 1);
             }
             return FieldText;
         }
@@ -177,7 +190,7 @@ public sealed class LineDesktop : DesktopBase
         Line is null ? null : new Field(0));
 
     public override void Backspace(int count)
-        => Line = Line is null ? null : Line.Substring(0, Math.Max(0, Line.Length - count));
+        => Line = Line is null ? null : FakeDesktop.RemoveLastTextElements(Line, count);
 
     public override string? GetText(Field field) => Line;
 

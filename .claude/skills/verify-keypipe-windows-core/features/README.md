@@ -1,8 +1,10 @@
 # Feature map: Windows core fake-desktop fire path (slice 1)
 
 Slice 1 ports the fire procedure into C# `Keypipe.Core` and reproduces V1–V12 on a fake
-desktop. No hooks, UIA, `SendInput`, or live Notepad. Each file answers, from the caller's
-point of view: what the capability is, how to reach it, how to drive it, and what proves it.
+desktop; V13–V18 add Swift-parity items around it (globs, hotkey parsing, character
+counting, labels, load errors, write timing). No hooks, UIA, `SendInput`, or live Notepad.
+Each file answers, from the caller's point of view: what the capability is, how to reach
+it, how to drive it, and what proves it.
 
 - [fire-order.md](fire-order.md) — the 11-step fire order and the V1–V12 gate checklist.
 - [fake-desktop.md](fake-desktop.md) — fake-desktop capabilities (the port of `FakeDesktop`).

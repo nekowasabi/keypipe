@@ -47,4 +47,31 @@ public sealed class TriggerMatcherTests
         Assert.Contains("keypipe matched @@ rule 0", lines);
         Assert.DoesNotContain(lines, l => l.Contains("rule 1"));
     }
+
+    // V14: a trailing separator leaves an empty key, which Swift rejects
+    // ("empty hotkey key"); the port must not silently drop it and accept
+    // the previous key.
+    [Fact]
+    public void HotkeyParseRejectsATrailingPlus()
+    {
+        var ex = Assert.Throws<ConfigException>(() => Hotkey.Parse("ctrl+a+"));
+        Assert.Equal("keypipe: invalid config: empty hotkey key", ex.Message);
+    }
+
+    // V14: "ctrl+" alone ends in the same empty key, not in the key "ctrl".
+    [Fact]
+    public void HotkeyParseRejectsABareTrailingSeparator()
+    {
+        var ex = Assert.Throws<ConfigException>(() => Hotkey.Parse("ctrl+"));
+        Assert.Equal("keypipe: invalid config: empty hotkey key", ex.Message);
+    }
+
+    // V14: "+" itself stays a valid key: "ctrl++" is ctrl plus the "+" key.
+    [Fact]
+    public void HotkeyParseKeepsThePlusKey()
+    {
+        var hotkey = Hotkey.Parse("ctrl++");
+        Assert.Equal("+", hotkey.Key);
+        Assert.Equal("ctrl++", hotkey.ToString());
+    }
 }
