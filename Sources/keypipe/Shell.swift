@@ -70,6 +70,11 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
     if environment["KEYPIPE_BIN"] == nil {
         environment["KEYPIPE_BIN"] = Bundle.main.executablePath ?? CommandLine.arguments[0]
     }
+    // Why: an app launched from Finder (voice-switch) has no locale, and then pbpaste prints
+    // Japanese as MacJapanese bytes and pbcopy drops UTF-8 input, so osascript loses the prompt.
+    if ["LC_ALL", "LC_CTYPE", "LANG"].allSatisfy({ environment[$0, default: ""].isEmpty }) {
+        environment["LC_CTYPE"] = "UTF-8"
+    }
     // Typed: with Glibc the literal is otherwise inferred as an array of C pointers and does not compile.
     let argv: [String] = ["/bin/sh", "-c", script, "keypipe", input]
     let arguments: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) } + [nil]
