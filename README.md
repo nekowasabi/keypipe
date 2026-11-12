@@ -355,8 +355,11 @@ implements the `Desktop` primitives over the Accessibility API: the focused
 Notifications go through `osascript display notification` with the text
 passed as an argument. Both files only compile under `#if os(macOS)`.
 
-The daemon refuses to start without Accessibility permission for the
-`keypipe` binary (System Settings > Privacy & Security > Accessibility).
+The daemon refuses to start without Accessibility permission (System Settings >
+Privacy & Security > Accessibility); without it, it asks macOS to show the grant
+dialog and adds itself to that list. `make` runs the daemon from `.build/Keypipe.app`
+(bundle id `dev.keypipe`) and resets its grant on every run, so each `make` ends at
+that dialog: turn keypipe on, then `make restart`.
 `keypipe --probe` prints the grant and the current snapshot as one JSON line
 and never prompts. What was measured on a real Mac is in
 `docs/design/verification-plan.md`; the live items M0 to M4 of

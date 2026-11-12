@@ -46,6 +46,9 @@ the focused terminal's directory.
   one tab and runs `argv` there with `task` appended as its last argument, so `claude` starts with
   the task as its first message, with no shell in between. It prints `{"space","tab","terminal"}`,
   or `{"error"}` and exits 1.
+- With every space closed, `tab.new` fails with `no space yet: make one first (space.new)`.
+  `herdr-app do space.new` takes the same `{name, argv, task, folder?}` and opens a space whose
+  first tab runs the agent, so the script retries with it.
 - Do not pass the task as `--task TEXT`: a TEXT that parses as JSON (`42`, `null`, `[1, 2]`,
   `{"a":1}`) is read as JSON and dropped, and Claude starts empty. And keep `--` in `argv`: a task
   starting with `-` (a selected bullet list) is otherwise an option to `claude`, which stops at
@@ -94,13 +97,14 @@ Both empty means no tab. `shell/selection-prompt.sh` builds it (lock, copy, rest
 - V9 音声、空行、選択の順にプロンプトが組まれる（S4）。
 - V10 選択が空なら、音声だけがプロンプトになる（S4）。
 - V11 `VOICE_SWITCH_APP` があれば、コピーの前にそのアプリを前に出す。
+- V13 space が 1 つも開いていなければ、`tab.new` の失敗を受けて `space.new` で space を開き、同じプロンプトを届ける。
 - V12 実機。文字を選び、voice-switch でウェイクワード「クロード」と指示を話す。Herdr に新しいタブが開き、指示と選択を受け取った Claude Code が動き出す。
 
 ## How to run
 
 ```sh
 swift build
-bash .claude/skills/verify-keypipe-herdr-claude/check.sh           # V1-V6, V9-V11 against stubs
+bash .claude/skills/verify-keypipe-herdr-claude/check.sh           # V1-V6, V9-V11, V13 against stubs
 LIVE=1 bash .claude/skills/verify-keypipe-herdr-claude/check.sh    # adds V7: real Herdr and Claude Code, closes its tab
 ```
 

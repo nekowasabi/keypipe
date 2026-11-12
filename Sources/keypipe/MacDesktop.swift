@@ -10,7 +10,11 @@
         private var nextToken = 1
         private let lock = NSLock()
 
-        static var trusted: Bool { AXIsProcessTrusted() }
+        // Why: with prompt the daemon adds itself to the Accessibility list, so after `make` resets
+        // the grant the user only flips the switch instead of adding the app by hand.
+        static func trusted(prompt: Bool = false) -> Bool {
+            AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": prompt] as CFDictionary)
+        }
 
         func snapshot() -> Snapshot {
             let app = NSWorkspace.shared.frontmostApplication

@@ -317,8 +317,11 @@ cmd のどれかが押されていればホットキー、それ以外は文字�
 です。通知は `osascript` の `display notification` に文字を引数で渡します。
 どちらも `#if os(macOS)` でのみコンパイルされます。
 
-デーモンは `keypipe` バイナリに Accessibility 許可（システム設定 >
-プライバシーとセキュリティ > アクセシビリティ）が無いと起動を拒否します。
+デーモンは Accessibility 許可（システム設定 > プライバシーとセキュリティ >
+アクセシビリティ）が無いと起動を拒否し、そのとき macOS に許可ダイアログを出させて
+一覧に自分を加えます。`make` はデーモンを `.build/Keypipe.app`（バンドル ID
+`dev.keypipe`）から起動し、実行のたびに許可を消します。そのため `make` は毎回この
+ダイアログで止まります。keypipe をオンにしてから `make restart` を実行してください。
 `keypipe --probe` は許可の有無と現在のスナップショットを JSON 1 行で出し、
 ダイアログは出しません。実機で測った事実は `docs/design/verification-plan.md`
 に、この経路を TextEdit と System Events で動かす検証は
