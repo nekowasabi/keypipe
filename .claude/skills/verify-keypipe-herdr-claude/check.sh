@@ -16,7 +16,12 @@ mkdir -p "$work/bin"
 cat >"$work/bin/herdr-app" <<'EOF'
 #!/bin/sh
 echo "$1 $2" >>"$STUB_CALLS"
-[ "$#" = 3 ] && [ "$1 $2" = "do tab.new" ] && [ -z "${STUB_FAIL:-}" ] || { echo '{"error":"stub"}'; exit 1; }
+case "$1 $2" in
+  "do tab.new") if [ -n "${STUB_NOSPACE:-}" ]; then
+    echo '{ "error": "no space yet: make one first (space.new)" }'; exit 1; fi ;;
+  "do space.new") ;;
+  *) false ;;
+esac && [ "$#" = 3 ] && [ -z "${STUB_FAIL:-}" ] || { echo '{"error":"stub"}'; exit 1; }
 fields=$(/usr/bin/osascript -l JavaScript -e 'function run(a) {
   var o = JSON.parse(a[0].slice(1));
   return JSON.stringify(o.argv) + "\n" + o.task;
@@ -76,6 +81,11 @@ else fail V9 "exit $code, prompt: $(cat "$STUB_PROMPT" 2>/dev/null)"; fi
 run "要約して" ""
 if [ "$code" = 0 ] && prompt_is "要約して"; then pass "V10 the dictation alone when nothing is selected"
 else fail V10 "exit $code, prompt: $(cat "$STUB_PROMPT" 2>/dev/null)"; fi
+
+STUB_NOSPACE=1 run "要約して" "body"
+if [ "$code" = 0 ] && prompt_is "$(printf '要約して\n\nbody')" && [ "$(calls)" = "do tab.new,do space.new," ]; then
+  pass "V13 with no space open, space.new opens one with Claude Code and the prompt"
+else fail V13"exit $code, calls: $(calls) $(cat "$work/err")"; fi
 
 reset body
 printf '要約して' | VOICE_SWITCH_APP=com.apple.TextEdit PATH=$work/bin:/usr/bin:/bin \

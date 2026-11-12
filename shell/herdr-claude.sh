@@ -23,5 +23,11 @@ json=$(/usr/bin/osascript -l JavaScript -e 'function run(a) {
   if (a[1].length > 1) o.folder = a[1].slice(1);
   return JSON.stringify(o);
 }' "x$prompt" "x${HERDR_CLAUDE_CWD:-}") || fail "could not encode the prompt"
-out=$("$herdr" do tab.new "$json" 2>&1) ||
-  fail "tab.new failed: $(printf '%s' "$out" | tr -s '\n\t ' ' ')"
+cmd=tab.new
+out=$("$herdr" do $cmd "$json" 2>&1) && exit 0
+# Why: tab.new needs an open space; with every space closed, space.new opens one that starts
+# the same agent with the same task.
+case $out in
+  *"no space yet"*) cmd=space.new; out=$("$herdr" do $cmd "$json" 2>&1) && exit 0 ;;
+esac
+fail "$cmd failed: $(printf '%s' "$out" | tr -s '\n\t ' ' ')"
