@@ -82,7 +82,7 @@ if flags.contains("--job") { runJobProcess() }
 if flags.contains("--probe") {
     var probe: [String: Any] = ["trusted": false, "focus": "none", "focusIsTextField": false]
     #if os(macOS)
-        probe["trusted"] = MacDesktop.trusted
+        probe["trusted"] = MacDesktop.trusted()
         let mac = MacDesktop()
         let snapshot = mac.snapshot()
         probe["app"] = snapshot.app ?? NSNull()
@@ -237,9 +237,9 @@ if flags.contains("--feed-stdin") {
 }
 
 #if os(macOS)
-    guard MacDesktop.trusted else {
+    guard MacDesktop.trusted(prompt: true) else {
         fputs(
-            "keypipe: Accessibility not granted; allow this binary in System Settings > Privacy & Security > Accessibility\n",
+            "keypipe: Accessibility not granted; turn keypipe on in System Settings > Privacy & Security > Accessibility, then start it again\n",
             stderr)
         exit(1)
     }

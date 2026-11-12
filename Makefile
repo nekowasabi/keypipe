@@ -1,15 +1,20 @@
 # keypipe daemon targets. Default `make` = stop, build, start (quick manual check).
 #
 # The daemon reads ~/.config/keypipe/config.json (or CONFIG=...). stdout and
-# stderr go to LOG. Rebuilding keeps the Accessibility grant (measured).
+# stderr go to LOG. The daemon runs from APP so that `make` can reset its Accessibility grant.
 
-BIN     := .build/debug/keypipe
+# Why: tccutil resets one app only by bundle id; a bare binary can't be named, and a reset with
+# no id removes every app's grant.
+APP     := .build/Keypipe.app
+APP_ID  := dev.keypipe
+BIN     := $(APP)/Contents/MacOS/keypipe
+LSREGISTER := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 LOG     ?= $(HOME)/.local/state/keypipe/keypipe.log
 CONFIG  ?=
 CONFIG_FLAG := $(if $(CONFIG),--config $(CONFIG),)
 
 .DEFAULT_GOAL := dev
-.PHONY: help dev build start stop restart status log test lint check-docs check verify verify-auto
+.PHONY: help dev build reset-ax start stop restart status log test lint check-docs check verify verify-auto
 
 # Why: Xcode ships the formatter as `swift format` without swift-format on PATH. Each verify
 # script once looked the tool up on its own, missed this, and skipped the lint on every Mac
@@ -20,10 +25,18 @@ help: ## 利用可能なターゲット一覧を表示する
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
 
-dev: stop build start ## デーモンを止めて再ビルドし起動する（既定）
+dev: stop build reset-ax start ## デーモンを止めて再ビルドし、アクセシビリティ許可を消して起動する（既定）
 
-build: ## swift build
+build: ## swift build と、デーモン用の $(APP) の作成
 	swift build
+	@mkdir -p "$(APP)/Contents/MacOS"
+	@cp macos/Info.plist "$(APP)/Contents/Info.plist"
+	@cp .build/debug/keypipe "$(BIN)"
+	@codesign --force --sign - --identifier $(APP_ID) "$(APP)"
+	@$(LSREGISTER) -f "$(APP)"
+
+reset-ax: ## $(APP) のアクセシビリティ許可を消す（起動時に許可ダイアログが出る）
+	@tccutil reset Accessibility $(APP_ID) || true
 
 start: ## デーモンを裏で起動し、`keypipe started` が出るまで最大 5 秒待つ
 	@mkdir -p "$(dir $(LOG))"
