@@ -27,6 +27,8 @@ struct Rule: Equatable {
     var label: String? = nil
     /// Pill icon: a .app path, an image path, or short text such as an emoji. nil is status-only.
     var icon: String? = nil
+    /// Variables every shell of this rule needs; a fire with one still empty runs no shell.
+    var env: [String] = []
 }
 
 struct KeypipeConfig: Equatable {
@@ -227,7 +229,7 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
             value,
             keys: [
                 "trigger", "hotkey", "when", "transform", "output", "onFail", "name", "label",
-                "icon",
+                "icon", "env",
             ])
         let trigger: Trigger
         switch (entry["trigger"], entry["hotkey"]) {
@@ -283,11 +285,28 @@ func loadConfig(data: Data) throws -> KeypipeConfig {
                 }
             }
         }
+        var env: [String] = []
+        if let value = entry["env"] {
+            guard let names = value as? [String] else {
+                throw ConfigError.invalid("env must be an array of strings")
+            }
+            guard !names.isEmpty else { throw ConfigError.invalid("empty env list") }
+            var seen = Set<String>()
+            for name in names {
+                // Why: the names are spliced into the zsh lookup script.
+                guard name.range(of: "^[A-Za-z_][A-Za-z0-9_]*$", options: .regularExpression) != nil
+                else { throw ConfigError.invalid("bad env name \(jsonString(name))") }
+                guard seen.insert(name).inserted else {
+                    throw ConfigError.invalid("duplicate env \(name)")
+                }
+            }
+            env = names
+        }
         return Rule(
             trigger: trigger, when: when, transform: transform, output: output,
             name: try entry["name"].map { try nonblank($0, name: "name") },
             label: try entry["label"].map { try nonblank($0, name: "label") },
-            icon: try entry["icon"].map { try nonblank($0, name: "icon") })
+            icon: try entry["icon"].map { try nonblank($0, name: "icon") }, env: env)
     }
     var names = Set<String>()
     for name in rules.compactMap(\.name) where !names.insert(name).inserted {

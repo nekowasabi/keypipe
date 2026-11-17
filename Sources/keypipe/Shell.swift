@@ -175,6 +175,27 @@ func runShell(_ script: String, input: String, env: [String: String], timeout: T
         stderr: String(decoding: errors, as: UTF8.self))
 }
 
+/// The non-empty values of `names`: the process's own, then ~/.zshenv for the rest. A name left
+/// out was not found. `env` is merged into the lookup shell's environment (a test sets HOME).
+func lookupEnvironment(_ names: [String], env: [String: String] = [:]) -> [String: String] {
+    var found = ProcessInfo.processInfo.environment.filter {
+        names.contains($0.key) && !$0.value.isEmpty
+    }
+    let missing = names.filter { found[$0] == nil }
+    guard !missing.isEmpty else { return found }
+    // ponytail: zsh -c reads only ~/.zshenv, so a variable exported only in .zshrc, .zprofile or
+    // another shell's startup is not found; use zsh -lic or a keypipe env file if that is needed.
+    // The names are config-checked identifiers, safe to splice.
+    let script =
+        #"/bin/zsh -c 'for n; do printf "%s\0" "${(P)n}"; done' zsh "#
+        + missing.joined(separator: " ")
+    guard case .exited(0, let stdout, _) = runShell(script, input: "", env: env, timeout: 5)
+    else { return found }
+    let values = stdout.split(separator: "\0", omittingEmptySubsequences: false)
+    for (name, value) in zip(missing, values) where !value.isEmpty { found[name] = String(value) }
+    return found
+}
+
 /// A macOS notification, the one notifier the daemon, the bridge and background jobs share.
 func notifyUser(_ text: String) {
     // Why: the text rides in argv, never in the AppleScript source (R8).

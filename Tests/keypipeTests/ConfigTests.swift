@@ -127,6 +127,22 @@ final class ConfigTests: XCTestCase {
         XCTAssertThrowsError(try load(#"{"rules":[{"trigger":"\#(max)a"}]}"#))
     }
 
+    func testRuleEnvParsesAndRejectsBadNames() throws {
+        let parsed = try load(#"{"rules":[{"trigger":"@@@","env":["A_1","_b"]}]}"#)
+        XCTAssertEqual(parsed.rules[0].env, ["A_1", "_b"])
+        XCTAssertEqual(try load(#"{"rules":[{"trigger":"@@@"}]}"#).rules[0].env, [])
+        for (env, reason) in [
+            (#""A""#, "env must be an array of strings"),
+            ("[1]", "env must be an array of strings"),
+            (#"["1A"]"#, #"bad env name "1A""#), (#"["A;rm"]"#, #"bad env name "A;rm""#),
+            (#"["A","A"]"#, "duplicate env A"), ("[]", "empty env list"),
+        ] {
+            XCTAssertThrowsError(try load(#"{"rules":[{"trigger":"@@@","env":\#(env)}]}"#)) {
+                XCTAssertEqual("\($0)", "keypipe: invalid config: \(reason)")
+            }
+        }
+    }
+
     func testMalformedShapesAndMissingFile() {
         for json in [
             "{bad", "[]", #"{"rules":{}}"#, #"{"rules":[{"trigger":3}]}"#,

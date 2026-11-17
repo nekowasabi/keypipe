@@ -9,6 +9,22 @@ import XCTest
 #endif
 
 final class ShellTests: XCTestCase {
+    func testLookupEnvironmentReadsZshenv() throws {
+        guard FileManager.default.isExecutableFile(atPath: "/bin/zsh") else {
+            throw XCTSkip("/bin/zsh is not installed")
+        }
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        try "export KEYPIPE_TEST_FROM_ZSHENV='a b'\n".write(
+            to: home.appendingPathComponent(".zshenv"), atomically: true, encoding: .utf8)
+        XCTAssertEqual(
+            lookupEnvironment(
+                ["KEYPIPE_TEST_FROM_ZSHENV", "KEYPIPE_TEST_UNDEFINED"],
+                env: ["HOME": home.path, "ZDOTDIR": home.path]),
+            ["KEYPIPE_TEST_FROM_ZSHENV": "a b"])
+    }
+
     func testExitAndOneTrailingNewline() {
         XCTAssertEqual(runShell("exit 3", input: "", env: [:], timeout: 2), .exited(3, stdout: ""))
         for (script, expected) in [

@@ -190,6 +190,16 @@ out of scope). Path is passed with `--config` and defaults to
   at 40 characters (graphemes), including `label` and `name`, with trailing whitespace
   removed. Transform stdout and field text never reach it. Both ride the
   `keypipe hud` transcript line as JSON.
+- `env` (optional, `Rule.env`) names the environment variables the rule's
+  shells need, e.g. `"env": ["VOICE_SWITCH_GROKBOT_TOKEN"]`, so the rule works
+  the same when launchd or an app starts keypipe without your shell's
+  environment. Before any shell of the rule runs, keypipe keeps each name's own
+  non-empty value and reads the rest from `~/.zshenv` with one `/bin/zsh -c`
+  (variables exported only in `.zshrc` or `.zprofile` are not found). If a
+  name is still empty, no shell runs: keypipe notifies
+  `<rule>: environment variable <NAME> is not set`, logs
+  `keypipe env-missing <NAME>`, and the fire fails at stage `env` with
+  `env-missing`. Values are never logged or put in a background job.
 - `hud` (top level, boolean, default true, `KeypipeConfig.hud`). After a
   finished fire the daemon hides the spinner, draws the pill through
   `Desktop.showFired` as one `FiredEvent`, and emits
@@ -209,6 +219,7 @@ out of scope). Path is passed with `--config` and defaults to
   cannot fail (`none`, `notify`), `background` on a fallback, a background
   output falling back to `replaceInput`, duplicate rule names (`duplicate name <name>`),
   an empty or whitespace-only `name`, `label` or `icon` (`empty <key>`),
+  an `env` that is not a non-empty array of distinct shell identifiers,
   a non-boolean `hud` or `background`
   (`<key> must be a boolean`, including numbers 0 and 1), and a non-positive
   `shellTimeout` or `backgroundTimeout` are
@@ -330,7 +341,7 @@ original text on failure.
 | `replaced` | `replaceInput` wrote the result | `rule`, `text`, `fallback` if `onFail.output` did it |
 | `delivered` | any other output succeeded | `rule`, `fallback` |
 | `started` | a background job did start | `rule` |
-| `failed` | a stage failed | `rule`, `stage` (`transform`, `output`, `spawn`), `failure` (the `KEYPIPE_FAILURE` token) |
+| `failed` | a stage failed | `rule`, `stage` (`env`, `transform`, `output`, `spawn`), `failure` (the `KEYPIPE_FAILURE` token) |
 | `nomatch` | no rule for this trigger holds | |
 | `blocked` | a gate stopped the fire before anything was erased or run | `reason` (`terminal`, `composing`, `secure`, `deny`, `front-changed`) |
 | `unreadable` | a condition fact could not be read, so the fire stopped | `fact`, `reason` |

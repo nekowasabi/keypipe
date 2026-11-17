@@ -84,7 +84,8 @@ func runJobProcess() -> Never {
     let engine = Engine(
         config: config,
         desktop: LineDesktop(app: request.job.environment["KEYPIPE_APP"], line: nil),
-        shell: boundedShell(limit: config.backgroundTimeout, run: runShell), emit: emit)
+        shell: boundedShell(limit: config.backgroundTimeout, run: runShell), emit: emit,
+        lookupEnv: { lookupEnvironment($0) })
     engine.run(request.job)
     emit("keypipe job done")
     exit(0)
