@@ -150,7 +150,7 @@ enum FireResult: Equatable {
     case started(rule: Int)
     case failed(rule: Int, stage: Stage, failure: String)
 
-    enum Stage: String { case transform, output, spawn }
+    enum Stage: String { case env, transform, output, spawn }
 
     /// "A rule matched", as --line's exit 0 and --smoke-feed's hits have always meant.
     var isHit: Bool {
@@ -168,6 +168,8 @@ struct Engine {
     private let emit: (String) -> Void
     /// Returns whether the detached job started, so a failed spawn is never reported as started.
     private let background: (Job) -> Bool
+    /// The non-empty values found for the names asked for; a name left out is missing.
+    private let lookupEnv: ([String]) -> [String: String]
     private var matcher: TriggerMatcher
     private let hotkeys: Set<Hotkey>
     private(set) var hits = 0
@@ -176,10 +178,12 @@ struct Engine {
         config: KeypipeConfig, desktop: Desktop,
         shell: @escaping (String, String, [String: String], TimeInterval) -> ShellOutcome,
         emit: @escaping (String) -> Void,
-        background: @escaping (Job) -> Bool = { _ in false }
+        background: @escaping (Job) -> Bool = { _ in false },
+        lookupEnv: @escaping ([String]) -> [String: String] = { _ in [:] }
     ) {
         self.config = config
         self.background = background
+        self.lookupEnv = lookupEnv
         self.desktop = desktop
         self.shell = shell
         self.emit = emit
@@ -396,6 +400,18 @@ struct Engine {
     ) -> FireResult {
         // Why: a rule called by name from voice-switch was never typed, so its trigger means nothing to the user.
         let title = rule.label ?? rule.name ?? "\(rule.trigger)"
+        var environment = environment
+        if !rule.env.isEmpty {
+            let found = lookupEnv(rule.env)
+            let missing = rule.env.filter { found[$0, default: ""].isEmpty }
+            guard missing.isEmpty else {
+                let names = missing.joined(separator: " ")
+                emit("keypipe env-missing \(names)")
+                notify("\(title): environment variable \(names) is not set")
+                return .failed(rule: index, stage: .env, failure: "env-missing")
+            }
+            environment.merge(found) { _, new in new }
+        }
         var result = input
         if let transform = rule.transform {
             switch runTransform(transform, input, environment) {

@@ -383,6 +383,82 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(desktop.notifications, [])
     }
 
+    func testRuleEnvReachesEveryShellOrStopsTheFire() {
+        let rule = Rule(
+            trigger: "@@@", transform: Guarded(primary: "tr"),
+            output: Guarded(primary: .shell(ShellOutput(script: "out", background: false))),
+            name: "send", env: ["TOK"])
+        func fire(_ rules: [Rule], found: [String: String])
+            -> (FireResult, [String: String?], [[String]], FakeDesktop, [String])
+        {
+            let desktop = FakeDesktop(focus: .nothing)
+            var seen: [String: String?] = [:]
+            var asked: [[String]] = []
+            var lines: [String] = []
+            var engine = Engine(
+                config: KeypipeConfig(rules: rules), desktop: desktop,
+                shell: { script, input, env, _ in
+                    seen[script] = env["TOK"]
+                    return .exited(0, stdout: input)
+                }, emit: { lines.append($0) },
+                lookupEnv: {
+                    asked.append($0)
+                    return found
+                })
+            return (engine.fire(rule: 0, input: "hi"), seen, asked, desktop, lines)
+        }
+        let (ok, seen, asked, _, _) = fire([rule], found: ["TOK": "s3cret"])
+        XCTAssertEqual(ok, .delivered(rule: 0, viaFallback: false))
+        XCTAssertEqual(seen, ["tr": "s3cret", "out": "s3cret"])
+        XCTAssertEqual(asked, [["TOK"]])
+
+        let (failed, ran, _, desktop, lines) = fire([rule], found: [:])
+        XCTAssertEqual(failed, .failed(rule: 0, stage: .env, failure: "env-missing"))
+        XCTAssertEqual(ran, [:], "no shell runs")
+        XCTAssertEqual(desktop.notifications, ["send: environment variable TOK is not set"])
+        XCTAssertTrue(lines.contains("keypipe env-missing TOK"))
+
+        var plain = rule
+        plain.env = []
+        let (_, _, never, _, _) = fire([plain], found: ["TOK": "x"])
+        XCTAssertEqual(never, [], "a rule without env never looks up")
+    }
+
+    func testBackgroundJobResolvesEnvAndTheJobCarriesNoValue() {
+        let rule = Rule(
+            trigger: "@@@",
+            output: Guarded(primary: .shell(ShellOutput(script: "curl", background: true))),
+            env: ["TOK"])
+        var jobs: [Job] = []
+        var parent = Engine(
+            config: KeypipeConfig(rules: [rule]), desktop: FakeDesktop(focus: .nothing),
+            shell: { _, _, _, _ in .exited(0, stdout: "") }, emit: { _ in },
+            background: {
+                jobs.append($0)
+                return true
+            }, lookupEnv: { _ in ["TOK": "s3cret"] })
+        XCTAssertEqual(parent.fire(rule: 0, input: "hi"), .started(rule: 0))
+        XCTAssertEqual(jobs.count, 1)
+        let encoded = String(decoding: try! JSONEncoder().encode(jobs[0]), as: UTF8.self)
+        XCTAssertFalse(encoded.contains("s3cret"))
+        var seen: String?
+        let child = Engine(
+            config: KeypipeConfig(rules: [rule]), desktop: FakeDesktop(focus: .nothing),
+            shell: { _, input, env, _ in
+                seen = env["TOK"]
+                return .exited(0, stdout: input)
+            }, emit: { _ in }, lookupEnv: { _ in ["TOK": "s3cret"] })
+        XCTAssertEqual(child.run(jobs[0]), .delivered(rule: 0, viaFallback: false))
+        XCTAssertEqual(seen, "s3cret")
+        let missing = Engine(
+            config: KeypipeConfig(rules: [rule]), desktop: FakeDesktop(focus: .nothing),
+            shell: { _, _, _, _ in
+                XCTFail("no shell without the variable")
+                return .exited(0, stdout: "")
+            }, emit: { _ in })
+        XCTAssertEqual(missing.run(jobs[0]), .failed(rule: 0, stage: .env, failure: "env-missing"))
+    }
+
     func testBackgroundShellHandsTheReadInputToAJobAndReturns() {
         let desktop = FakeDesktop(app: "editor", focus: .text, fieldText: "note")
         let rule = Rule(

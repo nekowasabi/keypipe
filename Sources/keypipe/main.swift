@@ -189,7 +189,7 @@ if flags.contains("--line") || flags.contains("--rule") {
         config: loaded, desktop: desktop, shell: runShell, emit: toStderr,
         background: {
             startJob($0, configPath: configFile, configBytes: configBytes, emit: toStderr)
-        })
+        }, lookupEnv: { lookupEnvironment($0) })
     let result = named.map { engine.fire(rule: $0, input: input) } ?? engine.fire(trigger)
     // Why: --report is for callers that act on the outcome (the verify skills). Plain --line keeps
     // the zsh widget's contract byte for byte: the line on stdout, exit 0 on a hit, 2 otherwise.
@@ -250,7 +250,7 @@ if flags.contains("--feed-stdin") {
             config: config, desktop: desktop, shell: runShell, emit: emit,
             background: {
                 startJob($0, configPath: configFile, configBytes: live.bytes, emit: emit)
-            })
+            }, lookupEnv: { lookupEnvironment($0) })
     }
     var engine = daemonEngine(loaded)
     // Why: Engine.key blocks on shells and erase readback; the tap callback must not.

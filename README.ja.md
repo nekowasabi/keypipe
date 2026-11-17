@@ -172,6 +172,13 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   末尾の空白を除きます。
   変換の stdout や欄の文字は決して載りません。どちらも `keypipe hud` の記録行に
   JSON で載ります。
+- `env`（任意）はルールのシェルが要る環境変数の名前の一覧です。例:
+  `"env": ["VOICE_SWITCH_GROKBOT_TOKEN"]`。launchd やアプリが keypipe を起動して
+  シェルの環境が無くても、同じように動きます。シェルを走らせる前に、各名前の値を
+  自分の環境から取り、無いか空なら `~/.zshenv` から `/bin/zsh -c` で 1 回読みます。
+  `.zshrc` や `.zprofile` だけで export した変数は見つかりません。それでも空の
+  名前があればシェルは走らず、`<ルール>: environment variable <名前> is not set`
+  と通知し、段 `env`・`env-missing` で失敗します。値は記録にも裏のジョブにも載せません。
 - `hud`（最上位、真偽値、既定 true、`KeypipeConfig.hud`）。発火が終わるとデーモンは
   スピナーを消し、`Desktop.showFired` で 1 つの `FiredEvent` としてピルを出し、
   `keypipe hud <trigger> <status>` を表示名とアイコン付きで記録します。成功と裏起動は
@@ -187,7 +194,8 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   `focus`、`focus: textField` の無い `replaceInput`、`transform` の無い
   `onFail.transform`、失敗しない送り先（`none`、`notify`）への `onFail.output`、
   代替への `background`、`replaceInput` へ逃がす裏の送り先、空または空白だけの
-  `name`、`label`、`icon`（`empty <key>`）、重複するルール名（`duplicate name <名前>`）、真偽値でない `hud` や
+  `name`、`label`、`icon`（`empty <key>`）、重複するルール名（`duplicate name <名前>`）、
+  空・重複・識別子でない名前を含む `env`、真偽値でない `hud` や
   `background`（数値の 0 と 1 も含めて `<key> must be a boolean`）、正でない `shellTimeout`
   や `backgroundTimeout` は読み込み時に `invalid config: <理由>` で拒否し、
   終了コード 1 です。
