@@ -200,6 +200,43 @@ echo '@@@' | .build/debug/keypipe --config ./config.example.json --context /tmp/
   や `backgroundTimeout` は読み込み時に `invalid config: <理由>` で拒否し、
   終了コード 1 です。
 
+## LLM プロバイダー（`shell/llm.sh`）
+
+モデルに問い合わせるルールは、`curl` を自分で書かずに `shell/llm.sh` へ渡します。
+スクリプトは OpenAI 形式のチャット本文を stdin で、送り先 `PROVIDER:MODEL` を 1 つ以上
+引数で受け、最初に答えた送り先の返答を出します。
+
+```json
+{
+  "name": "translate",
+  "trigger": ";;;",
+  "when": { "focus": "textField" },
+  "env": ["ALTER_API_KEY", "OPENROUTER_API_KEY"],
+  "transform": "jq -n --arg t \"$KEYPIPE_INPUT\" '{messages:[{role:\"user\",content:$t}]}' | ~/repos/keypipe/shell/llm.sh 'alter:Alter#light' 'openrouter:qwen/qwen3.8-27b'",
+  "output": "replaceInput"
+}
+```
+
+- `alter` は [Alter API ルーター](https://docs.alterhq.com/ja/references/api-router-overview)
+  です（`ALTER_API_KEY`。Alter の設定 → Router で作ります。モデル名は `Provider#model`）。
+  `openrouter` は OpenRouter です（`OPENROUTER_API_KEY`。モデル名は `vendor/model`）。
+- ルールがどちらを使い、どちらを予備にするかは、送り先の並び順で決まります。Alter は
+  1 日 200 回までで、超えると 10 分に 1 回になります。よく発火するルールでは
+  `openrouter` を 1 番目か 2 番目に置きます。
+- 本文の `model` は送り先のモデル名で置き換えます。`provider` と `reasoning` は
+  OpenRouter の項目なので、Alter への要求からは外します。
+- 送り先のキーはすべて `env` に書きます。1 つでも空なら keypipe は `env-missing` で
+  ルールを止めます。`env` に無いキーは `~/.zshenv` から読まれないので、launchd からの
+  発火では、その送り先が毎回飛ばされます。
+- curl の失敗、エラーの本文、文字の無い返答で、その送り先は失敗です（ルールの外から
+  呼んだときはキーの欠落でも失敗です）。次の送り先を試し、理由を stderr に 1 行出します。
+  デーモンは stderr をログに書きます。どれも答えなければ終了コード 1 で、
+  ルールは `transform` の段で失敗し、`onFail.transform` に引き継げます。送り先や本文の
+  書式が不正なら、要求を送る前に終了コード 2 で止まります。
+- 1 回の試行は `LLM_TIMEOUT` 秒（既定 12）です。送り先の数 × `LLM_TIMEOUT` を
+  `shellTimeout` より短くします。
+- `sh shell/llm-check.sh` は偽の `curl` でスクリプトを検査します。
+
 ## ターミナル（zsh）
 
 ターミナルは画面全体を一つの AX テキスト欄として見せるので、前面アプリが pty の
@@ -368,6 +405,7 @@ cmd のどれかが押されていればホットキー、それ以外は文字�
 - `Sources/keypipe/MacKeyTap.swift`、`MacDesktop.swift`: listen-only の
   CGEventTap と、デスクトップ境界の Accessibility 実装（macOS 専用）。
 - `Tests/keypipeTests/`: トリガー、コンテキスト、設定、シェル、エンジンの単体テスト。
+- `shell/llm.sh`、`shell/llm-check.sh`: Alter か OpenRouter へのチャット要求と、その検査。
 - `config.example.json`: echo する最小の `focus: any` ルール。
 
 ## フォーマットとテスト

@@ -225,6 +225,43 @@ out of scope). Path is passed with `--config` and defaults to
   `shellTimeout` or `backgroundTimeout` are
   rejected at load with `invalid config: <reason>` and exit 1.
 
+## LLM providers (`shell/llm.sh`)
+
+A rule that asks a model pipes the request to `shell/llm.sh` instead of writing its own
+`curl`. The script takes an OpenAI-style chat body on stdin and one or more targets,
+`PROVIDER:MODEL`, and prints the reply of the first target that answers:
+
+```json
+{
+  "name": "translate",
+  "trigger": ";;;",
+  "when": { "focus": "textField" },
+  "env": ["ALTER_API_KEY", "OPENROUTER_API_KEY"],
+  "transform": "jq -n --arg t \"$KEYPIPE_INPUT\" '{messages:[{role:\"user\",content:$t}]}' | ~/repos/keypipe/shell/llm.sh 'alter:Alter#light' 'openrouter:qwen/qwen3.8-27b'",
+  "output": "replaceInput"
+}
+```
+
+- `alter` is the [Alter API router](https://docs.alterhq.com/references/api-router-overview)
+  (`ALTER_API_KEY`, made in Alter's Settings → Router; model names are `Provider#model`).
+  `openrouter` is OpenRouter (`OPENROUTER_API_KEY`, model names are `vendor/model`).
+- Which provider a rule uses, and which one backs it up, is the order of its targets. Alter
+  allows 200 requests a day and then one per 10 minutes, so a rule that fires often lists
+  `openrouter` first or second.
+- The body's `model` is replaced by the target's. `provider` and `reasoning` are OpenRouter
+  fields and are removed from the request to Alter.
+- List every target's key in `env`. keypipe then stops the rule with `env-missing` when one
+  is not set; a key left out of `env` is not read from `~/.zshenv`, and its target would be
+  skipped on every fire from launchd.
+- A target fails on a curl error, an error body, or a reply with no text (called outside a
+  rule, also on a missing key); the next target is then tried, and stderr, which the daemon
+  writes to its log, gets one line with the reason. When none answers the
+  script exits 1, so the rule fails at `transform` and `onFail.transform` can take over.
+  A malformed target or body exits 2 before any request.
+- Each try gets `LLM_TIMEOUT` seconds (default 12). Keep targets × `LLM_TIMEOUT` under
+  `shellTimeout`.
+- `sh shell/llm-check.sh` checks the script against a fake `curl`.
+
 ## Terminals (zsh)
 
 A terminal shows its whole pane as one AX text field, so the daemon does
@@ -413,6 +450,7 @@ It always exits 0 and prints nothing when there is nothing to add.
   (macOS only).
 - `Tests/keypipeTests/`: unit tests for trigger, context, config, shell,
   and engine.
+- `shell/llm.sh`, `shell/llm-check.sh`: the chat request to Alter or OpenRouter and its check.
 - `config.example.json`: a minimal `focus: any` rule that echoes.
 
 ## Format and tests
