@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{F6A2F0AE-42DE-4F78-B811-50B29224CD32}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Keypipe.Core", "src\Keypipe.Core\Keypipe.Core.csproj", "{266D0080-B792-4532-9DFE-0E0C74614E38}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{AC0DA082-AC74-4F3B-9266-0D1A7CE28C51}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Keypipe.Core.Tests", "tests\Keypipe.Core.Tests\Keypipe.Core.Tests.csproj", "{8A042B39-8E30-4397-B81B-566B74B3EF9B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{266D0080-B792-4532-9DFE-0E0C74614E38}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{266D0080-B792-4532-9DFE-0E0C74614E38}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{266D0080-B792-4532-9DFE-0E0C74614E38}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{266D0080-B792-4532-9DFE-0E0C74614E38}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8A042B39-8E30-4397-B81B-566B74B3EF9B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8A042B39-8E30-4397-B81B-566B74B3EF9B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8A042B39-8E30-4397-B81B-566B74B3EF9B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8A042B39-8E30-4397-B81B-566B74B3EF9B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{266D0080-B792-4532-9DFE-0E0C74614E38} = {F6A2F0AE-42DE-4F78-B811-50B29224CD32}
+		{8A042B39-8E30-4397-B81B-566B74B3EF9B} = {AC0DA082-AC74-4F3B-9266-0D1A7CE28C51}
+	EndGlobalSection
+EndGlobal
